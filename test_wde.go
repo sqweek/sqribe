@@ -6,6 +6,8 @@ import (
 	"github.com/neagix/Go-SDL/sound"
 	"github.com/skelterjohn/go.wde"
 	_ "github.com/skelterjohn/go.wde/init"
+	"code.google.com/p/freetype-go/freetype"
+	"io/ioutil"
 	"image"
 	"sync"
 	"time"
@@ -15,6 +17,8 @@ import (
 
 var wg sync.WaitGroup
 var wave *WaveWidget
+
+var fc *freetype.Context
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	scroll := func(amount float64) {
@@ -65,12 +69,30 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 			wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
 			wave.Draw(s, wvR)
 			statusR := image.Rect(0, wvR.Max.Y, width, height)
-			wave.DrawStatus(s, statusR)
+			wave.DrawStatus(s, fc, statusR)
 			w.FlushImage()
 		case <-done:
 			return
 		}
 	}
+}
+
+func initfont() *freetype.Context {
+	filename := "/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf"
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	font, err := freetype.ParseFont(bytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fc := freetype.NewContext()
+	fc.SetDPI(72)
+	fc.SetFont(font)
+	fc.SetFontSize(12)
+	return fc
 }
 
 func main() {
@@ -93,6 +115,8 @@ func main() {
 	sample.Decode()
 	wav := NewWaveform(sample.Buffer_int16(), uint(obtainedSpec.Freq))
 	log.Println(len(wav.Samples))
+
+	fc = initfont()
 
 	dw, err := wde.NewWindow(400, 400)
 	if err != nil {

@@ -2,11 +2,13 @@ package main
 
 import (
 	_ "github.com/skelterjohn/go.wde"
+	"code.google.com/p/freetype-go/freetype"
 	"image/color"
 	"image/draw"
 	"image"
 	"math"
 	"log"
+	"fmt"
 )
 
 type WaveWidget struct {
@@ -134,8 +136,14 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 }
 
 
-
-func (ww *WaveWidget) DrawStatus(dst draw.Image, r image.Rectangle) {
+/* XXX should probably just return a string for the widget status, and
+ * leave rendering up to something closer to the event handler */
+func (ww *WaveWidget) DrawStatus(dst draw.Image, ftc *freetype.Context, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
+	ftc.SetDst(dst)
+	ftc.SetSrc(image.Black)
+	ftc.SetClip(r)
+	str := fmt.Sprintf("s0=%d spp=%d", ww.first_sample, ww.samples_per_pixel)
+	ftc.DrawString(str, freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
 }
