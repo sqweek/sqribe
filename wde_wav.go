@@ -2,12 +2,11 @@ package main
 
 import (
 	_ "github.com/skelterjohn/go.wde"
-	"code.google.com/p/freetype-go/freetype"
 	"image/color"
 	"image/draw"
 	"image"
 	"math"
-	"log"
+	//"log"
 	"fmt"
 )
 
@@ -15,11 +14,22 @@ type WaveWidget struct {
 	wav *Waveform
 	first_sample int
 	samples_per_pixel int
-	width int
+	renderstate struct {
+		rect image.Rectangle
+		img draw.Image
+		modelChanged bool
+	}
 }
 
 func NewWaveWidget() *WaveWidget {
-	return &WaveWidget{nil, 0, 512, -1}
+	var ww WaveWidget
+	ww.wav = nil
+	ww.first_sample = 0
+	ww.samples_per_pixel = 512
+	ww.renderstate.rect = image.Rect(0,0,0,0)
+	ww.renderstate.img = nil
+	ww.renderstate.modelChanged = true
+	return &ww
 }
 
 func (ww *WaveWidget) SetWaveform(wav *Waveform) {
@@ -28,20 +38,25 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
-	if ww.width == -1 || ww.wav == nil {
+	if ww.renderstate.rect.Empty() || ww.wav == nil {
 		return 0
 	}
 	original := ww.first_sample
-	shift := int((float64(ww.width) * amount) * float64(ww.samples_per_pixel))
-	rbound := len(ww.wav.Samples)/2 - (ww.width + 1) * ww.samples_per_pixel
+	width := ww.renderstate.rect.Size().X
+	shift := int((float64(width) * amount) * float64(ww.samples_per_pixel))
+	rbound := len(ww.wav.Samples)/2 - (width + 1) * ww.samples_per_pixel
 	ww.first_sample += shift
-	log.Println(len(ww.wav.Samples), ww.width, ww.samples_per_pixel, ww.first_sample, rbound)
+	//log.Println(len(ww.wav.Samples), width, ww.samples_per_pixel, ww.first_sample, rbound)
 	if ww.first_sample < 0 || rbound < 0 {
 		ww.first_sample = 0
 	} else if ww.first_sample > rbound {
 		ww.first_sample = rbound
 	}
-	return ww.first_sample - original
+	diff := ww.first_sample - original
+	if diff != 0 {
+		ww.renderstate.modelChanged = true
+	}
+	return diff
 }
 
 func (ww *WaveWidget) Zoom(factor float64) float64 {
@@ -50,15 +65,24 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	if ww.samples_per_pixel < 1 {
 		ww.samples_per_pixel = 1
 	}
-	return float64(ww.samples_per_pixel) / original
+	delta := float64(ww.samples_per_pixel) / original
+	if delta != 1.0 {
+		ww.renderstate.modelChanged = true
+	}
+	return delta
 }
 
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
-	ww.width = dst.Bounds().Size().X
-	if ww.wav != nil {
-		ww.drawWave(dst, r)
+	if ww.renderstate.modelChanged || !dst.Bounds().Eq(ww.renderstate.rect) {
+		ww.renderstate.rect = dst.Bounds()
+		ww.renderstate.modelChanged = false
+		ww.renderstate.img = image.NewRGBA(r)
+		if ww.wav != nil {
+			ww.drawWave(ww.renderstate.img, r)
+		}
+		ww.drawScale(ww.renderstate.img, r)
+		draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 	}
-	ww.drawScale(dst, r)
 }
 
 func slog(s int16) float64 {
@@ -81,13 +105,16 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	spp := ww.samples_per_pixel
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	size := r.Size()
-	yscale := (slog(ww.wav.Max()) / float64(size.Y / 2))
+	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	for dx := 0; dx < size.X; dx++ {
 		i0 := 2*(dx*spp + s0)
 		iN := 2*((dx+1)*spp + s0)
-		if iN > len(ww.wav.Samples) {
+		if i0 > len(ww.wav.Samples) {
 			return
+		}
+		if iN > len(ww.wav.Samples) {
+			iN = len(ww.wav.Samples)
 		}
 		pixSamples := ww.wav.Samples[i0:iN]
 		left, right := WaveRanges(pixSamples)
@@ -95,22 +122,22 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 		if left.min > 0 {
 			lmin = 0
 		} else {
-			lmin = int(slog(left.min) / yscale)
+			lmin = int(float64(left.min) / yscale)
 		}
 		if left.max < 0 {
 			lmax = 0
 		} else {
-			lmax = int(slog(left.max) / yscale)
+			lmax = int(float64(left.max) / yscale)
 		}
 		if right.min > 0 {
 			rmin = 0
 		} else {
-			rmin = int(slog(right.min) / yscale)
+			rmin = int(float64(right.min) / yscale)
 		}
 		if right.max < 0 {
 			rmax = 0
 		} else {
-			rmax = int(slog(right.max) / yscale)
+			rmax = int(float64(right.max) / yscale)
 		}
 		x := r.Min.X + dx
 		rl := image.Rect(x, yorigin - lmax, x + 1, yorigin - lmin + 1)
@@ -135,15 +162,10 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	}
 }
 
+func (ww *WaveWidget) SampleAt(dx int) int {
+	return ww.first_sample + dx*ww.samples_per_pixel
+}
 
-/* XXX should probably just return a string for the widget status, and
- * leave rendering up to something closer to the event handler */
-func (ww *WaveWidget) DrawStatus(dst draw.Image, ftc *freetype.Context, r image.Rectangle) {
-	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
-	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	ftc.SetDst(dst)
-	ftc.SetSrc(image.Black)
-	ftc.SetClip(r)
-	str := fmt.Sprintf("s0=%d spp=%d", ww.first_sample, ww.samples_per_pixel)
-	ftc.DrawString(str, freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
+func (ww *WaveWidget) Status() string {
+	return fmt.Sprintf("s0=%d spp=%d", ww.first_sample, ww.samples_per_pixel)
 }

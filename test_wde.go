@@ -8,32 +8,40 @@ import (
 	_ "github.com/skelterjohn/go.wde/init"
 	"code.google.com/p/freetype-go/freetype"
 	"io/ioutil"
+	"image/draw"
+	"image/color"
 	"image"
 	"sync"
 	"time"
 	"log"
+	"fmt"
 	_ "os"
 )
 
 var wg sync.WaitGroup
 var wave *WaveWidget
+var mousePos image.Point
 
 var fc *freetype.Context
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
+	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
 	scroll := func(amount float64) {
 		if wave.Scroll(amount) != 0 {
-			redraw <- image.Rect(0, 0, 0, 0)
+			doredraw()
 		}
 	}
 	zoom := func(factor float64) {
 		if wave.Zoom(factor) != 0.0 {
-			redraw <- image.Rect(0, 0, 0, 0)
+			doredraw()
 		}
 	}
 	var refreshTimer *time.Timer
 	for ei := range events {
 		switch e := ei.(type) {
+		case wde.MouseMovedEvent:
+			mousePos = e.Where
+			doredraw()
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
@@ -59,18 +67,46 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	}
 }
 
+func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
+	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
+	wstr := wave.Status()
+	dx := mousePos.X - dst.Bounds().Min.X
+	cp := wave.SampleAt(dx)
+	fc.SetDst(dst)
+	fc.SetSrc(image.Black)
+	fc.SetClip(r)
+	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
+	fc.DrawString(fmt.Sprintf("%s %d", wstr, cp), freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
+}
+
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
-	/* TODO restart drawing if a new event comes in? */
+	rate := time.Millisecond * 33 /* maximum refresh rate */
+	lastframe := time.Now().Add(-rate)
+	var refresh *time.Timer
+	merged := 0
 	for {
 		select {
 		case <-redraw:
-			s := w.Screen()
-			width, height := w.Size()
-			wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
-			wave.Draw(s, wvR)
-			statusR := image.Rect(0, wvR.Max.Y, width, height)
-			wave.DrawStatus(s, fc, statusR)
-			w.FlushImage()
+			now := time.Now()
+			nextframe := lastframe.Add(rate)
+			if refresh != nil || now.Before(nextframe) {
+				merged++
+				if refresh == nil {
+					refresh = time.AfterFunc(nextframe.Sub(now), func() { redraw <- image.Rect(0,0,0,0); refresh = nil })
+				}
+			} else {
+				lastframe = now
+				s := w.Screen()
+				width, height := w.Size()
+				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
+				wave.Draw(s, wvR)
+				statusR := image.Rect(0, wvR.Max.Y, width, height)
+				drawstatus(s, fc, statusR)
+				w.FlushImage()
+				log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
+				merged = 0
+				lastframe = time.Now()
+			}
 		case <-done:
 			return
 		}
@@ -130,7 +166,7 @@ func main() {
 	wave.SetWaveform(&wav)
 
 	wg.Add(1)
-	redraw := make(chan image.Rectangle, 5)
+	redraw := make(chan image.Rectangle, 10)
 	done := make(chan bool)
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done)
