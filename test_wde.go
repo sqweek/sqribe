@@ -71,12 +71,15 @@ func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	wstr := wave.Status()
 	dx := mousePos.X - dst.Bounds().Min.X
-	cp := wave.SampleAt(dx)
+	secs := wave.TimeAtCursor(dx)
+	beat64 := wave.SixtyFourthAtTime(secs)
+	measure := beat64/ 64
+	beatInMeasure := beat64 % 64
 	fc.SetDst(dst)
 	fc.SetSrc(image.Black)
 	fc.SetClip(r)
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	fc.DrawString(fmt.Sprintf("%s %d", wstr, cp), freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
+	fc.DrawString(fmt.Sprintf("%s %f  %d:%d", wstr, secs, measure, beatInMeasure), freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
 }
 
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {

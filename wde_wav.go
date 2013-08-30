@@ -162,8 +162,19 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	}
 }
 
-func (ww *WaveWidget) SampleAt(dx int) int {
-	return ww.first_sample + dx*ww.samples_per_pixel
+func (ww *WaveWidget) TimeAtCursor(dx int) float64 {
+	if ww.wav == nil {
+		return 0.0
+	}
+	s := ww.first_sample + dx*ww.samples_per_pixel
+	return float64(s) / float64(ww.wav.rate)
+}
+
+func (ww *WaveWidget) SixtyFourthAtTime(time float64) int {
+	// TODO allow for changing bpm
+	bpm := 120
+	bps := float64(bpm) / 60.0
+	return int(time * 16 * bps)
 }
 
 func (ww *WaveWidget) Status() string {
