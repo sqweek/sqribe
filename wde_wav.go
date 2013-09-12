@@ -14,6 +14,10 @@ type WaveWidget struct {
 	wav *Waveform
 	first_sample int
 	samples_per_pixel int
+	selection struct {
+		min float64
+		max float64
+	}
 	renderstate struct {
 		rect image.Rectangle
 		img draw.Image
@@ -30,6 +34,16 @@ func NewWaveWidget() *WaveWidget {
 	ww.renderstate.img = nil
 	ww.renderstate.modelChanged = true
 	return &ww
+}
+
+func (ww *WaveWidget) SelectAudio(start, end float64) {
+	ww.selection.min = start
+	ww.selection.max = end
+	ww.renderstate.modelChanged = true
+}
+
+func (ww *WaveWidget) GetSelectedSampleRange() (int, int) {
+	return ww.SampleAtTime(ww.selection.min), ww.SampleAtTime(ww.selection.max)	
 }
 
 func (ww *WaveWidget) SetWaveform(wav *Waveform) {
@@ -101,12 +115,17 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	cl := color.RGBA{0x99, 0x99, 0xcc, 255}
 	ci := color.RGBA{0xbb, 0x99, 0xbb, 255}
 	cr := color.RGBA{0xbb, 0x99, 0x99, 255}
+	csel := color.RGBA{0xdd, 0xdd, 0xdd, 255}
 	s0 := ww.first_sample
 	spp := ww.samples_per_pixel
+	sel0, selN := ww.GetSelectedSampleRange()
+	selR := image.Rect((sel0 - s0)/spp, r.Min.Y, (selN - s0)/spp, r.Max.Y)
+	fmt.Println(ww.selection, selR)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	size := r.Size()
 	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
+	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
 	for dx := 0; dx < size.X; dx++ {
 		i0 := 2*(dx*spp + s0)
 		iN := 2*((dx+1)*spp + s0)
@@ -168,6 +187,13 @@ func (ww *WaveWidget) TimeAtCursor(dx int) float64 {
 	}
 	s := ww.first_sample + dx*ww.samples_per_pixel
 	return float64(s) / float64(ww.wav.rate)
+}
+
+func (ww *WaveWidget) SampleAtTime(secs float64) int {
+	if ww.wav == nil {
+		return 0
+	}
+	return int(secs * float64(ww.wav.rate))
 }
 
 func (ww *WaveWidget) SixtyFourthAtTime(time float64) int {
