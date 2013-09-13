@@ -87,15 +87,12 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	}
 }
 
-var audioTicker *time.Ticker
-
 func playToggle() {
-	if audioTicker != nil {
+	if transportStop != nil {
 		/* already playing, so stop playback */
 		fmt.Println("stopping playback")
-		audioTicker.Stop()
 		transportStop <- true
-		audioTicker = nil
+		transportStop = nil
 		audio.PauseAudio(true)
 		return
 	}
@@ -134,48 +131,42 @@ func playToggle() {
 	tick := 50 * time.Millisecond
 	padN := N + len(loopPad)/2
 	perTick := int(6 * math.Ceil(float64(wav.rate) * float64(tick) / float64(time.Second)))
-	i := perTick * 2
-	if i >= padN {
-		i = padN - 1
-	}
-	audioTicker = time.NewTicker(tick)
-	audio.PauseAudio(false)
-	audio.SendAudio_int16(playSamples[0:2*i])
+	i := 0
 	go func() {
-		ticker := audioTicker
 		for {
 			select {
-			case <-ticker.C:
+			case <-transportStop:
+				return
+			default:
 				for nSamp := perTick; nSamp > 0; {
 					if i < N {
 						if i + nSamp > N {
-							audio.SendAudio_int16(playSamples[2*i:])
+							AppendAudio(playSamples[2*i:])
 							nSamp -= (N-i)
 							i = N
 						} else {
-							audio.SendAudio_int16(playSamples[2*i:2*(i+nSamp)])
+							AppendAudio(playSamples[2*i:2*(i+nSamp)])
 							i += nSamp
 							nSamp = 0
 						}
 					} else if i < padN {
 						iP := i-N
 						if i + nSamp > padN {
-							audio.SendAudio_int16(loopPad[2*iP:])
+							AppendAudio(loopPad[2*iP:])
 							nSamp -= (padN - i)
 							i = 0
 						} else {
-							audio.SendAudio_int16(loopPad[2*iP:2*(iP + nSamp)])
+							AppendAudio(loopPad[2*iP:2*(iP + nSamp)])
 							i += nSamp
 							nSamp = 0
 						}
 					}
 				}
 				fmt.Println(i, N, perTick)
-			case <-transportStop:
-				return
 			}
 		}
 	}()
+	audio.PauseAudio(false)
 }
 
 func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
@@ -253,10 +244,9 @@ func main() {
 	sound.Init()
 
 	desiredSpec := audio.AudioSpec{Freq: 44100, Format: audio.AUDIO_S16SYS, Channels: 1, Samples: 4096}
-	var obtainedSpec audio.AudioSpec
-
-	if audio.OpenAudio(&desiredSpec, &obtainedSpec) != 0 {
-		log.Fatal(sdl.GetError())
+	obtainedSpec, err := AudioInit(&desiredSpec)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	actualFmt := sound.AudioInfo{obtainedSpec.Format, obtainedSpec.Channels, uint32(obtainedSpec.Freq)}
