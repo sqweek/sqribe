@@ -16,6 +16,7 @@ type RingBuffer struct {
 }
 
 var buf *RingBuffer
+var playing bool
 
 func AudioInit(desired *audio.AudioSpec) (*audio.AudioSpec, error) {
 	var obtained audio.AudioSpec
@@ -26,13 +27,17 @@ func AudioInit(desired *audio.AudioSpec) (*audio.AudioSpec, error) {
 	if obtained.Format != audio.AUDIO_S16SYS {
 		return &obtained, &Errstr{"only S16 supported"}
 	}
+	/* since everything currently assumes stereo */
+	if obtained.Channels != 2 {
+		return &obtained, &Errstr{"only 2 channels supported"}
+	}
 	s16PerSecond := obtained.Freq * int(obtained.Channels)
 	buf = NewRingBuffer(s16PerSecond/2)
 	return &obtained, nil
 }
 
-func AppendAudio(src []int16) {
-	buf.Append(src)
+func AppendAudio(src []int16) int {
+	return buf.Append(src)
 }
 
 func NewRingBuffer(bufSize int) *RingBuffer {
@@ -43,10 +48,14 @@ func NewRingBuffer(bufSize int) *RingBuffer {
 }
 
 /* appends int16s. if the ring buffer is full, Append blocks until the samples can fit */
-func (ring *RingBuffer) Append(src []int16) {
+func (ring *RingBuffer) Append(src []int16) int {
 	ring.write.L.Lock()
+	defer ring.write.L.Unlock()
 	for len(src) > len(ring.buf) - ring.Size() {
 		ring.write.Wait()
+		if !playing {
+			return -1
+		}
 	}
 	newTail := ring.tail + len(src)
 	if newTail > len(ring.buf) {
@@ -57,7 +66,7 @@ func (ring *RingBuffer) Append(src []int16) {
 		copy(ring.buf[ring.tail:newTail], src)
 	}
 	ring.tail = newTail
-	ring.write.L.Unlock()
+	return len(src)
 }
 
 /* tries to fill the dest buffer with int16s. if not enough s16s are in the ring buffer,
@@ -90,13 +99,20 @@ func (ring *RingBuffer) Clear() {
 func (ring *RingBuffer) Size() int {
 	h := ring.head
 	t := ring.tail
+	var s int
 	if t < h {
-		return len(ring.buf) + t - h
+		s = len(ring.buf) + t - h
+	} else {
+		s = t - h
 	}
-	return t - h
+	return s
 }
 
 func callback(outptr unsafe.Pointer, nbytes int) {
+	if !playing {
+		return
+	}
+
 	var out []int16
 	n := nbytes / 2
 	hdr := (*reflect.SliceHeader)((unsafe.Pointer(&out)))
@@ -104,7 +120,21 @@ func callback(outptr unsafe.Pointer, nbytes int) {
 	hdr.Len = n
 	hdr.Data = uintptr(outptr)
 
-	/* TODO if playback stopped, clear the ring buffer */
-
 	buf.Extract(out)
+}
+
+func StartPlayback() {
+	audio.PauseAudio(false)
+	playing = true
+}
+
+func StopPlayback() {
+	audio.PauseAudio(true)
+	playing = false
+	buf.write.Signal()
+	buf.Clear()
+}
+
+func IsPlaying() bool {
+	return playing
 }

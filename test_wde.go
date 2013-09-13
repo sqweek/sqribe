@@ -13,19 +13,14 @@ import (
 	"image"
 	"sync"
 	"time"
-	"math"
 	"log"
 	"fmt"
-	"encoding/binary"
-	"os"
 )
 
 var wg sync.WaitGroup
 var wav Waveform
 var wave *WaveWidget
 var mousePos image.Point
-
-var transportStop chan bool 
 
 var fc *freetype.Context
 
@@ -88,21 +83,16 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 }
 
 func playToggle() {
-	if transportStop != nil {
-		/* already playing, so stop playback */
+	if IsPlaying() {
 		fmt.Println("stopping playback")
-		transportStop <- true
-		transportStop = nil
-		audio.PauseAudio(true)
+		StopPlayback()
 		return
 	}
 
-	// get range, convert to samples
-	// load samples
 	s0, sN := wave.GetSelectedSampleRange()
-	transportStop = make(chan bool, 1)
 	fmt.Println("starting playback", s0, sN)
 
+	/* short crossfade to loop smoothly */
 	playSamples := wav.Samples[2*s0:2*sN]
 	padlen := 20
 	loopPad := make([]int16, 2*(2*padlen + 1))
@@ -114,59 +104,36 @@ func playToggle() {
 		loopPad[2*(2*padlen - i)] = int16(float64(playSamples[0]) * alpha)
 		loopPad[2*(2*padlen - i) + 1] = int16(float64(playSamples[1]) * alpha)
 	}
-	fmt.Printf("%6d     %6d     %6d\n", -1, playSamples[2*(N-1)], playSamples[2*(N-1) + 1])
-	for i := 0; i < 2*padlen + 1; i++ {
-		fmt.Printf("%6d     %6d     %6d\n", i, loopPad[2*i], loopPad[2*i + 1])
-	}
-	fmt.Printf("%6d     %6d     %6d\n", 999, playSamples[0], playSamples[1])
-	file, _ := os.Create("loop.raw")
-	binary.Write(file, binary.LittleEndian, playSamples)
-	binary.Write(file, binary.LittleEndian, loopPad)
-	binary.Write(file, binary.LittleEndian, playSamples)
-	binary.Write(file, binary.LittleEndian, loopPad)
-	binary.Write(file, binary.LittleEndian, playSamples)
-	binary.Write(file, binary.LittleEndian, loopPad)
-	file.Close()
-	// start thread to send audio
-	tick := 50 * time.Millisecond
+
 	padN := N + len(loopPad)/2
-	perTick := int(6 * math.Ceil(float64(wav.rate) * float64(tick) / float64(time.Second)))
-	i := 0
+	bufsiz := 4096
 	go func() {
+		var buf []int16
+		i := 0
 		for {
-			select {
-			case <-transportStop:
-				return
-			default:
-				for nSamp := perTick; nSamp > 0; {
-					if i < N {
-						if i + nSamp > N {
-							AppendAudio(playSamples[2*i:])
-							nSamp -= (N-i)
-							i = N
-						} else {
-							AppendAudio(playSamples[2*i:2*(i+nSamp)])
-							i += nSamp
-							nSamp = 0
-						}
-					} else if i < padN {
-						iP := i-N
-						if i + nSamp > padN {
-							AppendAudio(loopPad[2*iP:])
-							nSamp -= (padN - i)
-							i = 0
-						} else {
-							AppendAudio(loopPad[2*iP:2*(iP + nSamp)])
-							i += nSamp
-							nSamp = 0
-						}
-					}
+			buf = nil
+			if i < N {
+				if i + bufsiz > N {
+					buf = playSamples[2*i:]
+				} else {
+					buf = playSamples[2*i:2*(i+bufsiz)]
 				}
-				fmt.Println(i, N, perTick)
+			} else if i < padN {
+				iP := i - N
+				if i + bufsiz > padN {
+					buf = loopPad[2*iP:]
+				} else {
+					buf = loopPad[2*iP:2*(iP + bufsiz)]
+				}
 			}
+			if AppendAudio(buf) == -1 {
+				break
+			}
+			i += len(buf) / 2
+			i %= padN
 		}
 	}()
-	audio.PauseAudio(false)
+	StartPlayback()
 }
 
 func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
@@ -208,7 +175,7 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(s, fc, statusR)
 				w.FlushImage()
-				log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
+				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
 				merged = 0
 				lastframe = time.Now()
 			}
