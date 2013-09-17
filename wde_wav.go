@@ -6,17 +6,19 @@ import (
 	"image/draw"
 	"image"
 	"math"
-	//"log"
+	"time"
 	"fmt"
 )
 
 type WaveWidget struct {
 	wav *Waveform
+	bpm float64
+	anchor time.Duration
 	first_sample int
 	samples_per_pixel int
 	selection struct {
-		min float64
-		max float64
+		min time.Duration
+		max time.Duration
 	}
 	renderstate struct {
 		rect image.Rectangle
@@ -28,6 +30,7 @@ type WaveWidget struct {
 func NewWaveWidget() *WaveWidget {
 	var ww WaveWidget
 	ww.wav = nil
+	ww.bpm = 120
 	ww.first_sample = 0
 	ww.samples_per_pixel = 512
 	ww.renderstate.rect = image.Rect(0,0,0,0)
@@ -36,7 +39,17 @@ func NewWaveWidget() *WaveWidget {
 	return &ww
 }
 
-func (ww *WaveWidget) SelectAudio(start, end float64) {
+func (ww *WaveWidget) SetBeatAnchor(anchor time.Duration) {
+	ww.anchor = anchor
+	ww.renderstate.modelChanged = true
+}
+
+func (ww *WaveWidget) SetBpm(bpm float64) {
+	ww.bpm = bpm
+	ww.renderstate.modelChanged = true
+}
+
+func (ww *WaveWidget) SelectAudio(start, end time.Duration) {
 	ww.selection.min = start
 	ww.selection.max = end
 	ww.renderstate.modelChanged = true
@@ -120,7 +133,6 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	spp := ww.samples_per_pixel
 	sel0, selN := ww.GetSelectedSampleRange()
 	selR := image.Rect((sel0 - s0)/spp, r.Min.Y, (selN - s0)/spp, r.Max.Y)
-	fmt.Println(ww.selection, selR)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	size := r.Size()
 	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
@@ -172,35 +184,49 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	black := color.RGBA{0x00, 0x00, 0x00, 0xff}
-	spacing := 10
+	beatsPerBar := 4.0
+	secondsPerBar := beatsPerBar / (float64(ww.bpm) / 60.0)
+	barWidth := int(secondsPerBar * float64(ww.wav.rate) / float64(ww.samples_per_pixel))
+	anchor := ww.SampleAtTime(ww.anchor)
+	anchorPixel := int((anchor - ww.first_sample) / ww.samples_per_pixel)
+	for anchorPixel > r.Min.X + barWidth {
+		anchorPixel -= barWidth
+	}
+	for anchorPixel < r.Min.X {
+		anchorPixel += barWidth
+	}
+	yspacing := 10
 	mid := (r.Min.Y + r.Max.Y) / 2
 	for i := -2; i <= 2; i++ {
-		y := mid + i * spacing
+		y := mid + i * yspacing
 		line := image.Rect(r.Min.X, y, r.Max.X, y+1)
+		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
+	}
+	for x := anchorPixel; x < r.Max.X; x += barWidth {
+		line := image.Rect(x, mid - 2*yspacing, x+1, mid + 2*yspacing + 1)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
 	}
 }
 
-func (ww *WaveWidget) TimeAtCursor(dx int) float64 {
+func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 	if ww.wav == nil {
 		return 0.0
 	}
-	s := ww.first_sample + dx*ww.samples_per_pixel
-	return float64(s) / float64(ww.wav.rate)
+	sample := ww.first_sample + dx*ww.samples_per_pixel
+	durPerSample := time.Second / time.Duration(ww.wav.rate)
+	return time.Duration(sample) * durPerSample
 }
 
-func (ww *WaveWidget) SampleAtTime(secs float64) int {
+func (ww *WaveWidget) SampleAtTime(t time.Duration) int {
 	if ww.wav == nil {
 		return 0
 	}
-	return int(secs * float64(ww.wav.rate))
+	return int(float64(t) / float64(time.Second) * float64(ww.wav.rate))
 }
 
-func (ww *WaveWidget) SixtyFourthAtTime(time float64) int {
-	// TODO allow for changing bpm
-	bpm := 120
-	bps := float64(bpm) / 60.0
-	return int(time * 16 * bps)
+func (ww *WaveWidget) SixtyFourthAtTime(t time.Duration) int {
+	bps := float64(ww.bpm) / 60.0
+	return int(float64(t) / float64(time.Second) * 16.0 * bps)
 }
 
 func (ww *WaveWidget) Status() string {

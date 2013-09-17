@@ -6,8 +6,6 @@ import (
 	"github.com/neagix/Go-SDL/sound"
 	"github.com/skelterjohn/go.wde"
 	_ "github.com/skelterjohn/go.wde/init"
-	"code.google.com/p/freetype-go/freetype"
-	"io/ioutil"
 	"image/draw"
 	"image/color"
 	"image"
@@ -21,8 +19,7 @@ var wg sync.WaitGroup
 var wav Waveform
 var wave *WaveWidget
 var mousePos image.Point
-
-var fc *freetype.Context
+var bpm BpmWidget
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
@@ -36,22 +33,37 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			doredraw()
 		}
 	}
-	var mouseDownPos image.Point
+	var dragOrigin image.Point
 	var refreshTimer *time.Timer
 	for ei := range events {
 		switch e := ei.(type) {
 		case wde.MouseDownEvent:
-			mouseDownPos = e.Where
-		case wde.MouseDraggedEvent:
-			t1 := wave.TimeAtCursor(mouseDownPos.X)
-			t2 := wave.TimeAtCursor(e.Where.X)
-			if t1 < t2 {
-				wave.SelectAudio(t1, t2)
-			} else {
-				wave.SelectAudio(t2, t1)
+			switch (e.Which) {
+			case wde.LeftButton:
+				dragOrigin = e.Where
+				if dragOrigin.In(bpm.Rect()) {
+					if newBpm := bpm.Hit(); newBpm != 0.0 {
+						wave.SetBpm(newBpm)
+						doredraw()
+					}
+				}
+			case wde.MiddleButton:
+				wave.SetBeatAnchor(wave.TimeAtCursor(e.Where.X))
+				doredraw()
 			}
-			mousePos = e.Where
-			doredraw()
+		case wde.MouseDraggedEvent:
+			switch (e.Which) {
+			case wde.LeftButton:
+				t1 := wave.TimeAtCursor(dragOrigin.X)
+				t2 := wave.TimeAtCursor(e.Where.X)
+				if t1 < t2 {
+					wave.SelectAudio(t1, t2)
+				} else {
+					wave.SelectAudio(t2, t1)
+				}
+				mousePos = e.Where
+				doredraw()
+			}
 		case wde.MouseMovedEvent:
 			mousePos = e.Where
 			doredraw()
@@ -136,7 +148,7 @@ func playToggle() {
 	StartPlayback()
 }
 
-func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
+func drawstatus(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	wstr := wave.Status()
 	dx := mousePos.X - dst.Bounds().Min.X
@@ -144,17 +156,14 @@ func drawstatus(dst draw.Image, fc *freetype.Context, r image.Rectangle) {
 	beat64 := wave.SixtyFourthAtTime(secs)
 	measure := beat64/ 64
 	beatInMeasure := beat64 % 64
-	fc.SetDst(dst)
-	fc.SetSrc(image.Black)
-	fc.SetClip(r)
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	fc.DrawString(fmt.Sprintf("%s %f  %d:%d", wstr, secs, measure, beatInMeasure), freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
+	RenderString(dst, color.Black, r, fmt.Sprintf("%s %s  %d:%d", wstr, secs, measure, beatInMeasure))
 }
 
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 	rate := time.Millisecond * 33 /* maximum refresh rate */
 	lastframe := time.Now().Add(-rate)
-	var refresh *time.Timer
+	var refresh func()
 	merged := 0
 	for {
 		select {
@@ -164,7 +173,11 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 			if refresh != nil || now.Before(nextframe) {
 				merged++
 				if refresh == nil {
-					refresh = time.AfterFunc(nextframe.Sub(now), func() { redraw <- image.Rect(0,0,0,0); refresh = nil })
+					refresh = func() {
+						redraw <- image.Rect(0,0,0,0)
+						refresh = nil
+					}
+					time.AfterFunc(nextframe.Sub(now), refresh)
 				}
 			} else {
 				lastframe = now
@@ -172,8 +185,13 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				width, height := w.Size()
 				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
 				wave.Draw(s, wvR)
-				statusR := image.Rect(0, wvR.Max.Y, width, height)
-				drawstatus(s, fc, statusR)
+
+				bpmR := image.Rect(width - 150, wvR.Max.Y, width, height)
+				bpm.Draw(s, bpmR)
+
+				statusR := image.Rect(0, wvR.Max.Y, bpmR.Min.X, height)
+				drawstatus(s, statusR)
+
 				w.FlushImage()
 				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
 				merged = 0
@@ -183,24 +201,6 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 			return
 		}
 	}
-}
-
-func initfont() *freetype.Context {
-	filename := "/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf"
-	bytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	font, err := freetype.ParseFont(bytes)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fc := freetype.NewContext()
-	fc.SetDPI(72)
-	fc.SetFont(font)
-	fc.SetFontSize(12)
-	return fc
 }
 
 func main() {
@@ -224,7 +224,10 @@ func main() {
 	wav = NewWaveform(sample.Buffer_int16(), uint(obtainedSpec.Freq))
 	log.Println(len(wav.Samples))
 
-	fc = initfont()
+	err = FontInit()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	dw, err := wde.NewWindow(400, 400)
 	if err != nil {
@@ -236,6 +239,8 @@ func main() {
 
 	wave = NewWaveWidget()
 	wave.SetWaveform(&wav)
+
+	bpm = BpmWidget{bpm: 120}
 
 	wg.Add(1)
 	redraw := make(chan image.Rectangle, 10)
