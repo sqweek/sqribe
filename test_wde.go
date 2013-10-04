@@ -11,6 +11,7 @@ import (
 	"image"
 	"sync"
 	"time"
+	"flag"
 	"log"
 	"fmt"
 )
@@ -203,6 +204,8 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 	}
 }
 
+var audioFile = flag.String("audio", "test.ogg", "audio file")
+
 func main() {
 	if sdl.Init(sdl.INIT_EVERYTHING) != 0 {
 		log.Fatal(sdl.GetError())
@@ -219,7 +222,9 @@ func main() {
 	actualFmt := sound.AudioInfo{obtainedSpec.Format, obtainedSpec.Channels, uint32(obtainedSpec.Freq)}
 	fmt.Println(actualFmt)
 
-	sample := sound.NewSampleFromFile("test.ogg", &actualFmt, 1024*1024)
+	flag.Parse()
+
+	sample := sound.NewSampleFromFile(*audioFile, &actualFmt, 10*1024*1024)
 	sample.Decode()
 	wav = NewWaveform(sample.Buffer_int16(), uint(obtainedSpec.Freq))
 	log.Println(len(wav.Samples))

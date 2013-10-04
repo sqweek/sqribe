@@ -221,7 +221,14 @@ func (ww *WaveWidget) SampleAtTime(t time.Duration) int {
 	if ww.wav == nil {
 		return 0
 	}
-	return int(float64(t) / float64(time.Second) * float64(ww.wav.rate))
+	s := int(float64(t) / float64(time.Second) * float64(ww.wav.rate))
+	if s < 0 {
+		s = 0
+	}
+	if s >= len(ww.wav.Samples)/2 {
+		s = len(ww.wav.Samples)/2 - 1
+	}
+	return s
 }
 
 func (ww *WaveWidget) SixtyFourthAtTime(t time.Duration) int {
