@@ -213,20 +213,19 @@ func main() {
 
 	sound.Init()
 
-	desiredSpec := audio.AudioSpec{Freq: 44100, Format: audio.AUDIO_S16SYS, Channels: 1, Samples: 4096}
-	obtainedSpec, err := AudioInit(&desiredSpec)
+	channels, sampleRate, err := AudioInit()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	actualFmt := sound.AudioInfo{obtainedSpec.Format, obtainedSpec.Channels, uint32(obtainedSpec.Freq)}
+	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)
 
 	flag.Parse()
 
 	sample := sound.NewSampleFromFile(*audioFile, &actualFmt, 10*1024*1024)
 	sample.Decode()
-	wav = NewWaveform(sample.Buffer_int16(), uint(obtainedSpec.Freq))
+	wav = NewWaveform(sample.Buffer_int16(), uint(sampleRate))
 	log.Println(len(wav.Samples))
 
 	err = FontInit()

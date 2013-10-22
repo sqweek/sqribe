@@ -1,8 +1,7 @@
 package main
 
 import (
-	"github.com/neagix/Go-SDL/sdl"
-	"github.com/neagix/Go-SDL/sdl/audio"
+	"bitbucket.org/sqweek/portaudio-go/portaudio"
 	"unsafe"
 	"reflect"
 	"sync"
@@ -17,23 +16,26 @@ type RingBuffer struct {
 
 var buf *RingBuffer
 var playing bool
+var stream *portaudio.Stream
 
-func AudioInit(desired *audio.AudioSpec) (*audio.AudioSpec, error) {
-	var obtained audio.AudioSpec
-	desired.UserDefinedCallback = callback
-	if audio.OpenAudio(desired, &obtained) != 0 {
-		return nil, &Errstr{sdl.GetError()}
+func AudioInit() (uint8, uint32, error) {
+	err := portaudio.Initialize()
+	if err != nil {
+		return 0, 0, err
 	}
-	if obtained.Format != audio.AUDIO_S16SYS {
-		return &obtained, &Errstr{"only S16 supported"}
+
+	jack, err := portaudio.HostApi(portaudio.JACK)
+	dev := &jack.Devices[0]
+	in, out := portaudio.DefaultParameters(nil, dev)
+	rate := dev.DefaultSampleRate
+	s, err := portaudio.OpenStream(in, out, rate, 4096, &AudioProcessor{})
+	if err != nil {
+		return 0, 0, err
 	}
-	/* since everything currently assumes stereo */
-	if obtained.Channels != 2 {
-		return &obtained, &Errstr{"only 2 channels supported"}
-	}
-	s16PerSecond := obtained.Freq * int(obtained.Channels)
+	s16PerSecond := int(rate) * out.Channels
 	buf = NewRingBuffer(s16PerSecond/2)
-	return &obtained, nil
+	stream = s
+	return uint8(out.Channels), uint32(rate), nil
 }
 
 func AppendAudio(src []int16) int {
@@ -108,7 +110,7 @@ func (ring *RingBuffer) Size() int {
 	return s
 }
 
-func callback(outptr unsafe.Pointer, nbytes int) {
+func sdl_callback(outptr unsafe.Pointer, nbytes int) {
 	if !playing {
 		return
 	}
@@ -123,14 +125,23 @@ func callback(outptr unsafe.Pointer, nbytes int) {
 	buf.Extract(out)
 }
 
+type AudioProcessor struct {}
+
+func (ap *AudioProcessor) ProcessAudio(in, out []int16) {
+	if !playing {
+		return
+	}
+	buf.Extract(out)
+}
+
 func StartPlayback() {
-	audio.PauseAudio(false)
+	stream.Start()
 	playing = true
 }
 
 func StopPlayback() {
-	audio.PauseAudio(true)
 	playing = false
+	stream.Abort()
 	buf.write.Signal()
 	buf.Clear()
 }
