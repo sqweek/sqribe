@@ -39,6 +39,10 @@ func NewWaveWidget() *WaveWidget {
 	return &ww
 }
 
+func (ww *WaveWidget) Rect() image.Rectangle {
+	return ww.renderstate.rect
+}
+
 func (ww *WaveWidget) SetBeatAnchor(anchor time.Duration) {
 	ww.anchor = anchor
 	ww.renderstate.modelChanged = true
@@ -49,9 +53,25 @@ func (ww *WaveWidget) SetBpm(bpm float64) {
 	ww.renderstate.modelChanged = true
 }
 
-func (ww *WaveWidget) SelectAudio(start, end time.Duration) {
+func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	ww.selection.min = start
 	ww.selection.max = end
+	ww.renderstate.modelChanged = true
+}
+
+func nearestBar(x, anchor, barDuration time.Duration) time.Duration {
+	rem := (x - anchor) % barDuration
+	if rem > barDuration > 2 {
+		return x - remS + barDuration
+	}
+	return x - remS
+}
+
+func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
+	beatsPerBar := 4.0
+	barDuration := time.Microsecond * time.Duration(1000000 * beatsPerBar / (float64(ww.bpm) / 60.0))
+	ww.selection.min = nearestBar(start, ww.anchor, barDuration)
+	ww.selection.max = nearestBar(end, ww.anchor, barDuration)
 	ww.renderstate.modelChanged = true
 }
 
@@ -101,7 +121,7 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	if ww.renderstate.modelChanged || !dst.Bounds().Eq(ww.renderstate.rect) {
-		ww.renderstate.rect = dst.Bounds()
+		ww.renderstate.rect = r
 		ww.renderstate.modelChanged = false
 		ww.renderstate.img = image.NewRGBA(r)
 		if ww.wav != nil {

@@ -55,15 +55,22 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 		case wde.MouseDraggedEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
-				t1 := wave.TimeAtCursor(dragOrigin.X)
-				t2 := wave.TimeAtCursor(e.Where.X)
-				if t1 < t2 {
-					wave.SelectAudio(t1, t2)
-				} else {
-					wave.SelectAudio(t2, t1)
+				r := wave.Rect()
+				//log.Println(r, dragOrigin.Y - r.Min.Y, r.Dy() / 5)
+				if dragOrigin.In(r) {
+					t1 := wave.TimeAtCursor(dragOrigin.X)
+					t2 := wave.TimeAtCursor(e.Where.X)
+					if t1 > t2 {
+						t1, t2 = t2, t1
+					}
+					if dragOrigin.Y - r.Min.Y < r.Dy() / 5 {
+						wave.SelectAudioByTime(t1, t2)
+					} else {
+						wave.SelectAudioSnapToBars(t1, t2)
+					}
+					mousePos = e.Where
+					doredraw()
 				}
-				mousePos = e.Where
-				doredraw()
 			}
 		case wde.MouseMovedEvent:
 			mousePos = e.Where
