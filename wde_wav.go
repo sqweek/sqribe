@@ -61,10 +61,10 @@ func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 
 func nearestBar(x, anchor, barDuration time.Duration) time.Duration {
 	rem := (x - anchor) % barDuration
-	if rem > barDuration > 2 {
-		return x - remS + barDuration
+	if rem > barDuration/2 {
+		return x - rem + barDuration
 	}
-	return x - remS
+	return x - rem
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
