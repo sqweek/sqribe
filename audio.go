@@ -4,6 +4,7 @@ import (
 	"bitbucket.org/sqweek/portaudio-go/portaudio"
 	"unsafe"
 	"reflect"
+	"runtime"
 	"sync"
 )
 
@@ -23,6 +24,8 @@ func AudioInit() (uint8, uint32, error) {
 	if err != nil {
 		return 0, 0, err
 	}
+
+	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
 
 	jack, err := portaudio.HostApi(portaudio.JACK)
 	dev := &jack.Devices[0]
