@@ -38,6 +38,10 @@ func AudioInit() (uint8, uint32, error) {
 	return uint8(out.Channels), uint32(rate), nil
 }
 
+func AudioShutdown() {
+	portaudio.Terminate()
+}
+
 func AppendAudio(src []int16) int {
 	return buf.Append(src)
 }
@@ -135,15 +139,17 @@ func (ap *AudioProcessor) ProcessAudio(in, out []int16) {
 }
 
 func StartPlayback() {
-	stream.Start()
 	playing = true
+	stream.Start()
 }
 
 func StopPlayback() {
-	playing = false
-	stream.Abort()
-	buf.write.Signal()
-	buf.Clear()
+	go func() {
+		playing = false
+		stream.Abort()
+		buf.write.Signal()
+		buf.Clear()
+	}()
 }
 
 func IsPlaying() bool {

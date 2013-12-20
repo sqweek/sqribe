@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/neagix/Go-SDL/sdl"
+//	"github.com/neagix/Go-SDL/sdl"
 	"github.com/neagix/Go-SDL/sdl/audio"
 	"github.com/neagix/Go-SDL/sound"
 	"github.com/skelterjohn/go.wde"
@@ -113,7 +113,8 @@ func playToggle() {
 	fmt.Println("starting playback", s0, sN)
 
 	/* short crossfade to loop smoothly */
-	playSamples := wav.Samples[2*s0:2*sN]
+	/* XXX GetSamples returns holes, need a blocking api */
+	playSamples := wav.GetSamples(uint64(2*s0), uint64(2*sN))
 	padlen := 20
 	loopPad := make([]int16, 2*(2*padlen + 1))
 	N := len(playSamples)/2
@@ -214,9 +215,9 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 var audioFile = flag.String("audio", "test.ogg", "audio file")
 
 func main() {
-	if sdl.Init(sdl.INIT_EVERYTHING) != 0 {
-		log.Fatal(sdl.GetError())
-	}
+//	if sdl.Init(sdl.INIT_EVERYTHING) != 0 {
+//		log.Fatal(sdl.GetError())
+//	}
 
 	sound.Init()
 
@@ -230,10 +231,7 @@ func main() {
 
 	flag.Parse()
 
-	sample := sound.NewSampleFromFile(*audioFile, &actualFmt, 10*1024*1024)
-	sample.Decode()
-	wav = NewWaveform(sample.Buffer_int16(), uint(sampleRate))
-	log.Println(len(wav.Samples))
+	wav = NewWaveform(*audioFile, actualFmt)
 
 	err = FontInit()
 	if err != nil {
@@ -262,4 +260,6 @@ func main() {
 	redraw <- image.Rect(0,0,0,0)
 
 	wg.Wait()
+
+	AudioShutdown()
 }

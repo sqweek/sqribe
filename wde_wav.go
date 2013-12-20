@@ -14,7 +14,7 @@ type WaveWidget struct {
 	wav *Waveform
 	bpm float64
 	anchor time.Duration
-	first_sample int
+	first_sample int64
 	samples_per_pixel int
 	selection struct {
 		min time.Duration
@@ -75,7 +75,7 @@ func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
 	ww.renderstate.modelChanged = true
 }
 
-func (ww *WaveWidget) GetSelectedSampleRange() (int, int) {
+func (ww *WaveWidget) GetSelectedSampleRange() (int64, int64) {
 	return ww.SampleAtTime(ww.selection.min), ww.SampleAtTime(ww.selection.max)	
 }
 
@@ -90,16 +90,16 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	}
 	original := ww.first_sample
 	width := ww.renderstate.rect.Size().X
-	shift := int((float64(width) * amount) * float64(ww.samples_per_pixel))
-	rbound := len(ww.wav.Samples)/2 - (width + 1) * ww.samples_per_pixel
+	shift := int64((float64(width) * amount) * float64(ww.samples_per_pixel))
+	rbound := int64(ww.wav.NSamples/2) - int64((width + 1) * ww.samples_per_pixel)
 	ww.first_sample += shift
-	//log.Println(len(ww.wav.Samples), width, ww.samples_per_pixel, ww.first_sample, rbound)
+	//log.Println(len(ww.wav.NSamples), width, ww.samples_per_pixel, ww.first_sample, rbound)
 	if ww.first_sample < 0 || rbound < 0 {
 		ww.first_sample = 0
 	} else if ww.first_sample > rbound {
 		ww.first_sample = rbound
 	}
-	diff := ww.first_sample - original
+	diff := int(ww.first_sample - original)
 	if diff != 0 {
 		ww.renderstate.modelChanged = true
 	}
@@ -150,24 +150,24 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	cr := color.RGBA{0xbb, 0x99, 0x99, 255}
 	csel := color.RGBA{0xdd, 0xdd, 0xdd, 255}
 	s0 := ww.first_sample
-	spp := ww.samples_per_pixel
+	spp := int64(ww.samples_per_pixel)
 	sel0, selN := ww.GetSelectedSampleRange()
-	selR := image.Rect((sel0 - s0)/spp, r.Min.Y, (selN - s0)/spp, r.Max.Y)
+	selR := image.Rect(int((sel0 - s0)/spp), r.Min.Y, int((selN - s0)/spp), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	size := r.Size()
 	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
 	for dx := 0; dx < size.X; dx++ {
-		i0 := 2*(dx*spp + s0)
-		iN := 2*((dx+1)*spp + s0)
-		if i0 > len(ww.wav.Samples) {
+		i0 := 2*uint64(int64(dx)*spp + s0)
+		iN := 2*uint64(int64(dx+1)*spp + s0)
+		if i0 > ww.wav.NSamples {
 			return
 		}
-		if iN > len(ww.wav.Samples) {
-			iN = len(ww.wav.Samples)
+		if iN > ww.wav.NSamples {
+			iN = ww.wav.NSamples
 		}
-		pixSamples := ww.wav.Samples[i0:iN]
+		pixSamples := ww.wav.GetSamples(i0, iN)
 		left, right := WaveRanges(pixSamples)
 		var lmin, lmax, rmin, rmax int
 		if left.min > 0 {
@@ -208,7 +208,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	secondsPerBar := beatsPerBar / (float64(ww.bpm) / 60.0)
 	barWidth := int(secondsPerBar * float64(ww.wav.rate) / float64(ww.samples_per_pixel))
 	anchor := ww.SampleAtTime(ww.anchor)
-	anchorPixel := int((anchor - ww.first_sample) / ww.samples_per_pixel)
+	anchorPixel := int((anchor - ww.first_sample) / int64(ww.samples_per_pixel))
 	for anchorPixel > r.Min.X + barWidth {
 		anchorPixel -= barWidth
 	}
@@ -232,21 +232,21 @@ func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 	if ww.wav == nil {
 		return 0.0
 	}
-	sample := ww.first_sample + dx*ww.samples_per_pixel
+	sample := ww.first_sample + int64(dx*ww.samples_per_pixel)
 	durPerSample := time.Second / time.Duration(ww.wav.rate)
 	return time.Duration(sample) * durPerSample
 }
 
-func (ww *WaveWidget) SampleAtTime(t time.Duration) int {
+func (ww *WaveWidget) SampleAtTime(t time.Duration) int64 {
 	if ww.wav == nil {
 		return 0
 	}
-	s := int(float64(t) / float64(time.Second) * float64(ww.wav.rate))
+	s := int64(float64(t) / float64(time.Second) * float64(ww.wav.rate))
 	if s < 0 {
 		s = 0
 	}
-	if s >= len(ww.wav.Samples)/2 {
-		s = len(ww.wav.Samples)/2 - 1
+	if s >= int64(ww.wav.NSamples/2) {
+		s = int64(ww.wav.NSamples/2 - 1)
 	}
 	return s
 }
