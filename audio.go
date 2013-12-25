@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bitbucket.org/sqweek/portaudio-go/portaudio"
-	"unsafe"
-	"reflect"
+	"code.google.com/p/portaudio-go/portaudio"
 	"runtime"
 	"sync"
 )
@@ -28,17 +26,16 @@ func AudioInit() (uint8, uint32, error) {
 	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
 
 	jack, err := portaudio.HostApi(portaudio.JACK)
-	dev := &jack.Devices[0]
-	in, out := portaudio.DefaultParameters(nil, dev)
-	rate := dev.DefaultSampleRate
-	s, err := portaudio.OpenStream(in, out, rate, 4096, &AudioProcessor{})
+	dev := jack.Devices[1]
+	params := portaudio.HighLatencyParameters(nil, dev)
+	s, err := portaudio.OpenStream(params, paCallback)
 	if err != nil {
 		return 0, 0, err
 	}
-	s16PerSecond := int(rate) * out.Channels
+	s16PerSecond := int(params.SampleRate) * params.Output.Channels
 	buf = NewRingBuffer(s16PerSecond/2)
 	stream = s
-	return uint8(out.Channels), uint32(rate), nil
+	return uint8(params.Output.Channels), uint32(params.SampleRate), nil
 }
 
 func AudioShutdown() {
@@ -117,24 +114,7 @@ func (ring *RingBuffer) Size() int {
 	return s
 }
 
-func sdl_callback(outptr unsafe.Pointer, nbytes int) {
-	if !playing {
-		return
-	}
-
-	var out []int16
-	n := nbytes / 2
-	hdr := (*reflect.SliceHeader)((unsafe.Pointer(&out)))
-	hdr.Cap = n
-	hdr.Len = n
-	hdr.Data = uintptr(outptr)
-
-	buf.Extract(out)
-}
-
-type AudioProcessor struct {}
-
-func (ap *AudioProcessor) ProcessAudio(in, out []int16) {
+func paCallback(out []int16) {
 	if !playing {
 		return
 	}
