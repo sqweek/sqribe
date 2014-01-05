@@ -17,7 +17,7 @@ import (
 )
 
 var wg sync.WaitGroup
-var wav Waveform
+var wav *Waveform
 var wave *WaveWidget
 var mousePos image.Point
 var bpm BpmWidget
@@ -113,8 +113,9 @@ func playToggle() {
 	fmt.Println("starting playback", s0, sN)
 
 	/* short crossfade to loop smoothly */
-	/* XXX GetSamples returns holes, need a blocking api */
-	playSamples := wav.GetSamples(uint64(2*s0), uint64(2*sN))
+	/* TODO have the go-routine that feeds audio wait for the samples
+	 * instead of reading them all upfront */
+	playSamples := wav.Samples(uint64(2*s0), uint64(2*sN))
 	padlen := 20
 	loopPad := make([]int16, 2*(2*padlen + 1))
 	N := len(playSamples)/2
@@ -215,10 +216,6 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 var audioFile = flag.String("audio", "test.ogg", "audio file")
 
 func main() {
-//	if sdl.Init(sdl.INIT_EVERYTHING) != 0 {
-//		log.Fatal(sdl.GetError())
-//	}
-
 	sound.Init()
 
 	channels, sampleRate, err := AudioInit()
@@ -247,7 +244,7 @@ func main() {
 	dw.Show()
 
 	wave = NewWaveWidget()
-	wave.SetWaveform(&wav)
+	wave.SetWaveform(wav)
 
 	bpm = BpmWidget{bpm: 120}
 

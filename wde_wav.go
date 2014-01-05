@@ -93,7 +93,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	shift := int64((float64(width) * amount) * float64(ww.samples_per_pixel))
 	rbound := int64(ww.wav.NSamples/2) - int64((width + 1) * ww.samples_per_pixel)
 	ww.first_sample += shift
-	//log.Println(len(ww.wav.NSamples), width, ww.samples_per_pixel, ww.first_sample, rbound)
+	//fmt.Println(ww.wav.NSamples, width, ww.samples_per_pixel, ww.first_sample, rbound)
 	if ww.first_sample < 0 || rbound < 0 {
 		ww.first_sample = 0
 	} else if ww.first_sample > rbound {
