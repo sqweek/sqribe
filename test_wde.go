@@ -213,9 +213,10 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 	}
 }
 
-var audioFile = flag.String("audio", "test.ogg", "audio file")
+var audioFile = flag.String("audio", "/d/music/Birds of Tokyo/Circles.mp3", "audio file")
 
 func main() {
+	//sdl.Init(sdl.INIT_EVERYTHING)
 	sound.Init()
 
 	channels, sampleRate, err := AudioInit()
@@ -228,7 +229,10 @@ func main() {
 
 	flag.Parse()
 
-	wav = NewWaveform(*audioFile, actualFmt)
+	wav, err = NewWaveform(*audioFile, actualFmt)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	err = FontInit()
 	if err != nil {

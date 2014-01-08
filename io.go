@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/binary"
+	"time"
 	"sync"
+	."fmt"
 	"os"
 )
 
@@ -17,6 +19,8 @@ type cache struct {
 
 	iodone *sync.Cond /* triggered whenever a block completes */
 	listeners []chan *Chunk
+
+	bytesWritten int64 /* -1 if writing has finished */
 }
 
 func mkcache(blocksz, sampsz uint, file string) *cache {
@@ -28,6 +32,22 @@ func mkcache(blocksz, sampsz uint, file string) *cache {
 	cache.lru.max = 100
 	go cache.fetcher()
 	return &cache
+}
+
+func (c *cache) Write(readfn func() []int16) error {
+	f, err := os.Create(c.file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	buf := readfn()
+	for len(buf) > 0 {
+		binary.Write(f, binary.LittleEndian, buf)
+		c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
+		buf = readfn()
+	}
+	c.bytesWritten = -1
+	return nil
 }
 
 func (c *cache) Bounds(sample0, sampleN uint64) (uint64, uint64) {
@@ -75,11 +95,18 @@ func (c *cache) fetcher() *Chunk {
 			continue
 		}
 		filename, offset := c.pos(id)
+		if offset == -1 {
+			/* block not written yet - back on the queue */
+			Printf("requeing block %d\n", id)
+			go func() { time.Sleep(1000 * time.Millisecond); c.iochan <- id }()
+			continue
+		}
 		file, err := os.Open(filename)
 		if err != nil {
 			continue
 		}
 		chunk, err := readchunk(id, file, c.blocksz, c.sampsz, offset)
+		Printf("read chunk %d\n", id)
 		file.Close()
 		if err != nil {
 			continue
@@ -88,8 +115,12 @@ func (c *cache) fetcher() *Chunk {
 	}
 }
 
-func (c *cache) pos(id uint64) (string, uint64) {
-	return c.file, id * uint64(c.blocksz)
+func (c *cache) pos(id uint64) (string, int64) {
+	offset := int64(id) * int64(c.blocksz)
+	if c.bytesWritten != -1 && offset + int64(c.blocksz) > c.bytesWritten {
+		offset = -1; /* cache still initialising, block not written yet */
+	}
+	return c.file, offset
 }
 
 func (c *cache) add(id uint64, chunk *Chunk) {
@@ -156,9 +187,9 @@ func (lru *ChunkList) touch(chunk *Chunk) {
 	}
 }
 
-func readchunk(id uint64, file *os.File, blocksz uint, sampsz uint, offset uint64) (*Chunk, error) {
-	_, err := file.Seek(int64(offset), 0)
-	chunk := Chunk{I0: offset/uint64(sampsz), Data: make([]int16, blocksz/sampsz), id: id}
+func readchunk(id uint64, file *os.File, blocksz uint, sampsz uint, offset int64) (*Chunk, error) {
+	_, err := file.Seek(offset, 0)
+	chunk := Chunk{I0: uint64(offset)/uint64(sampsz), Data: make([]int16, blocksz/sampsz), id: id}
 	err = binary.Read(file, binary.LittleEndian, chunk.Data)
 	return &chunk, err
 }

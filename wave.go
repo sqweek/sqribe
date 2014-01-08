@@ -2,8 +2,7 @@ package main
 
 import (
 	"github.com/neagix/Go-SDL/sound"
-	"encoding/binary"
-	"os"
+	."fmt"
 )
 
 type Waveform struct {
@@ -34,26 +33,31 @@ func min(a, b int16) int16 {
 	return b
 }
 
-func NewWaveform(file string, fmt sound.AudioInfo) *Waveform {
-	wave := &Waveform{rate: uint(fmt.Rate)}
+func NewWaveform(file string, fmt sound.AudioInfo) (*Waveform, error) {
+	wave := &Waveform{rate: uint(fmt.Rate), NSamples: 0}
 	wave.cache = mkcache(1024*1024, 2, "/home/sqweek/.cache/scribe")
-	go wave.decode(file, fmt)
+	sample, err := sound.NewSampleFromFile(file, &fmt, 1024*1024)
+	if err != nil {
+		return nil, err
+	}
+	go wave.cache.Write(wave.decodefn(sample))
 
-	return wave
+	return wave, nil
 }
 
-func (wav *Waveform) decode(input string, fmt sound.AudioInfo) {
-	f, _ := os.Create(wav.cache.file)
-	defer f.Close()
-	sample := sound.NewSampleFromFile(input, &fmt, 1024*1024)
-	wav.NSamples = 0
-	n := sample.Decode()
-	for n > 0 {
-		samps := sample.Buffer_int16()
-		wav.updateMax(samps)
-		binary.Write(f, binary.LittleEndian, samps)
-		wav.NSamples += uint64(n)
-		n = sample.Decode()
+func (wav *Waveform) decodefn(sample *sound.Sample) func() []int16 {
+	/* returns zero-length slice at EOF */
+	return func() []int16 {
+		n := sample.Decode()
+		if n > 0 {
+			samps := sample.Buffer_int16()
+			Printf("decoded %d bytes (%d samples)\n", n, len(samps))
+			wav.updateMax(samps[0:n/2])
+			wav.NSamples += uint64(n)
+			return samps[0:n/2]
+		}
+		Printf("decoding finished\n")
+		return []int16{}
 	}
 }
 
