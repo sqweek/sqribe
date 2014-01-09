@@ -25,9 +25,11 @@ type WaveWidget struct {
 		img draw.Image
 		modelChanged bool
 	}
+	refresh chan image.Rectangle
+	iolisten <-chan *Chunk
 }
 
-func NewWaveWidget() *WaveWidget {
+func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
 	var ww WaveWidget
 	ww.wav = nil
 	ww.bpm = 120
@@ -36,6 +38,7 @@ func NewWaveWidget() *WaveWidget {
 	ww.renderstate.rect = image.Rect(0,0,0,0)
 	ww.renderstate.img = nil
 	ww.renderstate.modelChanged = true
+	ww.refresh = refresh
 	return &ww
 }
 
@@ -80,8 +83,34 @@ func (ww *WaveWidget) GetSelectedSampleRange() (int64, int64) {
 }
 
 func (ww *WaveWidget) SetWaveform(wav *Waveform) {
+	if ww.wav != nil {
+		ww.wav.cache.ignore(ww.iolisten)
+	}
 	ww.wav = wav
-	/* TODO paint */
+	if ww.wav != nil {
+		iolisten := ww.wav.cache.listen()
+		ww.iolisten = iolisten
+		go func() {
+			for {
+				chunk := <-iolisten
+				c0, cN := int64(chunk.I0)/2, (int64(chunk.I0) + int64(len(chunk.Data)))/2
+				w0, wN := ww.SampleRange()
+				fmt.Printf("wav heard about chunk %d i/o (%d - %d)  visible (%d - %d)\n", chunk.id, c0, cN, w0, wN)
+				if (c0 >= w0 && c0 <= wN) || (cN >= w0 && cN <= wN) {
+					ww.renderstate.modelChanged = true
+					ww.refresh <- image.Rect(0, 0, 0, 0)
+				}
+			}
+		}()
+	}
+	ww.renderstate.modelChanged = true
+	ww.refresh <- image.Rect(0, 0, 0, 0)
+}
+
+func (ww *WaveWidget) SampleRange() (int64, int64) {
+	w0 := ww.first_sample
+	wN := w0 + int64(ww.samples_per_pixel) * int64(ww.renderstate.rect.Dx())
+	return w0, wN
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {

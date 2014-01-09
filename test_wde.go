@@ -247,13 +247,14 @@ func main() {
 	dw.SetSize(400, 400)
 	dw.Show()
 
-	wave = NewWaveWidget()
+	redraw := make(chan image.Rectangle, 10)
+
+	wave = NewWaveWidget(redraw)
 	wave.SetWaveform(wav)
 
 	bpm = BpmWidget{bpm: 120}
 
 	wg.Add(1)
-	redraw := make(chan image.Rectangle, 10)
 	done := make(chan bool)
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done)

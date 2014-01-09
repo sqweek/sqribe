@@ -128,6 +128,7 @@ func (c *cache) add(id uint64, chunk *Chunk) {
 	c.iodone.L.Lock()
 	c.iodone.Broadcast()
 	c.iodone.L.Unlock()
+	c.broadcast(chunk)
 	gone := c.lru.add(chunk)
 	if (gone != nil) {
 		delete(c.chunks, gone.id)
@@ -140,8 +141,20 @@ func (c *cache) broadcast(chunk *Chunk) {
 	}
 }
 
-func (c *cache) listen(listener chan *Chunk) {
+/* TODO synchronize listen/ignore */
+func (c *cache) listen() chan *Chunk {
+	listener := make(chan *Chunk)
 	c.listeners = append(c.listeners, listener)
+	return listener
+}
+
+func (c *cache) ignore(listener <-chan *Chunk) {
+	for i, l := range(c.listeners) {
+		if l == listener {
+			c.listeners = append(c.listeners[:i], c.listeners[i+1:]...)
+			return
+		}
+	}
 }
 
 type ChunkNode struct {
