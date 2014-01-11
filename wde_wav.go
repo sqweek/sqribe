@@ -92,7 +92,10 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 		ww.iolisten = iolisten
 		go func() {
 			for {
-				chunk := <-iolisten
+				chunk, ok := <-iolisten
+				if !ok {
+					return
+				}
 				c0, cN := int64(chunk.I0)/2, (int64(chunk.I0) + int64(len(chunk.Data)))/2
 				w0, wN := ww.SampleRange()
 				fmt.Printf("wav heard about chunk %d i/o (%d - %d)  visible (%d - %d)\n", chunk.id, c0, cN, w0, wN)

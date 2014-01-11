@@ -151,6 +151,7 @@ func (c *cache) listen() chan *Chunk {
 func (c *cache) ignore(listener <-chan *Chunk) {
 	for i, l := range(c.listeners) {
 		if l == listener {
+			close(c.listeners[i])
 			c.listeners = append(c.listeners[:i], c.listeners[i+1:]...)
 			return
 		}
