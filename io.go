@@ -142,7 +142,7 @@ func (c *cache) broadcast(chunk *Chunk) {
 }
 
 /* TODO synchronize listen/ignore */
-func (c *cache) listen() chan *Chunk {
+func (c *cache) listen() <-chan *Chunk {
 	listener := make(chan *Chunk)
 	c.listeners = append(c.listeners, listener)
 	return listener

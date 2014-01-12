@@ -1,7 +1,7 @@
 package main
 
 import (
-	_ "github.com/skelterjohn/go.wde"
+	"github.com/skelterjohn/go.wde"
 	"image/color"
 	"image/draw"
 	"image"
@@ -22,7 +22,7 @@ type WaveWidget struct {
 	}
 	renderstate struct {
 		rect image.Rectangle
-		img draw.Image
+		img *image.RGBA
 		modelChanged bool
 	}
 	refresh chan image.Rectangle
@@ -151,16 +151,19 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	return delta
 }
 
-func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
-	if ww.renderstate.modelChanged || !dst.Bounds().Eq(ww.renderstate.rect) {
+// dst.Bounds() is the entire window, r is the area this widget is responsible for
+func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
+	if ww.renderstate.modelChanged || !r.Eq(ww.renderstate.rect) {
 		ww.renderstate.rect = r
+		r0 := image.Rect(0, 0, r.Dx(), r.Dy())
 		ww.renderstate.modelChanged = false
-		ww.renderstate.img = image.NewRGBA(r)
+		ww.renderstate.img = image.NewRGBA(r0)
 		if ww.wav != nil {
-			ww.drawWave(ww.renderstate.img, r)
+			ww.drawWave(ww.renderstate.img, r0)
 		}
-		ww.drawScale(ww.renderstate.img, r)
-		draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
+		ww.drawScale(ww.renderstate.img, r0)
+		dst.CopyRGBA(ww.renderstate.img, r)
+		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 	}
 }
 
@@ -190,16 +193,9 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
+	samps := ww.wav.GetSamples(uint64(2*s0), uint64(2*(s0 + int64(size.X) * spp)))
 	for dx := 0; dx < size.X; dx++ {
-		i0 := 2*uint64(int64(dx)*spp + s0)
-		iN := 2*uint64(int64(dx+1)*spp + s0)
-		if i0 > ww.wav.NSamples {
-			return
-		}
-		if iN > ww.wav.NSamples {
-			iN = ww.wav.NSamples
-		}
-		pixSamples := ww.wav.GetSamples(i0, iN)
+		pixSamples := samps[int(spp)*dx*2:int(spp)*(dx+1)*2]
 		left, right := WaveRanges(pixSamples)
 		var lmin, lmax, rmin, rmax int
 		if left.min > 0 {
