@@ -109,13 +109,13 @@ func playToggle() {
 		return
 	}
 
-	s0, sN := wave.GetSelectedSampleRange()
-	fmt.Println("starting playback", s0, sN)
+	f0, fN := wave.GetSelectedFrameRange()
+	fmt.Println("starting playback", f0, fN)
 
 	/* short crossfade to loop smoothly */
 	/* TODO have the go-routine that feeds audio wait for the samples
 	 * instead of reading them all upfront */
-	playSamples := wav.Samples(uint64(2*s0), uint64(2*sN))
+	playSamples := wav.Samples(uint64(2*f0), uint64(2*fN))
 	padlen := 20
 	loopPad := make([]int16, 2*(2*padlen + 1))
 	N := len(playSamples)/2
