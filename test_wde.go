@@ -74,6 +74,9 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			}
 		case wde.MouseMovedEvent:
 			mousePos = e.Where
+			if !IsPlaying() && mousePos.In(wave.Rect()) {
+				wave.SetCursorByPixel(mousePos.Sub(wave.Rect().Min))
+			}
 			doredraw()
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
@@ -87,7 +90,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			case wde.KeyDownArrow:
 				zoom(2.0)
 			case wde.KeySpace:
-				playToggle()
+				playToggle(doredraw)
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -102,7 +105,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	}
 }
 
-func playToggle() {
+func playToggle(feedback func()) {
 	if IsPlaying() {
 		fmt.Println("stopping playback")
 		StopPlayback()
@@ -129,6 +132,7 @@ func playToggle() {
 
 	padN := N + len(loopPad)/2
 	bufsiz := 4096
+	/* sample feeding i/o thread */
 	go func() {
 		var buf []int16
 		i := 0
@@ -155,7 +159,20 @@ func playToggle() {
 			i %= padN
 		}
 	}()
-	StartPlayback()
+	s0 := 2*f0
+	StartPlayback(int64(2*padN))
+	/* gui feedback thread */
+	go func() {
+		for {
+			i := CurrentSampleIndex()
+			if i == -1 {
+				break
+			}
+			wave.SetCursorBySample(s0 + i)
+			time.Sleep(33 * time.Millisecond)
+			feedback()
+		}
+	}()
 }
 
 func drawstatus(dst draw.Image, r image.Rectangle) {

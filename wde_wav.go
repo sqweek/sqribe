@@ -10,6 +10,8 @@ import (
 	"fmt"
 )
 
+
+
 type WaveWidget struct {
 	wav *Waveform
 	bpm float64
@@ -25,6 +27,7 @@ type WaveWidget struct {
 		img *image.RGBA
 		modelChanged bool
 	}
+	cursor image.Point
 	refresh chan image.Rectangle
 	iolisten <-chan *Chunk
 }
@@ -116,6 +119,17 @@ func (ww *WaveWidget) VisibleSampleRange() (int64, int64) {
 	return w0, wN
 }
 
+func (ww *WaveWidget) SetCursorBySample(sample int64) {
+	frame := sample / 2
+	ww.cursor = image.Point{int(frame - ww.first_frame) / ww.frames_per_pixel, 0}
+	ww.renderstate.modelChanged = true 
+}
+
+func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
+	ww.cursor = mousePos
+	ww.renderstate.modelChanged = true
+}
+
 func (ww *WaveWidget) Scroll(amount float64) int {
 	if ww.renderstate.rect.Empty() || ww.wav == nil {
 		return 0
@@ -162,6 +176,9 @@ func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
 			ww.drawWave(ww.renderstate.img, r0)
 		}
 		ww.drawScale(ww.renderstate.img, r0)
+
+		curcol := color.RGBA{0, 0xdd, 0, 255}
+		draw.Draw(ww.renderstate.img, image.Rect(ww.cursor.X, 0, ww.cursor.X+1, r.Dy()), &image.Uniform{curcol}, image.ZP, draw.Src)
 		dst.CopyRGBA(ww.renderstate.img, r)
 		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 	}

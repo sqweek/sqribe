@@ -14,8 +14,12 @@ type RingBuffer struct {
 }
 
 var buf *RingBuffer
-var playing bool
 var stream *portaudio.Stream
+
+var (
+	currentLen int64 = -1
+	currentIndex int64 = -1
+)
 
 func AudioInit() (uint8, uint32, error) {
 	err := portaudio.Initialize()
@@ -59,7 +63,7 @@ func (ring *RingBuffer) Append(src []int16) int {
 	defer ring.write.L.Unlock()
 	for len(src) > len(ring.buf) - ring.Size() {
 		ring.write.Wait()
-		if !playing {
+		if currentLen == -1 {
 			return -1
 		}
 	}
@@ -115,20 +119,24 @@ func (ring *RingBuffer) Size() int {
 }
 
 func paCallback(out []int16) {
-	if !playing {
+	if currentLen == -1 {
 		return
 	}
 	buf.Extract(out)
+	currentIndex += int64(len(out))
+	currentIndex %= currentLen
 }
 
-func StartPlayback() {
-	playing = true
+func StartPlayback(period int64) {
+	currentIndex = 0
+	currentLen = period
 	stream.Start()
 }
 
 func StopPlayback() {
 	go func() {
-		playing = false
+		currentIndex = -1
+		currentLen = -1
 		stream.Abort()
 		buf.write.Signal()
 		buf.Clear()
@@ -136,5 +144,9 @@ func StopPlayback() {
 }
 
 func IsPlaying() bool {
-	return playing
+	return currentLen != -1
+}
+
+func CurrentSampleIndex() int64 {
+	return currentIndex
 }
