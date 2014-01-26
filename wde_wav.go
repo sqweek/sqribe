@@ -278,8 +278,7 @@ func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 		return 0.0
 	}
 	frame := ww.first_frame + int64(dx*ww.frames_per_pixel)
-	durPerFrame := time.Second / time.Duration(ww.wav.rate)
-	return time.Duration(frame) * durPerFrame
+	return ww.wav.TimeAtFrame(frame)
 }
 
 func (ww *WaveWidget) FrameAtTime(t time.Duration) int64 {

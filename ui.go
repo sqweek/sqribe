@@ -13,10 +13,44 @@ type Drawable interface {
 	Draw(draw.Image, image.Rectangle)
 }
 
+type BpmTracker struct {
+	t0 time.Time
+	Hits []time.Duration
+}
+
+func (bt *BpmTracker) Clear() {
+	bt.Hits = bt.Hits[0:0]
+}
+
+func (bt *BpmTracker) AppendTime(t time.Time) {
+	if len(bt.Hits) == 0 {
+		bt.t0 = t
+	}
+	bt.Hits = append(bt.Hits, t.Sub(bt.t0))
+}
+
+func (bt *BpmTracker) Append(d time.Duration) {
+	bt.Hits = append(bt.Hits, d)
+}
+
+func (bt *BpmTracker) LastTime() time.Time {
+	if len(bt.Hits) == 0 {
+		return time.Time{}
+	}
+	return bt.t0.Add(bt.Hits[len(bt.Hits) - 1])
+}
+
+func (bt *BpmTracker) Bpm() float64 {
+	if len(bt.Hits) <= 1 {
+		return 0.0
+	}
+	n := len(bt.Hits) - 1
+	return 60.0 * float64(time.Second) / (float64(bt.Hits[n] - bt.Hits[0]) / float64(n))
+}
 
 type BpmWidget struct {
+	BpmTracker
 	bpm float64
-	hits []time.Time
 	area image.Rectangle
 }
 
@@ -34,13 +68,17 @@ func (bw *BpmWidget) Draw(dst draw.Image, r image.Rectangle) {
 func (bw *BpmWidget) Hit() float64 {
 	cutoff := time.Second*3
 	now := time.Now()
-	if len(bw.hits) > 0 && now.After(bw.hits[len(bw.hits)-1].Add(cutoff)) {
-		bw.hits = bw.hits[0:0]
+	if now.After(bw.LastTime().Add(cutoff)) {
+		bw.Clear()
 	}
-	bw.hits = append(bw.hits, now)
-	if len(bw.hits) > 1 {
-		bw.bpm = 60.0 * float64(time.Second) / (float64(bw.hits[len(bw.hits)-1].Sub(bw.hits[0])) / float64(len(bw.hits) - 1))
-		return bw.bpm
+	bw.AppendTime(now)
+	bpm := bw.Bpm()
+	if bpm != 0.0 {
+		bw.bpm = bpm
 	}
-	return 0.0
+	return bpm
+}
+
+func (bw *BpmWidget) SetBpm(bpm float64) {
+	bw.bpm = bpm
 }

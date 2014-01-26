@@ -34,6 +34,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			doredraw()
 		}
 	}
+	var bpmT BpmTracker
 	var dragOrigin image.Point
 	var refreshTimer *time.Timer
 	for ei := range events {
@@ -91,6 +92,19 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				zoom(2.0)
 			case wde.KeySpace:
 				playToggle(doredraw)
+				bpmT.Clear()
+			case wde.KeyReturn:
+				if IsPlaying() {
+					t := wav.TimeAtFrame(CurrentSample()/2)
+					bpmT.Append(t)
+					b := bpmT.Bpm()
+					if b != 0.0 {
+						bpm.SetBpm(b)
+						wave.SetBpm(b)
+						wave.SetBeatAnchor(bpmT.Hits[0])
+						doredraw()
+					}
+				}
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -160,15 +174,15 @@ func playToggle(feedback func()) {
 		}
 	}()
 	s0 := 2*f0
-	StartPlayback(int64(2*padN))
+	StartPlayback(s0, int64(2*padN))
 	/* gui feedback thread */
 	go func() {
 		for {
-			i := CurrentSampleIndex()
-			if i == -1 {
+			s := CurrentSample()
+			if s == -1 {
 				break
 			}
-			wave.SetCursorBySample(s0 + i)
+			wave.SetCursorBySample(s)
 			time.Sleep(33 * time.Millisecond)
 			feedback()
 		}

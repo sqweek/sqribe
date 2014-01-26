@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/neagix/Go-SDL/sound"
 	."fmt"
+	"time"
 )
 
 type Waveform struct {
@@ -122,6 +123,11 @@ func (ww *Waveform) Max() int16 {
 	} else {
 		return ww.Rmax
 	}
+}
+
+func (wav *Waveform) TimeAtFrame(frame int64) time.Duration {
+	durPerFrame := time.Second / time.Duration(wav.rate)
+	return time.Duration(frame) * durPerFrame
 }
 
 func WaveRanges(s []int16) (WaveRange, WaveRange) {

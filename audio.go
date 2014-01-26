@@ -15,10 +15,13 @@ type RingBuffer struct {
 
 var buf *RingBuffer
 var stream *portaudio.Stream
+var samplesPerSecond float64
 
 var (
+	currentS0 int64
 	currentLen int64 = -1
 	currentIndex int64 = -1
+	currentTime portaudio.StreamCallbackTimeInfo
 )
 
 func AudioInit() (uint8, uint32, error) {
@@ -39,6 +42,7 @@ func AudioInit() (uint8, uint32, error) {
 	s16PerSecond := int(params.SampleRate) * params.Output.Channels
 	buf = NewRingBuffer(s16PerSecond/2)
 	stream = s
+	samplesPerSecond = float64(s16PerSecond)
 	return uint8(params.Output.Channels), uint32(params.SampleRate), nil
 }
 
@@ -118,18 +122,21 @@ func (ring *RingBuffer) Size() int {
 	return s
 }
 
-func paCallback(out []int16) {
+func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 	if currentLen == -1 {
 		return
 	}
 	buf.Extract(out)
 	currentIndex += int64(len(out))
 	currentIndex %= currentLen
+	currentTime = time
 }
 
-func StartPlayback(period int64) {
+func StartPlayback(s0, period int64) {
 	currentIndex = 0
 	currentLen = period
+	currentTime.OutputBufferDacTime = stream.Time()
+	currentS0 = s0
 	stream.Start()
 }
 
@@ -147,6 +154,15 @@ func IsPlaying() bool {
 	return currentLen != -1
 }
 
-func CurrentSampleIndex() int64 {
-	return currentIndex
+func CurrentSample() int64 {
+	if currentIndex == -1 {
+		return -1;
+	}
+	dt := stream.Time() - currentTime.OutputBufferDacTime
+	index := currentIndex + int64(samplesPerSecond * dt.Seconds())
+	if index < 0 {
+		return currentS0
+	}
+	index %= currentLen
+	return currentS0 + index
 }
