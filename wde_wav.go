@@ -78,6 +78,7 @@ func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
 	barDuration := time.Microsecond * time.Duration(1000000 * beatsPerBar / (float64(ww.bpm) / 60.0))
 	ww.selection.min = nearestBar(start, ww.anchor, barDuration)
 	ww.selection.max = nearestBar(end, ww.anchor, barDuration)
+	fmt.Println("selected", ww.selection.min, ww.selection.max, ww.FrameAtTime(ww.selection.min), ww.FrameAtTime(ww.selection.max))
 	ww.renderstate.modelChanged = true
 }
 
@@ -100,7 +101,7 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 					return
 				}
 				c0, cN := int64(chunk.I0)/2, (int64(chunk.I0) + int64(len(chunk.Data)))/2
-				w0, wN := ww.VisibleSampleRange()
+				w0, wN := ww.VisibleFrameRange()
 				fmt.Printf("wav heard about chunk %d i/o (%d - %d)  visible (%d - %d)\n", chunk.id, c0, cN, w0, wN)
 				if (c0 >= w0 && c0 <= wN) || (cN >= w0 && cN <= wN) {
 					ww.renderstate.modelChanged = true
@@ -113,7 +114,7 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 	ww.refresh <- image.Rect(0, 0, 0, 0)
 }
 
-func (ww *WaveWidget) VisibleSampleRange() (int64, int64) {
+func (ww *WaveWidget) VisibleFrameRange() (int64, int64) {
 	w0 := ww.first_frame
 	wN := w0 + int64(ww.frames_per_pixel) * int64(ww.renderstate.rect.Dx())
 	return w0, wN
@@ -251,15 +252,15 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	black := color.RGBA{0x00, 0x00, 0x00, 0xff}
 	beatsPerBar := 4.0
 	secondsPerBar := beatsPerBar / (float64(ww.bpm) / 60.0)
-	barWidth := int(secondsPerBar * float64(ww.wav.rate) / float64(ww.frames_per_pixel))
-	anchor := ww.FrameAtTime(ww.anchor)
-	anchorPixel := int((anchor - ww.first_frame) / int64(ww.frames_per_pixel))
-	for anchorPixel > r.Min.X + barWidth {
-		anchorPixel -= barWidth
+	framesPerBar := int64(secondsPerBar * float64(ww.wav.rate))
+	anchorFrame := ww.FrameAtTime(ww.anchor)
+	for anchorFrame > ww.first_frame + framesPerBar {
+		anchorFrame -= framesPerBar
 	}
-	for anchorPixel < r.Min.X {
-		anchorPixel += barWidth
+	for anchorFrame < ww.first_frame {
+		anchorFrame += framesPerBar
 	}
+	lastFrame := ww.first_frame + int64(r.Dx() * ww.frames_per_pixel)
 	yspacing := 10
 	mid := (r.Min.Y + r.Max.Y) / 2
 	for i := -2; i <= 2; i++ {
@@ -267,7 +268,8 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 		line := image.Rect(r.Min.X, y, r.Max.X, y+1)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
 	}
-	for x := anchorPixel; x < r.Max.X; x += barWidth {
+	for f := anchorFrame; f < lastFrame; f += framesPerBar {
+		x := int(f - ww.first_frame) / ww.frames_per_pixel
 		line := image.Rect(x, mid - 2*yspacing, x+1, mid + 2*yspacing + 1)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
 	}
