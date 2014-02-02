@@ -129,51 +129,51 @@ func playToggle(feedback func()) {
 	f0, fN := wave.GetSelectedFrameRange()
 	fmt.Println("starting playback", f0, fN)
 
-	/* short crossfade to loop smoothly */
-	/* TODO have the go-routine that feeds audio wait for the samples
-	 * instead of reading them all upfront */
-	playSamples := wav.Samples(uint64(2*f0), uint64(2*fN))
-	padlen := 20
-	loopPad := make([]int16, 2*(2*padlen + 1))
-	N := len(playSamples)/2
-	for i := 0; i < padlen; i++ {
-		alpha := 1.0 - float64(i)/float64(padlen)
-		loopPad[2*i] = int16(float64(playSamples[2*(N-1)]) * alpha)
-		loopPad[2*i + 1] = int16(float64(playSamples[2*(N-1) + 1]) * alpha)
-		loopPad[2*(2*padlen - i)] = int16(float64(playSamples[0]) * alpha)
-		loopPad[2*(2*padlen - i) + 1] = int16(float64(playSamples[1]) * alpha)
+	if f0 == fN {
+		/* TODO play whole song starting from cursor*/
+		return
 	}
 
-	padN := N + len(loopPad)/2
-	bufsiz := 4096
+	/* short crossfade to loop smoothly */
+	nchan := int64(2)
+	frame0 := wav.Frames(f0, f0)
+	frameN := wav.Frames(fN, fN)
+	nfPad := int64(20)
+	loopPad := make([]int16, nchan*(2*nfPad + 1))
+	N := fN - f0 + 1
+	for i := int64(0); i < nfPad; i++ {
+		α := 1.0 - float64(i)/float64(nfPad)
+		for j := int64(0); j < nchan; j++ {
+			loopPad[nchan*i + j] = int16(float64(frameN[j]) * α)
+			loopPad[nchan*(2*nfPad - i) + j] = int16(float64(frame0[j]) * α)
+		}
+	}
+
+	padN := N + int64(len(loopPad))/nchan
+	bufsiz := int64(4096) // number of frames per buffer
+	s0 := nchan*f0
 	/* sample feeding i/o thread */
 	go func() {
 		var buf []int16
-		i := 0
+		i := int64(0)
 		for {
-			buf = nil
 			if i < N {
 				if i + bufsiz > N {
-					buf = playSamples[2*i:]
+					buf = wav.Frames(f0 + i, fN)
 				} else {
-					buf = playSamples[2*i:2*(i+bufsiz)]
+					buf = wav.Frames(f0 + i, f0 + i + bufsiz - 1)
 				}
 			} else if i < padN {
-				iP := i - N
-				if i + bufsiz > padN {
-					buf = loopPad[2*iP:]
-				} else {
-					buf = loopPad[2*iP:2*(iP + bufsiz)]
-				}
+				buf = loopPad
 			}
 			if AppendAudio(buf) == -1 {
 				break
 			}
-			i += len(buf) / 2
+			i += int64(len(buf)) / nchan
 			i %= padN
 		}
 	}()
-	s0 := 2*f0
+	//TODO wait for ring buffer to fill up a bit before kicking off audio
 	StartPlayback(s0, int64(2*padN))
 	/* gui feedback thread */
 	go func() {

@@ -100,10 +100,9 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 				if !ok {
 					return
 				}
-				c0, cN := int64(chunk.I0)/2, (int64(chunk.I0) + int64(len(chunk.Data)))/2
 				w0, wN := ww.VisibleFrameRange()
-				fmt.Printf("wav heard about chunk %d i/o (%d - %d)  visible (%d - %d)\n", chunk.id, c0, cN, w0, wN)
-				if (c0 >= w0 && c0 <= wN) || (cN >= w0 && cN <= wN) {
+				s0, sN := w0*2, wN*2 + (2 - 1)
+				if chunk.Intersects(uint64(s0), uint64(sN)) {
 					ww.renderstate.modelChanged = true
 					ww.refresh <- image.Rect(0, 0, 0, 0)
 				}
@@ -211,9 +210,12 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
-	samps := ww.wav.GetSamples(uint64(2*f0), uint64(2*(f0 + int64(size.X) * fpp)))
+	chunks := ww.wav.GetFrames(f0, f0 + int64(size.X) * fpp)
+	s0 := 2 * f0
 	for dx := 0; dx < size.X; dx++ {
-		pixSamples := samps[int(fpp)*dx*2:int(fpp)*(dx+1)*2]
+		pixS0 := uint64(s0 + fpp * int64(dx) * 2)
+		pixSN := uint64(s0 + fpp * int64(dx+1) * 2 - 1)
+		pixSamples := Extract(chunks, pixS0, pixSN)
 		left, right := WaveRanges(pixSamples)
 		var lmin, lmax, rmin, rmax int
 		if left.min > 0 {

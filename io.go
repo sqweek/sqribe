@@ -20,11 +20,12 @@ type cache struct {
 	iodone *sync.Cond /* triggered whenever a block completes */
 	listeners []chan *Chunk
 
-	bytesWritten int64 /* -1 if writing has finished */
+	bytesWritten int64 /* -1 if decoding & writing has finished */
+	lastChunkId uint64 /* id of the last valid chunk */
 }
 
 func mkcache(blocksz, sampsz uint, file string) *cache {
-	cache := cache{blocksz: 1024*1024, sampsz: 2, file: file}
+	cache := cache{blocksz: blocksz, sampsz: sampsz, file: file}
 	cache.iochan = make(chan uint64, 20)
 	cache.chunks = make(map[uint64]*Chunk)
 	cache.listeners = make([]chan *Chunk, 0, 10)
@@ -46,6 +47,7 @@ func (c *cache) Write(readfn func() []int16) error {
 		c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
 		buf = readfn()
 	}
+	c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
 	c.bytesWritten = -1
 	return nil
 }
@@ -59,8 +61,10 @@ func (c *cache) Containing(sample uint64) uint64 {
 	return (sample * uint64(c.sampsz)) / uint64(c.blocksz)
 }
 
-/* doesn't block - returns nil if chunk not in cache */
 func (c *cache) Get(id uint64) *Chunk {
+	if c.bytesWritten == -1 && id > c.lastChunkId {
+		return nil
+	}
 	/* do I/O in background */
 	c.iochan <- id
 	chunk, ok := c.chunks[id]
@@ -215,3 +219,7 @@ type Chunk struct {
 	id uint64 //index into cache.chunks
 }
 
+func (chunk *Chunk) Intersects(s0, sN uint64) bool {
+	cN := chunk.I0 + uint64(len(chunk.Data)) - 1
+	return (s0 >= chunk.I0 && s0 <= cN) || (sN >= chunk.I0 && sN <= cN)
+}
