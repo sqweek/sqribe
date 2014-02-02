@@ -10,7 +10,13 @@ import (
 	"fmt"
 )
 
+type changeMask int
 
+const (
+	WAV changeMask = 1 << 1
+	SCALE = 1 << 2
+	CURSOR = 1 << 3
+)
 
 type WaveWidget struct {
 	wav *Waveform
@@ -25,7 +31,8 @@ type WaveWidget struct {
 	renderstate struct {
 		rect image.Rectangle
 		img *image.RGBA
-		modelChanged bool
+		waveform *image.RGBA
+		changed changeMask
 	}
 	cursor image.Point
 	refresh chan image.Rectangle
@@ -40,7 +47,7 @@ func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
 	ww.frames_per_pixel = 512
 	ww.renderstate.rect = image.Rect(0,0,0,0)
 	ww.renderstate.img = nil
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed = WAV
 	ww.refresh = refresh
 	return &ww
 }
@@ -51,18 +58,18 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 
 func (ww *WaveWidget) SetBeatAnchor(anchor time.Duration) {
 	ww.anchor = anchor
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed |= SCALE
 }
 
 func (ww *WaveWidget) SetBpm(bpm float64) {
 	ww.bpm = bpm
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed |= SCALE
 }
 
 func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	ww.selection.min = start
 	ww.selection.max = end
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
 }
 
 func nearestBar(x, anchor, barDuration time.Duration) time.Duration {
@@ -78,8 +85,8 @@ func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
 	barDuration := time.Microsecond * time.Duration(1000000 * beatsPerBar / (float64(ww.bpm) / 60.0))
 	ww.selection.min = nearestBar(start, ww.anchor, barDuration)
 	ww.selection.max = nearestBar(end, ww.anchor, barDuration)
-	fmt.Println("selected", ww.selection.min, ww.selection.max, ww.FrameAtTime(ww.selection.min), ww.FrameAtTime(ww.selection.max))
-	ww.renderstate.modelChanged = true
+	//fmt.Println("selected", ww.selection.min, ww.selection.max, ww.FrameAtTime(ww.selection.min), ww.FrameAtTime(ww.selection.max))
+	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
 }
 
 func (ww *WaveWidget) GetSelectedFrameRange() (int64, int64) {
@@ -103,13 +110,13 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 				w0, wN := ww.VisibleFrameRange()
 				s0, sN := w0*2, wN*2 + (2 - 1)
 				if chunk.Intersects(uint64(s0), uint64(sN)) {
-					ww.renderstate.modelChanged = true
+					ww.renderstate.changed |= WAV
 					ww.refresh <- image.Rect(0, 0, 0, 0)
 				}
 			}
 		}()
 	}
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed |= WAV
 	ww.refresh <- image.Rect(0, 0, 0, 0)
 }
 
@@ -122,12 +129,12 @@ func (ww *WaveWidget) VisibleFrameRange() (int64, int64) {
 func (ww *WaveWidget) SetCursorBySample(sample int64) {
 	frame := sample / 2
 	ww.cursor = image.Point{int(frame - ww.first_frame) / ww.frames_per_pixel, 0}
-	ww.renderstate.modelChanged = true 
+	ww.renderstate.changed |= CURSOR 
 }
 
 func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 	ww.cursor = mousePos
-	ww.renderstate.modelChanged = true
+	ww.renderstate.changed |= CURSOR
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
@@ -147,7 +154,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	}
 	diff := int(ww.first_frame - original)
 	if diff != 0 {
-		ww.renderstate.modelChanged = true
+		ww.renderstate.changed |= WAV
 	}
 	return diff
 }
@@ -160,20 +167,27 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	}
 	delta := float64(ww.frames_per_pixel) / original
 	if delta != 1.0 {
-		ww.renderstate.modelChanged = true
+		ww.renderstate.changed |= WAV
 	}
 	return delta
 }
 
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
-	if ww.renderstate.modelChanged || !r.Eq(ww.renderstate.rect) {
+	if !r.Eq(ww.renderstate.rect) {
+		/* our widget size has chaged, redraw everything */
+		ww.renderstate.changed |= WAV | SCALE | CURSOR
+	}
+	if ww.renderstate.changed != 0 {
 		ww.renderstate.rect = r
 		r0 := image.Rect(0, 0, r.Dx(), r.Dy())
-		ww.renderstate.modelChanged = false
 		ww.renderstate.img = image.NewRGBA(r0)
 		if ww.wav != nil {
-			ww.drawWave(ww.renderstate.img, r0)
+			if ww.renderstate.waveform == nil || (ww.renderstate.changed & WAV) != 0 {
+				ww.renderstate.waveform = image.NewRGBA(r0)
+				ww.drawWave(ww.renderstate.waveform, r0)
+			}
+			draw.Draw(ww.renderstate.img, r0, ww.renderstate.waveform, image.ZP, draw.Src)
 		}
 		ww.drawScale(ww.renderstate.img, r0)
 
@@ -181,6 +195,8 @@ func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursor.X, 0, ww.cursor.X+1, r.Dy()), &image.Uniform{curcol}, image.ZP, draw.Src)
 		dst.CopyRGBA(ww.renderstate.img, r)
 		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
+
+		ww.renderstate.changed = 0
 	}
 }
 
