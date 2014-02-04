@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+type FrameN int64 // frame index or frame count
+
 type Waveform struct {
 	NSamples uint64
 	rate uint
@@ -96,7 +98,7 @@ func (chunk *Chunk) copy(samples []int16, i0 uint64) {
 }
 
 /* Blocks until frames from f0 to fN (inclusive) have been read from disk */
-func (wav *Waveform) Frames(f0, fN int64) []int16 {
+func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
 //	Println("Frames", f0, fN)
 	s0, sN := uint64(2*f0), uint64(2*fN + (2 - 1))
 	samples := make([]int16, sN - s0 + 1)
@@ -138,7 +140,7 @@ func Extract(chunks []*Chunk, s0, sN uint64) []int16 {
 }
 
 /* Gets all cached samples for frames in range f0 to fN (inclusive) */
-func (wav *Waveform) GetFrames(f0, fN int64) []*Chunk {
+func (wav *Waveform) GetFrames(f0, fN FrameN) []*Chunk {
 	s0, sN := uint64(2*f0), uint64(2*fN + (2 - 1))
 	chunk0, chunkN := wav.cache.Bounds(s0, sN)
 	chunks := make([]*Chunk, 0, chunkN - chunk0 + 1)
@@ -159,9 +161,21 @@ func (ww *Waveform) Max() int16 {
 	}
 }
 
-func (wav *Waveform) TimeAtFrame(frame int64) time.Duration {
+func (wav *Waveform) TimeAtFrame(frame FrameN) time.Duration {
 	durPerFrame := time.Second / time.Duration(wav.rate)
 	return time.Duration(frame) * durPerFrame
+}
+
+
+func (wav *Waveform) FrameAtTime(t time.Duration) FrameN {
+	f := FrameN(float64(t) / float64(time.Second) * float64(wav.rate))
+	if f < 0 {
+		f = 0
+	}
+	if f >= FrameN(wav.NSamples/2) {
+		f = FrameN(wav.NSamples/2 - 1)
+	}
+	return f
 }
 
 func WaveRanges(s []int16) (WaveRange, WaveRange) {

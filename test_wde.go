@@ -95,7 +95,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				bpmT.Clear()
 			case wde.KeyReturn:
 				if IsPlaying() {
-					t := wav.TimeAtFrame(CurrentSample()/2)
+					t := wav.TimeAtFrame(FrameN(CurrentSample()/2))
 					bpmT.Append(t)
 					b := bpmT.Bpm()
 					if b != 0.0 {
@@ -135,27 +135,26 @@ func playToggle(feedback func()) {
 	}
 
 	/* short crossfade to loop smoothly */
-	nchan := int64(2)
+	nchan := FrameN(2)
 	frame0 := wav.Frames(f0, f0)
 	frameN := wav.Frames(fN, fN)
-	nfPad := int64(20)
+	nfPad := FrameN(20)
 	loopPad := make([]int16, nchan*(2*nfPad + 1))
 	N := fN - f0 + 1
-	for i := int64(0); i < nfPad; i++ {
+	for i := FrameN(0); i < nfPad; i++ {
 		α := 1.0 - float64(i)/float64(nfPad)
-		for j := int64(0); j < nchan; j++ {
+		for j := FrameN(0); j < nchan; j++ {
 			loopPad[nchan*i + j] = int16(float64(frameN[j]) * α)
 			loopPad[nchan*(2*nfPad - i) + j] = int16(float64(frame0[j]) * α)
 		}
 	}
 
-	padN := N + int64(len(loopPad))/nchan
-	bufsiz := int64(4096) // number of frames per buffer
-	s0 := nchan*f0
+	padN := N + FrameN(len(loopPad))/nchan
+	bufsiz := FrameN(4096) // number of frames per buffer
 	/* sample feeding i/o thread */
 	go func() {
 		var buf []int16
-		i := int64(0)
+		i := FrameN(0)
 		for {
 			if i < N {
 				if i + bufsiz > N {
@@ -169,12 +168,12 @@ func playToggle(feedback func()) {
 			if AppendAudio(buf) == -1 {
 				break
 			}
-			i += int64(len(buf)) / nchan
+			i += FrameN(len(buf)) / nchan
 			i %= padN
 		}
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
-	StartPlayback(s0, int64(2*padN))
+	StartPlayback(int64(nchan*f0), int64(nchan*padN))
 	/* gui feedback thread */
 	go func() {
 		for {
