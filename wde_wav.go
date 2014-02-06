@@ -119,9 +119,9 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 				if !ok {
 					return
 				}
-				w0, wN := ww.VisibleFrameRange()
-				s0, sN := w0*2, wN*2 + (2 - 1)
-				if chunk.Intersects(uint64(s0), uint64(sN)) {
+				f0, fN := ww.VisibleFrameRange()
+				s0, sN := ww.wav.SampleRange(f0, fN)
+				if chunk.Intersects(s0, sN) {
 					ww.renderstate.changed |= WAV
 					ww.refresh <- image.Rect(0, 0, 0, 0)
 				}
@@ -138,8 +138,7 @@ func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
 	return w0, wN
 }
 
-func (ww *WaveWidget) SetCursorBySample(sample int64) {
-	frame := FrameN(sample / 2)
+func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {
 	ww.cursor = image.Point{int(frame - ww.first_frame) / ww.frames_per_pixel, 0}
 	ww.renderstate.changed |= CURSOR
 }
@@ -156,7 +155,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	original := ww.first_frame
 	width := ww.renderstate.rect.Size().X
 	shift := FrameN((float64(width) * amount) * float64(ww.frames_per_pixel))
-	rbound := FrameN(ww.wav.NSamples/2) - FrameN((width + 1) * ww.frames_per_pixel)
+	rbound := ww.wav.ToFrame(ww.wav.NSamples) - FrameN((width + 1) * ww.frames_per_pixel)
 	ww.first_frame += shift
 	//fmt.Println(ww.wav.NSamples, width, ww.frames_per_pixel, ww.first_frame, rbound)
 	if ww.first_frame < 0 || rbound < 0 {
@@ -223,6 +222,17 @@ func slog(s int16) float64 {
 	}
 }
 
+func scale(chMin, chMax int16, yscale float64) (int, int) {
+	var min, max int
+	if chMin < 0 {
+		min = int(float64(chMin) / yscale)
+	}
+	if chMax > 0 {
+		max = int(float64(chMax) / yscale)
+	}
+	return min, max
+}
+
 func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xee, 0xee, 0xcc, 255}
 	cl := color.RGBA{0x99, 0x99, 0xcc, 255}
@@ -235,37 +245,17 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	selR := image.Rect(int((sel0 - f0)/fpp), r.Min.Y, int((selN - f0)/fpp), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	size := r.Size()
-	yscale := (float64(ww.wav.Max()) / float64(size.Y / 2))
+	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
 	chunks := ww.wav.GetFrames(f0, f0 + FrameN(size.X) * fpp)
-	s0 := 2 * f0
 	for dx := 0; dx < size.X; dx++ {
-		pixS0 := uint64(s0 + fpp * FrameN(dx) * 2)
-		pixSN := uint64(s0 + fpp * FrameN(dx+1) * 2 - 1)
+		pixS0, pixSN := ww.wav.SampleRange(f0 + fpp * FrameN(dx), f0 + fpp * FrameN(dx+1))
 		pixSamples := Extract(chunks, pixS0, pixSN)
-		left, right := WaveRanges(pixSamples)
-		var lmin, lmax, rmin, rmax int
-		if left.min > 0 {
-			lmin = 0
-		} else {
-			lmin = int(float64(left.min) / yscale)
-		}
-		if left.max < 0 {
-			lmax = 0
-		} else {
-			lmax = int(float64(left.max) / yscale)
-		}
-		if right.min > 0 {
-			rmin = 0
-		} else {
-			rmin = int(float64(right.min) / yscale)
-		}
-		if right.max < 0 {
-			rmax = 0
-		} else {
-			rmax = int(float64(right.max) / yscale)
-		}
+		ext := ww.wav.ChannelExtents(pixSamples)
+		/* FIXME remove two channel assumption */
+		lmin, lmax := scale(ext[0], ext[1], yscale)
+		rmin, rmax := scale(ext[2], ext[3], yscale)
 		x := r.Min.X + dx
 		rl := image.Rect(x, yorigin - lmax, x + 1, yorigin - lmin + 1)
 		rr := image.Rect(x, yorigin - rmax, x + 1, yorigin - rmin + 1)

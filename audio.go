@@ -18,9 +18,9 @@ var stream *portaudio.Stream
 var samplesPerSecond float64
 
 var (
-	currentS0 int64
-	currentLen int64 = -1
-	currentIndex int64 = -1
+	currentS0 SampleN
+	currentLen SampleN = 0
+	currentIndex SampleN
 	currentTime portaudio.StreamCallbackTimeInfo
 )
 
@@ -67,7 +67,7 @@ func (ring *RingBuffer) Append(src []int16) int {
 	defer ring.write.L.Unlock()
 	for len(src) > len(ring.buf) - ring.Size() {
 		ring.write.Wait()
-		if currentLen == -1 {
+		if currentLen == 0 {
 			return -1
 		}
 	}
@@ -123,16 +123,19 @@ func (ring *RingBuffer) Size() int {
 }
 
 func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
-	if currentLen == -1 {
+	if currentLen == 0 {
 		return
 	}
 	buf.Extract(out)
-	currentIndex += int64(len(out))
+	currentIndex += SampleN(len(out))
 	currentIndex %= currentLen
 	currentTime = time
 }
 
-func StartPlayback(s0, period int64) {
+func StartPlayback(s0, period SampleN) {
+	if period == 0 {
+		return
+	}
 	currentIndex = 0
 	currentLen = period
 	currentTime.OutputBufferDacTime = stream.Time()
@@ -142,8 +145,8 @@ func StartPlayback(s0, period int64) {
 
 func StopPlayback() {
 	go func() {
-		currentIndex = -1
-		currentLen = -1
+		currentIndex = 0
+		currentLen = 0
 		stream.Abort()
 		buf.write.Signal()
 		buf.Clear()
@@ -151,18 +154,18 @@ func StopPlayback() {
 }
 
 func IsPlaying() bool {
-	return currentLen != -1
+	return currentLen != 0
 }
 
-func CurrentSample() int64 {
-	if currentIndex == -1 {
-		return -1;
+func CurrentSample() (SampleN, bool) {
+	if currentLen == 0 {
+		return 0, false
 	}
 	dt := stream.Time() - currentTime.OutputBufferDacTime
-	index := currentIndex + int64(samplesPerSecond * dt.Seconds())
+	index := currentIndex + SampleN(samplesPerSecond * dt.Seconds())
 	if index < 0 {
-		return currentS0
+		return currentS0, true
 	}
 	index %= currentLen
-	return currentS0 + index
+	return currentS0 + index, true
 }

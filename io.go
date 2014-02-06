@@ -52,13 +52,13 @@ func (c *cache) Write(readfn func() []int16) error {
 	return nil
 }
 
-func (c *cache) Bounds(sample0, sampleN uint64) (uint64, uint64) {
+func (c *cache) Bounds(sample0, sampleN SampleN) (uint64, uint64) {
 	return c.Containing(sample0), c.Containing(sampleN)
 }
 
-func (c *cache) Containing(sample uint64) uint64 {
+func (c *cache) Containing(sample SampleN) uint64 {
 //	return uint64(math.Floor((float64(sample) * float64(c.sampsz)) / float64(c.blocksz)))
-	return (sample * uint64(c.sampsz)) / uint64(c.blocksz)
+	return uint64((sample * SampleN(c.sampsz)) / SampleN(c.blocksz))
 }
 
 func (c *cache) Get(id uint64) *Chunk {
@@ -207,19 +207,19 @@ func (lru *ChunkList) touch(chunk *Chunk) {
 
 func readchunk(id uint64, file *os.File, blocksz uint, sampsz uint, offset int64) (*Chunk, error) {
 	_, err := file.Seek(offset, 0)
-	chunk := Chunk{I0: uint64(offset)/uint64(sampsz), Data: make([]int16, blocksz/sampsz), id: id}
+	chunk := Chunk{I0: SampleN(offset)/SampleN(sampsz), Data: make([]int16, blocksz/sampsz), id: id}
 	err = binary.Read(file, binary.LittleEndian, chunk.Data)
 	return &chunk, err
 }
 
 type Chunk struct {
-	I0 uint64 //first sample's index
+	I0 SampleN //first sample's index
 	Data []int16
 
 	id uint64 //index into cache.chunks
 }
 
-func (chunk *Chunk) Intersects(s0, sN uint64) bool {
-	cN := chunk.I0 + uint64(len(chunk.Data)) - 1
+func (chunk *Chunk) Intersects(s0, sN SampleN) bool {
+	cN := chunk.I0 + SampleN(len(chunk.Data)) - 1
 	return (s0 >= chunk.I0 && s0 <= cN) || (sN >= chunk.I0 && sN <= cN)
 }

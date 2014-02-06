@@ -94,8 +94,8 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				playToggle(doredraw)
 				bpmT.Clear()
 			case wde.KeyReturn:
-				if IsPlaying() {
-					t := wav.TimeAtFrame(FrameN(CurrentSample()/2))
+				if s, playing := CurrentSample(); playing {
+					t := wav.TimeAtFrame(wav.ToFrame(s))
 					bpmT.Append(t)
 					b := bpmT.Bpm()
 					if b != 0.0 {
@@ -135,7 +135,7 @@ func playToggle(feedback func()) {
 	}
 
 	/* short crossfade to loop smoothly */
-	nchan := FrameN(2)
+	nchan := FrameN(wav.Channels)
 	frame0 := wav.Frames(f0, f0)
 	frameN := wav.Frames(fN, fN)
 	nfPad := FrameN(20)
@@ -173,15 +173,15 @@ func playToggle(feedback func()) {
 		}
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
-	StartPlayback(int64(nchan*f0), int64(nchan*padN))
+	StartPlayback(SampleN(nchan*f0), SampleN(nchan*padN))
 	/* gui feedback thread */
 	go func() {
 		for {
-			s := CurrentSample()
-			if s == -1 {
+			s, playing := CurrentSample()
+			if !playing {
 				break
 			}
-			wave.SetCursorBySample(s)
+			wave.SetCursorByFrame(wav.ToFrame(s))
 			time.Sleep(33 * time.Millisecond)
 			feedback()
 		}
