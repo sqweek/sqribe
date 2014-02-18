@@ -14,8 +14,11 @@ import (
 	"flag"
 	"log"
 	"fmt"
+	"os"
 )
 
+var currentFile string
+var score Score
 var wg sync.WaitGroup
 var wav *Waveform
 var wave *WaveWidget
@@ -34,7 +37,6 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			doredraw()
 		}
 	}
-	var bpmT BpmTracker
 	var dragOrigin image.Point
 	var refreshTimer *time.Timer
 	for ei := range events {
@@ -45,7 +47,6 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				dragOrigin = e.Where
 				if dragOrigin.In(bpm.Rect()) {
 					if newBpm := bpm.Hit(); newBpm != 0.0 {
-						wave.SetBpm(newBpm)
 						doredraw()
 					}
 				}
@@ -67,7 +68,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 					if dragOrigin.Y - r.Min.Y < r.Dy() / 5 {
 						wave.SelectAudioByTime(t1, t2)
 					} else {
-						wave.SelectAudioSnapToBars(t1, t2)
+						wave.SelectAudioSnapToBeats(t1, t2)
 					}
 					mousePos = e.Where
 					doredraw()
@@ -92,19 +93,12 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				zoom(2.0)
 			case wde.KeySpace:
 				playToggle(doredraw)
-				bpmT.Clear()
 			case wde.KeyReturn:
 				if s, playing := CurrentSample(); playing {
-					t := wav.TimeAtFrame(wav.ToFrame(s))
-					bpmT.Append(t)
-					b := bpmT.Bpm()
-					if b != 0.0 {
-						bpm.SetBpm(b)
-						wave.SetBpm(b)
-						wave.SetBeatAnchor(bpmT.Hits[0])
-						doredraw()
-					}
+					score.AddBeat(wav.ToFrame(s))
 				}
+			case wde.KeyS:
+				SaveState(currentFile)
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -193,11 +187,9 @@ func drawstatus(dst draw.Image, r image.Rectangle) {
 	wstr := wave.Status()
 	dx := mousePos.X - dst.Bounds().Min.X
 	secs := wave.TimeAtCursor(dx)
-	beat64 := wave.SixtyFourthAtTime(secs)
-	measure := beat64/ 64
-	beatInMeasure := beat64 % 64
+	beat, _ := score.ToBeat(wav.FrameAtTime(secs))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	RenderString(dst, color.Black, r, fmt.Sprintf("%s %s  %d:%d", wstr, secs, measure, beatInMeasure))
+	RenderString(dst, color.Black, r, fmt.Sprintf("%s %s  %f", wstr, secs, beat))
 }
 
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
@@ -243,6 +235,20 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 	}
 }
 
+func open(filename string, fmt sound.AudioInfo) error {
+	var err error
+	if wav != nil {
+		SaveState(currentFile)
+	}
+	wav, err = NewWaveform(filename, fmt)
+	if err != nil {
+		return err
+	}
+	currentFile = filename
+	LoadState(filename)
+	return nil
+}
+
 var audioFile = flag.String("audio", "/d/music/Birds of Tokyo/Circles.mp3", "audio file")
 
 func main() {
@@ -259,7 +265,7 @@ func main() {
 
 	flag.Parse()
 
-	wav, err = NewWaveform(*audioFile, actualFmt)
+	err = open(*audioFile, actualFmt)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -281,6 +287,7 @@ func main() {
 
 	wave = NewWaveWidget(redraw)
 	wave.SetWaveform(wav)
+	wave.SetScore(&score)
 
 	bpm = BpmWidget{bpm: 120}
 
@@ -294,4 +301,10 @@ func main() {
 	wg.Wait()
 
 	AudioShutdown()
+	//XXX should avoid closing GUI if SaveState fails
+	err = SaveState(currentFile)
+	if err != nil {
+		log.Println(err)
+	}
+	os.Remove(CacheFile())
 }

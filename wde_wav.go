@@ -20,7 +20,7 @@ const (
 
 type WaveWidget struct {
 	wav *Waveform
-	bpm float64
+	score *Score
 	anchor_frame FrameN
 	first_frame FrameN
 	frames_per_pixel int
@@ -41,8 +41,6 @@ type WaveWidget struct {
 
 func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
 	var ww WaveWidget
-	ww.wav = nil
-	ww.bpm = 120
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
 	ww.renderstate.rect = image.Rect(0,0,0,0)
@@ -67,11 +65,6 @@ func (ww *WaveWidget) SetBeatAnchor(t time.Duration) {
 	}
 }
 
-func (ww *WaveWidget) SetBpm(bpm float64) {
-	ww.bpm = bpm
-	ww.renderstate.changed |= SCALE
-}
-
 func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	if ww.wav == nil {
 		return
@@ -81,24 +74,14 @@ func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
 }
 
-func nearestBar(x, anchor, barDuration FrameN) FrameN {
-	rem := (x - anchor) % barDuration
-	if rem > barDuration/2 {
-		return x - rem + barDuration
-	}
-	return x - rem
-}
-
-func (ww *WaveWidget) SelectAudioSnapToBars(start, end time.Duration) {
-	if ww.wav == nil {
+func (ww *WaveWidget) SelectAudioSnapToBeats(start, end time.Duration) {
+	if ww.wav == nil || ww.score == nil {
 		return
 	}
-	beatsPerBar := 4.0
-	secondsPerBar := beatsPerBar / (float64(ww.bpm) / 60.0)
-	framesPerBar := FrameN(secondsPerBar * float64(ww.wav.rate))
-	ww.selection.min = nearestBar(ww.wav.FrameAtTime(start), ww.anchor_frame, framesPerBar)
-	ww.selection.max = nearestBar(ww.wav.FrameAtTime(end), ww.anchor_frame, framesPerBar)
-	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
+	ww.selection.min = ww.score.NearestBeat(ww.wav.FrameAtTime(start))
+	ww.selection.max = ww.score.NearestBeat(ww.wav.FrameAtTime(end))
+	// XXX could avoid redrawing waveform if selection rendered differently
+	ww.renderstate.changed |= WAV
 }
 
 func (ww *WaveWidget) GetSelectedFrameRange() (FrameN, FrameN) {
@@ -130,6 +113,11 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 	}
 	ww.renderstate.changed |= WAV
 	ww.refresh <- image.Rect(0, 0, 0, 0)
+}
+
+func (ww *WaveWidget) SetScore(score *Score) {
+	ww.score = score
+	//TODO listener stuff
 }
 
 func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
@@ -269,29 +257,43 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 }
 
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
-	black := color.RGBA{0x00, 0x00, 0x00, 0xff}
-	beatsPerBar := 4.0
-	secondsPerBar := beatsPerBar / (float64(ww.bpm) / 60.0)
-	framesPerBar := FrameN(secondsPerBar * float64(ww.wav.rate))
-	anchorFrame := ww.anchor_frame
-	for anchorFrame > ww.first_frame + framesPerBar {
-		anchorFrame -= framesPerBar
+	if ww.score == nil {
+		return
 	}
-	for anchorFrame < ww.first_frame {
-		anchorFrame += framesPerBar
-	}
+	black4 := color.RGBA{0x00, 0x00, 0x00, 0x88}
+	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
 	lastFrame := ww.first_frame + FrameN(r.Dx() * ww.frames_per_pixel)
+	minX, maxX := -1, -1
+	for i, beat := range(ww.score.beats) {
+		if beat < ww.first_frame {
+			minX = r.Min.X
+			continue
+		}
+		if beat > lastFrame {
+			maxX = r.Max.X
+			break
+		}
+		x := int(beat - ww.first_frame) / ww.frames_per_pixel
+		if minX == -1 {
+			minX = x
+		}
+		maxX = x
+		line := image.Rect(x, 0, x+1, r.Max.Y)
+		black := black1
+		if i % 4 == 0 {
+			black = black4
+		}
+		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
+	}
+	if minX >= maxX {
+		return
+	}
 	yspacing := 10
 	mid := (r.Min.Y + r.Max.Y) / 2
 	for i := -2; i <= 2; i++ {
 		y := mid + i * yspacing
-		line := image.Rect(r.Min.X, y, r.Max.X, y+1)
-		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
-	}
-	for f := anchorFrame; f < lastFrame; f += framesPerBar {
-		x := int(f - ww.first_frame) / ww.frames_per_pixel
-		line := image.Rect(x, mid - 2*yspacing, x+1, mid + 2*yspacing + 1)
-		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Src)
+		line := image.Rect(minX, y, maxX, y+1)
+		draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 	}
 }
 
@@ -301,11 +303,6 @@ func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 	}
 	frame := ww.first_frame + FrameN(dx*ww.frames_per_pixel)
 	return ww.wav.TimeAtFrame(frame)
-}
-
-func (ww *WaveWidget) SixtyFourthAtTime(t time.Duration) int {
-	bps := float64(ww.bpm) / 60.0
-	return int(float64(t) / float64(time.Second) * 16.0 * bps)
 }
 
 func (ww *WaveWidget) Status() string {

@@ -20,7 +20,7 @@ type Waveform struct {
 
 func NewWaveform(file string, fmt sound.AudioInfo) (*Waveform, error) {
 	wave := &Waveform{rate: uint(fmt.Rate), Channels: int(fmt.Channels), NSamples: 0}
-	wave.cache = mkcache(1024*1024, 2, "/home/sqweek/.cache/scribe")
+	wave.cache = mkcache(1024*1024, 2, CacheFile())
 	wave.Max = make([]int16, wave.Channels)
 	sample, err := sound.NewSampleFromFile(file, &fmt, 1024*1024)
 	if err != nil {
