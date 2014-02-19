@@ -17,14 +17,22 @@ import (
 	"os"
 )
 
-var currentFile string
-var cursor CursorCtl
-var score Score
+var G struct {
+	/* global state */
+	audiofile string
+	score Score
+	wav *Waveform
+
+	/* ui stuff */
+	ww *WaveWidget
+	mouse struct {
+		pt image.Point
+		cursor CursorCtl
+	}
+	bpm BpmWidget
+}
+
 var wg sync.WaitGroup
-var wav *Waveform
-var wave *WaveWidget
-var mousePos image.Point
-var bpm BpmWidget
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
@@ -36,8 +44,8 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			switch (e.Which) {
 			case wde.LeftButton:
 				dragOrigin = e.Where
-				if dragOrigin.In(bpm.Rect()) {
-					if newBpm := bpm.Hit(); newBpm != 0.0 {
+				if dragOrigin.In(G.bpm.Rect()) {
+					if newBpm := G.bpm.Hit(); newBpm != 0.0 {
 						doredraw()
 					}
 				}
@@ -45,51 +53,51 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 		case wde.MouseDraggedEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
-				r := wave.Rect()
+				r := G.ww.Rect()
 				//log.Println(r, dragOrigin.Y - r.Min.Y, r.Dy() / 5)
 				if dragOrigin.In(r) {
-					t1 := wave.TimeAtCursor(dragOrigin.X)
-					t2 := wave.TimeAtCursor(e.Where.X)
+					t1 := G.ww.TimeAtCursor(dragOrigin.X)
+					t2 := G.ww.TimeAtCursor(e.Where.X)
 					if t1 > t2 {
 						t1, t2 = t2, t1
 					}
 					if dragOrigin.Y - r.Min.Y < r.Dy() / 5 {
-						wave.SelectAudioByTime(t1, t2)
+						G.ww.SelectAudioByTime(t1, t2)
 					} else {
-						wave.SelectAudioSnapToBeats(t1, t2)
+						G.ww.SelectAudioSnapToBeats(t1, t2)
 					}
-					mousePos = e.Where
+					G.mouse.pt = e.Where
 				}
 			}
 		case wde.MouseMovedEvent:
-			mousePos = e.Where
-			if mousePos.In(wave.Rect()) {
-				wavePos := mousePos.Sub(wave.Rect().Min)
-				if !IsPlaying() && mousePos.In(wave.Rect()) {
-					wave.SetCursorByPixel(wavePos)
+			G.mouse.pt = e.Where
+			if G.mouse.pt.In(G.ww.Rect()) {
+				wwPos := G.mouse.pt.Sub(G.ww.Rect().Min)
+				if !IsPlaying() {
+					G.ww.SetCursorByPixel(wwPos)
 				}
-				_, cur := wave.CursorIconAtPixel(mousePos.Sub(wave.Rect().Min))
-				cursor.Set(cur)
+				_, cur := G.ww.CursorIconAtPixel(wwPos)
+				G.mouse.cursor.Set(cur)
 			}
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
 			case wde.KeyLeftArrow:
-				wave.Scroll(-0.25)
+				G.ww.Scroll(-0.25)
 			case wde.KeyRightArrow:
-				wave.Scroll(0.25)
+				G.ww.Scroll(0.25)
 			case wde.KeyUpArrow:
-				wave.Zoom(0.5)
+				G.ww.Zoom(0.5)
 			case wde.KeyDownArrow:
-				wave.Zoom(2.0)
+				G.ww.Zoom(2.0)
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
 				if s, playing := CurrentSample(); playing {
-					score.AddBeat(wav.ToFrame(s))
+					G.score.AddBeat(G.wav.ToFrame(s))
 				}
 			case wde.KeyS:
-				SaveState(currentFile)
+				SaveState(G.audiofile)
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -111,7 +119,7 @@ func playToggle() {
 		return
 	}
 
-	f0, fN := wave.GetSelectedFrameRange()
+	f0, fN := G.ww.GetSelectedFrameRange()
 	fmt.Println("starting playback", f0, fN)
 
 	if f0 == fN {
@@ -120,9 +128,9 @@ func playToggle() {
 	}
 
 	/* short crossfade to loop smoothly */
-	nchan := FrameN(wav.Channels)
-	frame0 := wav.Frames(f0, f0)
-	frameN := wav.Frames(fN, fN)
+	nchan := FrameN(G.wav.Channels)
+	frame0 := G.wav.Frames(f0, f0)
+	frameN := G.wav.Frames(fN, fN)
 	nfPad := FrameN(20)
 	loopPad := make([]int16, nchan*(2*nfPad + 1))
 	N := fN - f0 + 1
@@ -143,9 +151,9 @@ func playToggle() {
 		for {
 			if i < N {
 				if i + bufsiz > N {
-					buf = wav.Frames(f0 + i, fN)
+					buf = G.wav.Frames(f0 + i, fN)
 				} else {
-					buf = wav.Frames(f0 + i, f0 + i + bufsiz - 1)
+					buf = G.wav.Frames(f0 + i, f0 + i + bufsiz - 1)
 				}
 			} else if i < padN {
 				buf = loopPad
@@ -158,7 +166,7 @@ func playToggle() {
 		}
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
-	StartPlayback(SampleN(nchan*f0), SampleN(nchan*padN))
+	StartPlayback(G.wav.ToSample(f0), G.wav.ToSample(padN))
 	/* gui feedback thread */
 	go func() {
 		for {
@@ -166,7 +174,7 @@ func playToggle() {
 			if !playing {
 				break
 			}
-			wave.SetCursorByFrame(wav.ToFrame(s))
+			G.ww.SetCursorByFrame(G.wav.ToFrame(s))
 			time.Sleep(33 * time.Millisecond)
 		}
 	}()
@@ -174,10 +182,10 @@ func playToggle() {
 
 func drawstatus(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
-	wstr := wave.Status()
-	dx := mousePos.X - dst.Bounds().Min.X
-	secs := wave.TimeAtCursor(dx)
-	beat, _ := score.ToBeat(wav.FrameAtTime(secs))
+	wstr := G.ww.Status()
+	dx := G.mouse.pt.X - dst.Bounds().Min.X
+	secs := G.ww.TimeAtCursor(dx)
+	beat, _ := G.score.ToBeat(G.wav.FrameAtTime(secs))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	RenderString(dst, color.Black, r, fmt.Sprintf("%s %s  %f", wstr, secs, beat))
 }
@@ -206,10 +214,10 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				s := w.Screen()
 				width, height := w.Size()
 				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
-				wave.Draw(s, wvR)
+				G.ww.Draw(s, wvR)
 
 				bpmR := image.Rect(width - 150, wvR.Max.Y, width, height)
-				bpm.Draw(s, bpmR)
+				G.bpm.Draw(s, bpmR)
 
 				statusR := image.Rect(0, wvR.Max.Y, bpmR.Min.X, height)
 				drawstatus(s, statusR)
@@ -227,14 +235,14 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 
 func open(filename string, fmt sound.AudioInfo) error {
 	var err error
-	if wav != nil {
-		SaveState(currentFile)
+	if G.wav != nil {
+		SaveState(G.audiofile)
 	}
-	wav, err = NewWaveform(filename, fmt)
+	G.wav, err = NewWaveform(filename, fmt)
 	if err != nil {
 		return err
 	}
-	currentFile = filename
+	G.audiofile = filename
 	LoadState(filename)
 	return nil
 }
@@ -272,15 +280,15 @@ func main() {
 	dw.SetTitle("WDE test")
 	dw.SetSize(400, 400)
 	dw.Show()
-	cursor = NewCursorCtl(dw)
+	G.mouse.cursor = NewCursorCtl(dw)
 
 	redraw := make(chan image.Rectangle, 10)
 
-	wave = NewWaveWidget(redraw)
-	wave.SetWaveform(wav)
-	wave.SetScore(&score)
+	G.ww = NewWaveWidget(redraw)
+	G.ww.SetWaveform(G.wav)
+	G.ww.SetScore(&G.score)
 
-	bpm = BpmWidget{bpm: 120}
+	G.bpm = BpmWidget{bpm: 120}
 
 	wg.Add(1)
 	done := make(chan bool)
@@ -293,7 +301,7 @@ func main() {
 
 	AudioShutdown()
 	//XXX should avoid closing GUI if SaveState fails
-	err = SaveState(currentFile)
+	err = SaveState(G.audiofile)
 	if err != nil {
 		log.Println(err)
 	}

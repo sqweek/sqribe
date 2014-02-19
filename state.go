@@ -19,12 +19,12 @@ type stateV1 struct {
 }
 
 func (s *stateV1) Capture() {
-	s.Filename = currentFile
-	s.Beats = score.beats
+	s.Filename = G.audiofile
+	s.Beats = G.score.beats
 }
 
 func (s *stateV1) Restore() {
-	score.beats = s.Beats
+	G.score.beats = s.Beats
 }
 
 type VersionHeader struct {
