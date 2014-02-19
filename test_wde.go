@@ -18,6 +18,7 @@ import (
 )
 
 var currentFile string
+var cursor CursorCtl
 var score Score
 var wg sync.WaitGroup
 var wav *Waveform
@@ -27,16 +28,6 @@ var bpm BpmWidget
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
-	scroll := func(amount float64) {
-		if wave.Scroll(amount) != 0 {
-			doredraw()
-		}
-	}
-	zoom := func(factor float64) {
-		if wave.Zoom(factor) != 0.0 {
-			doredraw()
-		}
-	}
 	var dragOrigin image.Point
 	var refreshTimer *time.Timer
 	for ei := range events {
@@ -50,9 +41,6 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 						doredraw()
 					}
 				}
-			case wde.MiddleButton:
-				wave.SetBeatAnchor(wave.TimeAtCursor(e.Where.X))
-				doredraw()
 			}
 		case wde.MouseDraggedEvent:
 			switch (e.Which) {
@@ -71,28 +59,31 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 						wave.SelectAudioSnapToBeats(t1, t2)
 					}
 					mousePos = e.Where
-					doredraw()
 				}
 			}
 		case wde.MouseMovedEvent:
 			mousePos = e.Where
-			if !IsPlaying() && mousePos.In(wave.Rect()) {
-				wave.SetCursorByPixel(mousePos.Sub(wave.Rect().Min))
+			if mousePos.In(wave.Rect()) {
+				wavePos := mousePos.Sub(wave.Rect().Min)
+				if !IsPlaying() && mousePos.In(wave.Rect()) {
+					wave.SetCursorByPixel(wavePos)
+				}
+				_, cur := wave.CursorIconAtPixel(mousePos.Sub(wave.Rect().Min))
+				cursor.Set(cur)
 			}
-			doredraw()
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
 			case wde.KeyLeftArrow:
-				scroll(-0.25)
+				wave.Scroll(-0.25)
 			case wde.KeyRightArrow:
-				scroll(0.25)
+				wave.Scroll(0.25)
 			case wde.KeyUpArrow:
-				zoom(0.5)
+				wave.Zoom(0.5)
 			case wde.KeyDownArrow:
-				zoom(2.0)
+				wave.Zoom(2.0)
 			case wde.KeySpace:
-				playToggle(doredraw)
+				playToggle()
 			case wde.KeyReturn:
 				if s, playing := CurrentSample(); playing {
 					score.AddBeat(wav.ToFrame(s))
@@ -113,7 +104,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	}
 }
 
-func playToggle(feedback func()) {
+func playToggle() {
 	if IsPlaying() {
 		fmt.Println("stopping playback")
 		StopPlayback()
@@ -177,7 +168,6 @@ func playToggle(feedback func()) {
 			}
 			wave.SetCursorByFrame(wav.ToFrame(s))
 			time.Sleep(33 * time.Millisecond)
-			feedback()
 		}
 	}()
 }
@@ -282,6 +272,7 @@ func main() {
 	dw.SetTitle("WDE test")
 	dw.SetSize(400, 400)
 	dw.Show()
+	cursor = NewCursorCtl(dw)
 
 	redraw := make(chan image.Rectangle, 10)
 

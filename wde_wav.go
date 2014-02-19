@@ -21,7 +21,6 @@ const (
 type WaveWidget struct {
 	wav *Waveform
 	score *Score
-	anchor_frame FrameN
 	first_frame FrameN
 	frames_per_pixel int
 	selection struct {
@@ -54,17 +53,6 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 	return ww.renderstate.rect
 }
 
-func (ww *WaveWidget) SetBeatAnchor(t time.Duration) {
-	if ww.wav == nil {
-		return
-	}
-	prevAnchor := ww.anchor_frame
-	ww.anchor_frame = ww.wav.FrameAtTime(t)
-	if ww.anchor_frame != prevAnchor {
-		ww.renderstate.changed |= SCALE
-	}
-}
-
 func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	if ww.wav == nil {
 		return
@@ -72,6 +60,7 @@ func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
 	ww.selection.min = ww.wav.FrameAtTime(start)
 	ww.selection.max = ww.wav.FrameAtTime(end)
 	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
+	ww.refresh <- ww.renderstate.rect
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end time.Duration) {
@@ -82,6 +71,7 @@ func (ww *WaveWidget) SelectAudioSnapToBeats(start, end time.Duration) {
 	ww.selection.max = ww.score.NearestBeat(ww.wav.FrameAtTime(end))
 	// XXX could avoid redrawing waveform if selection rendered differently
 	ww.renderstate.changed |= WAV
+	ww.refresh <- ww.renderstate.rect
 }
 
 func (ww *WaveWidget) GetSelectedFrameRange() (FrameN, FrameN) {
@@ -106,13 +96,13 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 				s0, sN := ww.wav.SampleRange(f0, fN)
 				if chunk.Intersects(s0, sN) {
 					ww.renderstate.changed |= WAV
-					ww.refresh <- image.Rect(0, 0, 0, 0)
+					ww.refresh <- ww.renderstate.rect
 				}
 			}
 		}()
 	}
 	ww.renderstate.changed |= WAV
-	ww.refresh <- image.Rect(0, 0, 0, 0)
+	ww.refresh <- ww.renderstate.rect
 }
 
 func (ww *WaveWidget) SetScore(score *Score) {
@@ -129,11 +119,44 @@ func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
 func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {
 	ww.cursor = image.Point{int(frame - ww.first_frame) / ww.frames_per_pixel, 0}
 	ww.renderstate.changed |= CURSOR
+	ww.refresh <- ww.renderstate.rect
+}
+
+func withinGrabDistance(x int, mouse image.Point) bool {
+	dx := mouse.X - x
+	return dx >= -2 && dx <= 2
+}
+
+func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
+	return int(frame - ww.first_frame) / ww.frames_per_pixel
+}
+
+func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (*FrameN, Cursor) {
+	if withinGrabDistance(ww.PixelAtFrame(ww.selection.min), mouse) {
+		return &ww.selection.min, ResizeLCursor
+	}
+	if withinGrabDistance(ww.PixelAtFrame(ww.selection.max), mouse) {
+		return &ww.selection.max, ResizeRCursor
+	}
+	// TODO ignore beat grabs when sufficiently zoomed out
+	lastFrame := ww.first_frame + FrameN(ww.renderstate.rect.Dx() * ww.frames_per_pixel)
+	for i, beat := range(ww.score.beats) {
+		if beat < ww.first_frame {
+			continue
+		} else if beat > lastFrame {
+			break
+		}
+		if withinGrabDistance(ww.PixelAtFrame(beat), mouse) {
+			return &ww.score.beats[i], ResizeHCursor
+		}
+	}
+	return nil, NormalCursor
 }
 
 func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 	ww.cursor = mousePos
 	ww.renderstate.changed |= CURSOR
+	ww.refresh <- ww.renderstate.rect
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
@@ -154,6 +177,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	diff := int(ww.first_frame - original)
 	if diff != 0 {
 		ww.renderstate.changed |= WAV
+		ww.refresh <- ww.renderstate.rect
 	}
 	return diff
 }
@@ -167,6 +191,7 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	delta := float64(ww.frames_per_pixel) / original
 	if delta != 1.0 {
 		ww.renderstate.changed |= WAV
+		ww.refresh <- ww.renderstate.rect
 	}
 	return delta
 }
