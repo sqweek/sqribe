@@ -127,30 +127,67 @@ func withinGrabDistance(x int, mouse image.Point) bool {
 	return dx >= -2 && dx <= 2
 }
 
+func (ww *WaveWidget) FrameAtPixel(dx int) FrameN {
+	return ww.first_frame + FrameN(dx * ww.frames_per_pixel)
+}
+
 func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (*FrameN, Cursor) {
+func (ww *WaveWidget) dragFn(min, max FrameN, ptr *FrameN, cm changeMask) DragFn {
+	return func(pos image.Point) bool {
+		f := ww.FrameAtPixel(pos.X - ww.renderstate.rect.Min.X)
+		if f <= min || f >= max {
+			return false
+		}
+		*ptr = f
+		ww.renderstate.changed |= cm
+		ww.refresh <- ww.renderstate.rect
+		return true
+	}
+}
+
+func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
+	nframes := ww.wav.ToFrame(ww.wav.NSamples)
 	if withinGrabDistance(ww.PixelAtFrame(ww.selection.min), mouse) {
-		return &ww.selection.min, ResizeLCursor
+		return ww.dragFn(0, ww.selection.max, &ww.selection.min, WAV), ResizeLCursor
 	}
 	if withinGrabDistance(ww.PixelAtFrame(ww.selection.max), mouse) {
-		return &ww.selection.max, ResizeRCursor
+		return ww.dragFn(ww.selection.min, nframes, &ww.selection.max, WAV), ResizeRCursor
 	}
 	// TODO ignore beat grabs when sufficiently zoomed out
 	lastFrame := ww.first_frame + FrameN(ww.renderstate.rect.Dx() * ww.frames_per_pixel)
+	min, max := FrameN(0), nframes
 	for i, beat := range(ww.score.beats) {
 		if beat < ww.first_frame {
+			min = 0
 			continue
 		} else if beat > lastFrame {
 			break
 		}
 		if withinGrabDistance(ww.PixelAtFrame(beat), mouse) {
-			return &ww.score.beats[i], ResizeHCursor
+			if i + 1 < len(ww.score.beats) {
+				max = ww.score.beats[i + 1]
+			}
+			return ww.dragFn(min, max, &ww.score.beats[i], SCALE), ResizeHCursor
 		}
 	}
-	return nil, NormalCursor
+	origin := mouse
+	return func(pos image.Point)bool {
+		r := ww.renderstate.rect
+		minT := ww.TimeAtCursor(pos.X)
+		maxT := ww.TimeAtCursor(origin.X)
+		if maxT < minT {
+			minT, maxT = maxT, minT
+		}
+		if origin.Y - r.Min.Y < r.Dy() / 5 {
+			ww.SelectAudioByTime(minT, maxT)
+		} else {
+			ww.SelectAudioSnapToBeats(minT, maxT)
+		}
+		return true
+	}, NormalCursor
 }
 
 func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
@@ -198,16 +235,18 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
+	change := ww.renderstate.changed
+	ww.renderstate.changed = 0
 	if !r.Eq(ww.renderstate.rect) {
 		/* our widget size has chaged, redraw everything */
-		ww.renderstate.changed |= WAV | SCALE | CURSOR
+		change |= WAV | SCALE | CURSOR
 	}
-	if ww.renderstate.changed != 0 {
+	if change != 0 {
 		ww.renderstate.rect = r
 		r0 := image.Rect(0, 0, r.Dx(), r.Dy())
 		ww.renderstate.img = image.NewRGBA(r0)
 		if ww.wav != nil {
-			if ww.renderstate.waveform == nil || (ww.renderstate.changed & WAV) != 0 {
+			if change & WAV != 0 || ww.renderstate.waveform == nil {
 				ww.renderstate.waveform = image.NewRGBA(r0)
 				ww.drawWave(ww.renderstate.waveform, r0)
 			}
@@ -219,8 +258,6 @@ func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursor.X, 0, ww.cursor.X+1, r.Dy()), &image.Uniform{curcol}, image.ZP, draw.Src)
 		dst.CopyRGBA(ww.renderstate.img, r)
 		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
-
-		ww.renderstate.changed = 0
 	}
 }
 

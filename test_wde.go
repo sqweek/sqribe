@@ -36,15 +36,16 @@ var wg sync.WaitGroup
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
-	var dragOrigin image.Point
+	var drag DragFn = nil
 	var refreshTimer *time.Timer
 	for ei := range events {
 		switch e := ei.(type) {
 		case wde.MouseDownEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
-				dragOrigin = e.Where
-				if dragOrigin.In(G.bpm.Rect()) {
+				if e.Where.In(G.ww.Rect()) {
+					drag, _ = G.ww.CursorIconAtPixel(e.Where)
+				} else if e.Where.In(G.bpm.Rect()) {
 					if newBpm := G.bpm.Hit(); newBpm != 0.0 {
 						doredraw()
 					}
@@ -53,30 +54,17 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 		case wde.MouseDraggedEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
-				r := G.ww.Rect()
-				//log.Println(r, dragOrigin.Y - r.Min.Y, r.Dy() / 5)
-				if dragOrigin.In(r) {
-					t1 := G.ww.TimeAtCursor(dragOrigin.X)
-					t2 := G.ww.TimeAtCursor(e.Where.X)
-					if t1 > t2 {
-						t1, t2 = t2, t1
-					}
-					if dragOrigin.Y - r.Min.Y < r.Dy() / 5 {
-						G.ww.SelectAudioByTime(t1, t2)
-					} else {
-						G.ww.SelectAudioSnapToBeats(t1, t2)
-					}
-					G.mouse.pt = e.Where
+				if drag != nil {
+					drag(e.Where)
 				}
 			}
 		case wde.MouseMovedEvent:
 			G.mouse.pt = e.Where
 			if G.mouse.pt.In(G.ww.Rect()) {
-				wwPos := G.mouse.pt.Sub(G.ww.Rect().Min)
 				if !IsPlaying() {
-					G.ww.SetCursorByPixel(wwPos)
+					G.ww.SetCursorByPixel(e.Where)
 				}
-				_, cur := G.ww.CursorIconAtPixel(wwPos)
+				_, cur := G.ww.CursorIconAtPixel(e.Where)
 				G.mouse.cursor.Set(cur)
 			}
 		case wde.KeyTypedEvent:
@@ -277,7 +265,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	dw.SetTitle("WDE test")
+	dw.SetTitle("Sqribe")
 	dw.SetSize(400, 400)
 	dw.Show()
 	G.mouse.cursor = NewCursorCtl(dw)

@@ -8,6 +8,8 @@ import (
 	"fmt"
 )
 
+type DragFn func(image.Point) bool
+
 type Drawable interface {
 	Rect() image.Rectangle
 	Draw(draw.Image, image.Rectangle)
