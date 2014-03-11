@@ -33,7 +33,7 @@ func AudioInit() (uint8, uint32, error) {
 	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
 
 	jack, err := portaudio.HostApi(portaudio.JACK)
-	dev := jack.Devices[1]
+	dev := jack.DefaultOutputDevice
 	params := portaudio.HighLatencyParameters(nil, dev)
 	s, err := portaudio.OpenStream(params, paCallback)
 	if err != nil {

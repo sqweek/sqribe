@@ -66,6 +66,8 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				}
 				_, cur := G.ww.CursorIconAtPixel(e.Where)
 				G.mouse.cursor.Set(cur)
+			} else {
+				G.mouse.cursor.Set(NormalCursor)
 			}
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
@@ -274,6 +276,7 @@ func main() {
 
 	G.ww = NewWaveWidget(redraw)
 	G.ww.SetWaveform(G.wav)
+	G.score.Init()
 	G.ww.SetScore(&G.score)
 
 	G.bpm = BpmWidget{bpm: 120}

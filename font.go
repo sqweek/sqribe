@@ -22,9 +22,10 @@ func FontInit() error {
 	}
 
 	fc = freetype.NewContext()
-	fc.SetDPI(72)
+	// TODO get actual DPI
+	fc.SetDPI(96)
 	fc.SetFont(font)
-	fc.SetFontSize(12)
+	fc.SetFontSize(10)
 	return nil
 }
 

@@ -10,6 +10,22 @@ import (
 
 type DragFn func(image.Point) bool
 
+type Hoverable interface {
+	MouseMoved(image.Point)
+}
+
+type LeftClickable interface {
+	MouseLeftClicked(image.Point)
+}
+
+type RightClickable interface {
+	MouseRightClicked(image.Point)
+}
+
+type MouseDraggable interface {
+	MouseDragged(image.Point)
+}
+
 type Drawable interface {
 	Rect() image.Rectangle
 	Draw(draw.Image, image.Rectangle)

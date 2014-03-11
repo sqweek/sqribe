@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"math/big"
 )
 
@@ -14,7 +15,8 @@ type BeatMap interface {
 type Score struct {
 	staves []Staff
 	beats []FrameN
-	beatLen big.Rat
+	beatLen *big.Rat
+	notes []Note
 }
 
 type Staff struct {
@@ -34,6 +36,9 @@ type Note struct {
 	Offset big.Rat
 }
 
+func (score *Score) Init() {
+	score.beatLen = big.NewRat(1, 4)
+}
 
 func (score *Score) ToFrame(beat float64) (FrameN, bool) {
 	i := int(beat)
@@ -120,6 +125,33 @@ func (score *Score) NearestBeat(frame FrameN) FrameN {
 	} else {
 		return score.beats[i]
 	}
+}
+
+func (score *Score) Quantize(beat float64) (int, *big.Rat) {
+	beati := int(beat)
+	frac := beat - float64(beati)
+	best := big.NewRat(0, 1)
+	minErr := frac
+	for _, i := range([]int{2, 3}) { // , 5}) { //, 7}) {
+		for denom := int64(i); denom <= 8; denom <<= 1 {
+			for num := int64(1); num < denom; num++ {
+				r := big.NewRat(num, denom)
+				/* TODO account for picked beats in error measure */
+				f, _ := r.Float64()
+				d := math.Abs(f - frac)
+				if d < minErr {
+					minErr = d
+					best = r
+				}
+			}
+		}
+	}
+	if 1 - frac < minErr {
+		beati++
+		best = big.NewRat(0, 1)
+	}
+	best.Mul(best, score.beatLen)
+	return beati, best
 }
 
 // 2 4 8 16 32 64 128

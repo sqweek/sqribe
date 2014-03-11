@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image"
+	"math/big"
 	"math"
 	"time"
 	"fmt"
@@ -13,9 +14,9 @@ import (
 type changeMask int
 
 const (
-	WAV changeMask = 1 << 1
-	SCALE = 1 << 2
-	CURSOR = 1 << 3
+	WAV changeMask = 1 << iota + 1
+	SCALE
+	CURSOR
 )
 
 type WaveWidget struct {
@@ -318,6 +319,31 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	}
 }
 
+type NoteHead struct {
+	col color.RGBA
+	p image.Point
+	r int
+	α float64
+}
+
+func (n *NoteHead) ColorModel() color.Model {
+	return color.RGBAModel
+}
+
+func (n *NoteHead) Bounds() image.Rectangle {
+	return image.Rect(n.p.X - n.r, n.p.Y - n.r, n.p.X + n.r + 1, n.p.Y + n.r + 1)
+}
+
+func (n *NoteHead) At(x, y int) color.Color {
+	xx, yy, rr := float64(x - n.p.X)+0.5, float64(y - n.p.Y)+0.5, float64(n.r)
+	rx := xx * math.Cos(n.α) - yy * math.Sin(n.α)
+	ry := xx * math.Sin(n.α) + yy * math.Cos(n.α)
+	if rx*rx + 1.25*1.25*ry*ry < rr*rr {
+		return n.col
+	}
+	return color.RGBA{0, 0, 0, 0}
+}
+
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	if ww.score == nil {
 		return
@@ -352,11 +378,91 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	}
 	yspacing := 10
 	mid := (r.Min.Y + r.Max.Y) / 2
-	for i := -2; i <= 2; i++ {
-		y := mid + i * yspacing
+	minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
+	for y := minY; y <= maxY; y += yspacing {
 		line := image.Rect(minX, y, maxX, y+1)
 		draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 	}
+
+	ww.drawProspectiveNote(dst, r, mid, yspacing)
+}
+
+func colourFor(offset *big.Rat) color.RGBA {
+	α := uint8(0xff)
+	switch (offset.RatString()) {
+	case "0": fallthrough
+	case "1/8": return color.RGBA{0xff, 0x00, 0x00, α}
+
+	case "1/16": fallthrough
+	case "3/16": return color.RGBA{0x00, 0x00, 0xff, α}
+
+	case "1/32": fallthrough
+	case "3/32": fallthrough
+	case "5/32": fallthrough
+	case "7/32": return color.RGBA{0xff, 0xff, 0x00, α}
+
+	case "1/24": fallthrough
+	case "3/24": fallthrough
+	case "5/24": return color.RGBA{0x88, 0x00, 0x88, α}
+
+	case "1/12": fallthrough
+	case "1/6": return color.RGBA{0xff, 0x00, 0xff, α}
+	}
+	return color.RGBA{0x00, 0x00, 0x00, α}
+}
+
+func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid, yspacing int) {
+	black2 := color.RGBA{0x00, 0x00, 0x00, 0x44}
+	cur0 := ww.cursor.Sub(ww.renderstate.rect.Min)
+	noteY := snapto(cur0.Y, mid, yspacing / 2)
+
+	framec := ww.first_frame + FrameN(cur0.X * ww.frames_per_pixel)
+	beatf, ok := ww.score.ToBeat(framec)
+	if !ok {
+		return
+	}
+	beati, offset := ww.score.Quantize(beatf)
+
+	beat0, beat1 := ww.score.beats[beati], ww.score.beats[beati+1]
+//for beatf = float64(beati); beatf <= float64(beati + 1); beatf += 1.0/256.0 {
+//	_, offset = ww.score.Quantize(beatf)
+	α, _ := offset.Float64()
+	α *= float64(ww.score.beatLen.Denom().Int64())
+	frame := FrameN((1 - α) * float64(beat0) + α * float64(beat1))
+	noteX := ww.PixelAtFrame(frame)
+//	l := image.Rect(noteX, mid - 100, noteX + 1, mid + 101)
+//	draw.Draw(dst, l, &image.Uniform{colourFor(offset)}, image.ZP, draw.Src)
+//}
+//	noteX := cur0.X
+
+	/* ledger lines */
+	ydist := int(math.Abs(float64(noteY - mid)))
+	sgn := 1
+	if (mid > noteY) {
+		sgn = -1
+	}
+	for dy := yspacing * 3; dy <= ydist; dy += yspacing {
+		width := yspacing / 2 + 1
+		line := image.Rect(noteX - width, mid + sgn*dy, noteX + width + 1, mid + sgn*(dy + 1))
+		draw.Draw(dst, line, &image.Uniform{black2}, image.ZP, draw.Over)
+	}
+
+	draw.Draw(dst, dst.Bounds(), &NoteHead{colourFor(offset), image.Point{noteX, noteY}, yspacing/2, 35.0}, image.ZP, draw.Over)
+}
+
+func snapto(x, origin, step int) int {
+	d := x - origin
+	var sgn int
+	if (d < 0) {
+		sgn = -1
+	} else {
+		sgn = 1
+	}
+	rem := (sgn * d) % step
+	if rem < step/2 {
+		return x - sgn * rem
+	}
+	return x + sgn * (step - rem)
 }
 
 func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
@@ -368,5 +474,14 @@ func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 }
 
 func (ww *WaveWidget) Status() string {
-	return fmt.Sprintf("s0=%d spp=%d", ww.first_frame, ww.frames_per_pixel)
+	cur0 := ww.cursor.Sub(ww.renderstate.rect.Min)
+	framec := ww.first_frame + FrameN(cur0.X * ww.frames_per_pixel)
+	beatf, ok := ww.score.ToBeat(framec)
+	var offset *big.Rat
+	if !ok {
+		offset = big.NewRat(0, 1)
+	}
+	_, offset = ww.score.Quantize(beatf)
+
+	return fmt.Sprintf("s0=%d spp=%d pos=%v", ww.first_frame, ww.frames_per_pixel, offset)
 }
