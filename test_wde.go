@@ -4,6 +4,7 @@ import (
 //	"github.com/neagix/Go-SDL/sdl"
 	"github.com/neagix/Go-SDL/sdl/audio"
 	"github.com/neagix/Go-SDL/sound"
+	"github.com/sqweek/fluidsynth"
 	"github.com/skelterjohn/go.wde"
 	_ "github.com/skelterjohn/go.wde/init"
 	"image/draw"
@@ -22,6 +23,7 @@ var G struct {
 	audiofile string
 	score Score
 	wav *Waveform
+	synth *fluidsynth.Synth
 
 	/* ui stuff */
 	ww *WaveWidget
@@ -136,6 +138,7 @@ func playToggle() {
 	bufsiz := FrameN(4096) // number of frames per buffer
 	/* sample feeding i/o thread */
 	go func() {
+		on := false
 		var buf []int16
 		i := FrameN(0)
 		for {
@@ -148,10 +151,27 @@ func playToggle() {
 			} else if i < padN {
 				buf = loopPad
 			}
-			if AppendAudio(buf) == -1 {
+			if on {
+				G.synth.NoteOff(15, 89)
+				on = false
+			} else {
+				b0, _ := G.score.ToBeat(f0 + i)
+				bN, _ := G.score.ToBeat(f0 + i + bufsiz - 1)
+				if int(b0) != int(bN) {
+					G.synth.NoteOn(15, 77, 120)
+					on = true
+				}
+			}
+			nf := G.wav.ToFrame(SampleN(len(buf)))
+			mbuf := G.synth.WriteFrames_int16(int(nf))
+			for j := 0; j < len(buf); j++ {
+				mbuf[j] += buf[j]
+				mbuf[j] /= 2
+			}
+			if AppendAudio(mbuf) == -1 {
 				break
 			}
-			i += FrameN(len(buf)) / nchan
+			i += nf
 			i %= padN
 		}
 	}()
@@ -262,6 +282,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	synth, err := SynthInit(int(sampleRate), "/d/synth/FluidR3_GM.sf2")
+	if err != nil {
+		log.Fatal(err)
+	}
+	G.synth = synth
+	synth.ProgramChange(15, 115) // woodblock
 
 	dw, err := wde.NewWindow(400, 400)
 	if err != nil {
