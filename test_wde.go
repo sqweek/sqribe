@@ -110,12 +110,12 @@ func playToggle() {
 	}
 
 	f0, fN := G.ww.GetSelectedFrameRange()
-	fmt.Println("starting playback", f0, fN)
 
 	if f0 == fN {
-		/* TODO play whole song starting from cursor*/
-		return
+		fN = G.wav.ToFrame(G.wav.NSamples) - 1
+		f0 = G.ww.FrameAtCursor()
 	}
+	fmt.Println("starting playback", f0, fN)
 
 	/* short crossfade to loop smoothly */
 	nchan := FrameN(G.wav.Channels)

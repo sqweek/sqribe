@@ -39,7 +39,7 @@ func (wav *Waveform) decodefn(sample *sound.Sample) func() []int16 {
 			samps := sample.Buffer_int16()
 			Printf("decoded %d bytes (%d samples)\n", n, len(samps))
 			wav.updateMax(samps[0:n/2])
-			wav.NSamples += SampleN(n)
+			wav.NSamples += SampleN(n/2)
 			return samps[0:n/2]
 		}
 		Printf("decoding finished\n")
@@ -97,13 +97,14 @@ func (chunk *Chunk) copy(samples []int16, i0 SampleN) {
 
 /* Blocks until frames from f0 to fN (inclusive) have been read from disk */
 func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
-//	Println("Frames", f0, fN)
 	s0, sN := wav.SampleRange(f0, fN)
 	samples := make([]int16, sN - s0 + 1)
 	chunk0, chunkN := wav.cache.Bounds(s0, sN)
+	//Println("Frames", f0, fN, s0, sN, chunk0, chunkN)
 	if chunk0 == chunkN {
 		/* not across a chunk boundary, no need to copy */
 		chunk := wav.cache.Wait(chunk0)
+		//Println("Frames: chunk", chunk.id, chunk.I0, len(chunk.Data))
 		return chunk.Data[s0 - chunk.I0:sN - chunk.I0 + 1]
 	}
 	chunks := make(chan *Chunk, chunkN - chunk0 + 1)

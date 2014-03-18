@@ -128,6 +128,11 @@ func withinGrabDistance(x int, mouse image.Point) bool {
 	return dx >= -2 && dx <= 2
 }
 
+func (ww *WaveWidget) FrameAtCursor() FrameN {
+	cur0 := ww.cursor.Sub(ww.renderstate.rect.Min)
+	return ww.FrameAtPixel(cur0.X)
+}
+
 func (ww *WaveWidget) FrameAtPixel(dx int) FrameN {
 	return ww.first_frame + FrameN(dx * ww.frames_per_pixel)
 }
@@ -390,6 +395,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 func colourFor(offset *big.Rat) color.RGBA {
 	α := uint8(0xff)
 	switch (offset.RatString()) {
+	case "1": fallthrough
 	case "0": fallthrough
 	case "1/8": return color.RGBA{0xff, 0x00, 0x00, α}
 
@@ -422,6 +428,9 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid
 		return
 	}
 	beati, offset := ww.score.Quantize(beatf)
+	if beati + 1 >= len(ww.score.beats) {
+		return
+	}
 
 	beat0, beat1 := ww.score.beats[beati], ww.score.beats[beati+1]
 //for beatf = float64(beati); beatf <= float64(beati + 1); beatf += 1.0/256.0 {
