@@ -223,7 +223,7 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				lastframe = now
 				s := w.Screen()
 				width, height := w.Size()
-				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height)))
+				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height) + 20))
 				G.ww.Draw(s, wvR)
 
 				bpmR := image.Rect(width - 150, wvR.Max.Y, width, height)

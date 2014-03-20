@@ -250,18 +250,21 @@ func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
 	if change != 0 {
 		ww.renderstate.rect = r
 		r0 := image.Rect(0, 0, r.Dx(), r.Dy())
+		rCanvas := image.Rect(0, 0, r0.Max.X, r0.Max.Y - 20)
 		ww.renderstate.img = image.NewRGBA(r0)
 		if ww.wav != nil {
 			if change & WAV != 0 || ww.renderstate.waveform == nil {
-				ww.renderstate.waveform = image.NewRGBA(r0)
-				ww.drawWave(ww.renderstate.waveform, r0)
+				ww.renderstate.waveform = image.NewRGBA(rCanvas)
+				ww.drawWave(ww.renderstate.waveform, rCanvas)
 			}
-			draw.Draw(ww.renderstate.img, r0, ww.renderstate.waveform, image.ZP, draw.Src)
+			draw.Draw(ww.renderstate.img, rCanvas, ww.renderstate.waveform, image.ZP, draw.Src)
 		}
-		ww.drawScale(ww.renderstate.img, r0)
+		ww.drawScale(ww.renderstate.img, rCanvas)
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursor.X, 0, ww.cursor.X+1, r.Dy()), &image.Uniform{curcol}, image.ZP, draw.Src)
+		axish := 20
+		ww.drawTimeAxis(ww.renderstate.img, image.Rect(r0.Min.X, r0.Max.Y - axish, r0.Max.X, r0.Max.Y))
 		dst.CopyRGBA(ww.renderstate.img, r)
 		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 	}
@@ -474,6 +477,38 @@ func snapto(x, origin, step int) int {
 	return x + sgn * (step - rem)
 }
 
+/* assumes 'r' covers the widget's width */
+func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
+	targetPixPerTick := 30.0
+	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
+	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
+	minT := ww.TimeAtCursor(0).Seconds()
+	maxT := ww.TimeAtCursor(r.Dx()).Seconds()
+	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
+	pixPerSecond := float64(r.Dx()) / (maxT - minT)
+	dTmaj := 1.0
+	minPerMaj := 0
+	if (pixPerSecond < targetPixPerTick) {
+		dTmaj = math.Trunc(0.5 + targetPixPerTick / pixPerSecond)
+	} else {
+		minPerMaj = int(pixPerSecond / targetPixPerTick) - 1
+	}
+	for t := math.Trunc(minT); t <= maxT; t += dTmaj {
+		for i := 1; i <= minPerMaj; i++ {
+			tm := t + float64(i) * (dTmaj / float64(minPerMaj + 1))
+			if tm >= minT && tm <= maxT {
+				x := r.Min.X + int(0.5 + (tm - minT) * pixPerSecond)
+				draw.Draw(dst, image.Rect(x, r.Min.Y, x+1, r.Min.Y + 4), &image.Uniform{fg}, image.ZP, draw.Over)
+			}
+		}
+		if t >= minT && t <= maxT {
+			x := r.Min.X + int(0.5 + (t - minT) * pixPerSecond)
+			draw.Draw(dst, image.Rect(x, r.Min.Y, x+1, r.Min.Y + 7), &image.Uniform{fg}, image.ZP, draw.Over)
+		}
+	}
+}
+
+/* dx is relative to widget's left edge */
 func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 	if ww.wav == nil {
 		return 0.0
