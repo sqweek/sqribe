@@ -19,6 +19,8 @@ const (
 	CURSOR
 )
 
+const beatIncursion = 33 // pixels
+
 type WaveWidget struct {
 	wav *Waveform
 	score *Score
@@ -156,16 +158,20 @@ func (ww *WaveWidget) dragFn(min, max FrameN, ptr *FrameN, cm changeMask) DragFn
 
 func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
 	nframes := ww.wav.ToFrame(ww.wav.NSamples)
+	/* TODO these drags should follow the same snapping rules as normal selection */
 	if withinGrabDistance(ww.PixelAtFrame(ww.selection.min), mouse) {
 		return ww.dragFn(0, ww.selection.max, &ww.selection.min, WAV), ResizeLCursor
 	}
 	if withinGrabDistance(ww.PixelAtFrame(ww.selection.max), mouse) {
 		return ww.dragFn(ww.selection.min, nframes, &ww.selection.max, WAV), ResizeRCursor
 	}
-	// TODO ignore beat grabs when sufficiently zoomed out
 	lastFrame := ww.first_frame + FrameN(ww.renderstate.rect.Dx() * ww.frames_per_pixel)
-	min, max := FrameN(0), nframes
+	if mouse.Y >= ww.renderstate.rect.Min.Y + beatIncursion {
+		goto normal
+	}
+	// TODO ignore beat grabs when sufficiently zoomed out
 	for i, beat := range(ww.score.beats) {
+		min, max := FrameN(0), nframes
 		if beat < ww.first_frame {
 			min = 0
 			continue
@@ -179,6 +185,7 @@ func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
 			return ww.dragFn(min, max, &ww.score.beats[i], SCALE), ResizeHCursor
 		}
 	}
+normal:
 	origin := mouse
 	return func(pos image.Point)bool {
 		r := ww.renderstate.rect
@@ -187,7 +194,7 @@ func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
 		if maxT < minT {
 			minT, maxT = maxT, minT
 		}
-		if origin.Y - r.Min.Y < r.Dy() / 5 {
+		if origin.Y - r.Min.Y > 4 * r.Dy() / 5 {
 			ww.SelectAudioByTime(minT, maxT)
 		} else {
 			ww.SelectAudioSnapToBeats(minT, maxT)
@@ -264,6 +271,7 @@ func (ww *WaveWidget) Draw(dst wde.Image, r image.Rectangle) {
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursor.X, 0, ww.cursor.X+1, r.Dy()), &image.Uniform{curcol}, image.ZP, draw.Src)
 		axish := 20
+		//ww.drawBeatAxis(ww.renderstate.img, image.Rect(r0.Min.X, r0.Min.Y, r0.Max.X, r0.Min.Y + axish))
 		ww.drawTimeAxis(ww.renderstate.img, image.Rect(r0.Min.X, r0.Max.Y - axish, r0.Max.X, r0.Max.Y))
 		dst.CopyRGBA(ww.renderstate.img, r)
 		//draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
@@ -374,11 +382,14 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 			minX = x
 		}
 		maxX = x
-		line := image.Rect(x, 0, x+1, r.Max.Y)
+		line := image.Rect(x, r.Min.Y, x+1, r.Max.Y)
 		black := black1
 		if i % 4 == 0 {
 			black = black4
 		}
+		draw.Draw(dst, image.Rect(x-3, r.Min.Y, x+4, r.Min.Y+1), &image.Uniform{black}, image.ZP, draw.Over)
+		draw.Draw(dst, image.Rect(x-2, r.Min.Y+1, x+3, r.Min.Y+2), &image.Uniform{black}, image.ZP, draw.Over)
+		draw.Draw(dst, image.Rect(x-1, r.Min.Y+2, x+2, r.Min.Y+3), &image.Uniform{black}, image.ZP, draw.Over)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
 	if minX >= maxX {
