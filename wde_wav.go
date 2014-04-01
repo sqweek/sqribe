@@ -21,6 +21,8 @@ const (
 
 const beatIncursion = 33 // pixels
 
+const staffOrigin = 61 // B4
+
 const yspacing = 10 // pixels between staff lines
 
 type mouseState struct {
@@ -239,7 +241,7 @@ func (ww *WaveWidget) getMouseState(pos image.Point) *mouseState {
 	cur0 := mouse.Sub(ww.renderstate.rect.Min)
 	mid := ww.renderstate.staffMidY
 	noteY := snapto(cur0.Y, mid, yspacing / 2)
-	state.note.delta = (noteY - mid) / (yspacing / 2)
+	state.note.delta = (mid - noteY) / (yspacing / 2)
 
 	framec := ww.first_frame + FrameN(cur0.X * ww.frames_per_pixel)
 	beatf, ok := ww.score.ToBeat(framec)
@@ -273,6 +275,18 @@ func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 		ww.renderstate.changed |= CURSOR
 		ww.refresh <- ww.renderstate.rect
 	}
+}
+
+func (ww *WaveWidget) LeftClick(mouse image.Point) {
+	s := ww.getMouseState(mouse)
+	if s.note.beat == -1 || ww.score == nil{
+		return
+	}
+	beati, offset := ww.score.Quantize(s.note.beat)
+	b := big.NewRat(int64(beati), 1)
+	offset.Mul(big.NewRat(ww.score.beatLen.Denom().Int64(), 1), offset)
+	b.Add(b, offset)
+	ww.score.AddNote(Note{uint8(staffOrigin + s.note.delta), ww.score.beatLen, b})
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
@@ -472,7 +486,25 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 		draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 	}
 
+	ww.drawNotes(dst, r, mid)
+
 	ww.drawProspectiveNote(dst, r, mid)
+}
+
+func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
+	black8 := color.RGBA{0x00, 0x00, 0x00, 0xff}
+	f0, fN := ww.VisibleFrameRange()
+	for _, note := range(ww.score.notes) {
+		beatf, _ := note.Offset.Float64()
+		//beatf *= float64(ww.score.beatLen.Denom().Int64())
+		frame, _ := ww.score.ToFrame(beatf)
+		if frame < f0 || frame > fN {
+			continue
+		}
+		x := r.Min.X + ww.PixelAtFrame(frame)
+		y := ww.renderstate.staffMidY + (yspacing / 2) * (staffOrigin - int(note.Pitch))
+		draw.Draw(dst, r, &NoteHead{black8, image.Point{x, y}, yspacing/2, 35.0}, image.ZP, draw.Over)
+	}
 }
 
 func colourFor(offset *big.Rat) color.RGBA {
@@ -503,7 +535,7 @@ func colourFor(offset *big.Rat) color.RGBA {
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid int) {
 	black2 := color.RGBA{0x00, 0x00, 0x00, 0x44}
 	s := ww.getMouseState(ww.mouse.pos)
-	noteY := mid + (yspacing / 2) * s.note.delta
+	noteY := mid - (yspacing / 2) * s.note.delta
 	beatf := s.note.beat
 	if beatf < 0 {
 		return
@@ -596,13 +628,9 @@ func (ww *WaveWidget) TimeAtCursor(dx int) time.Duration {
 }
 
 func (ww *WaveWidget) Status() string {
-	framec := ww.first_frame + FrameN(ww.cursorDx * ww.frames_per_pixel)
-	beatf, ok := ww.score.ToBeat(framec)
-	var offset *big.Rat
-	if !ok {
-		offset = big.NewRat(0, 1)
-	}
-	_, offset = ww.score.Quantize(beatf)
+	s := ww.getMouseState(ww.mouse.pos)
+	beatf := s.note.beat
+	beati, offset := ww.score.Quantize(beatf)
 
-	return fmt.Sprintf("s0=%d spp=%d pos=%v", ww.first_frame, ww.frames_per_pixel, offset)
+	return fmt.Sprintf("s0=%d spp=%d pitch=%d pos=%d:%v", ww.first_frame, ww.frames_per_pixel, staffOrigin + s.note.delta, beati, offset)
 }

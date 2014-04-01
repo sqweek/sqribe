@@ -39,12 +39,14 @@ var wg sync.WaitGroup
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
 	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
 	var drag DragFn = nil
+	var dragged bool = false
 	var refreshTimer *time.Timer
 	for ei := range events {
 		switch e := ei.(type) {
 		case wde.MouseDownEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
+				dragged = false
 				if e.Where.In(G.ww.Rect()) {
 					drag, _ = G.ww.CursorIconAtPixel(e.Where)
 				} else if e.Where.In(G.bpm.Rect()) {
@@ -53,10 +55,18 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 					}
 				}
 			}
+		case wde.MouseUpEvent:
+			switch (e.Which) {
+			case wde.LeftButton:
+				if !dragged && e.Where.In(G.ww.Rect()) {
+					G.ww.LeftClick(e.Where)
+				}
+			}
 		case wde.MouseDraggedEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
 				if drag != nil {
+					dragged = true
 					drag(e.Where)
 				}
 			}
