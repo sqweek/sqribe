@@ -10,6 +10,7 @@ import (
 	"image/draw"
 	"image/color"
 	"image"
+	"sort"
 	"sync"
 	"time"
 	"flag"
@@ -114,6 +115,35 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	}
 }
 
+type MidiEv struct {
+	Pitch uint8
+	On bool
+	Next *MidiEv
+}
+
+func addEv(midi map[FrameN]*MidiEv, frame FrameN, ev MidiEv) {
+	prev, ok := midi[frame]
+	if ok {
+		prev.Next = &ev
+	} else {
+		midi[frame] = &ev
+	}
+}
+
+type FrameSlice []FrameN
+
+func (f FrameSlice) Len() int {
+	return len(f)
+}
+
+func (f FrameSlice) Less(i, j int) bool {
+	return f[i] < f[j]
+}
+
+func (f FrameSlice) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+
 func playToggle() {
 	if IsPlaying() {
 		fmt.Println("stopping playback")
@@ -144,12 +174,42 @@ func playToggle() {
 		}
 	}
 
+	midi := make(map[FrameN]*MidiEv)
+	for _, note := range(G.score.notes) {
+		beatf, _ := note.Offset.Float64()
+		durf, _ := note.Duration.Float64()
+		start, _ := G.score.ToFrame(beatf)
+		end, _ := G.score.ToFrame(beatf + durf)
+		if end <= f0 || start >= fN {
+			continue
+		}
+		if start < f0 {
+			start = f0
+		}
+		if end > fN {
+			end = fN
+		}
+		addEv(midi, start, MidiEv{note.Pitch, true, nil})
+		addEv(midi, end, MidiEv{note.Pitch, false, nil})
+	}
+	mframes := make([]FrameN, len(midi))
+	i := 0
+	for f, _ := range(midi) {
+		mframes[i] = f
+		for ev, _ := midi[f]; ev != nil; ev = ev.Next {
+			fmt.Println(f, ev)
+		}
+		i++
+	}
+	sort.Sort(FrameSlice(mframes))
+
 	padN := N + FrameN(len(loopPad))/nchan
 	bufsiz := FrameN(4096) // number of frames per buffer
 	/* sample feeding i/o thread */
 	go func() {
 		on := false
 		var buf []int16
+		mi := 0
 		i := FrameN(0)
 		for {
 			if i < N {
@@ -162,7 +222,7 @@ func playToggle() {
 				buf = loopPad
 			}
 			if on {
-				G.synth.NoteOff(15, 89)
+				G.synth.NoteOff(15, 77)
 				on = false
 			} else {
 				b0, _ := G.score.ToBeat(f0 + i)
@@ -173,6 +233,17 @@ func playToggle() {
 				}
 			}
 			nf := G.wav.ToFrame(SampleN(len(buf)))
+			for mi < len(mframes) && mframes[mi] <= f0 + i + nf {
+				//fmt.Println(f0 + i, f0 + i + nf, mframes[mi])
+				for ev, _ := midi[mframes[mi]]; ev != nil; ev = ev.Next {
+					if ev.On {
+						G.synth.NoteOn(0, int(ev.Pitch), 100)
+					} else {
+						G.synth.NoteOff(0, int(ev.Pitch))
+					}
+				}
+				mi++
+			}
 			mbuf := G.synth.WriteFrames_int16(int(nf))
 			for j := 0; j < len(buf); j++ {
 				mbuf[j] += buf[j]
@@ -182,7 +253,10 @@ func playToggle() {
 				break
 			}
 			i += nf
-			i %= padN
+			if i > padN {
+				i = 0
+				mi = 0
+			}
 		}
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
