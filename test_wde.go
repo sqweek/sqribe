@@ -305,17 +305,19 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				}
 			} else {
 				lastframe = now
-				s := w.Screen()
 				width, height := w.Size()
+				r := image.Rect(0, 0, width, height)
+				img := image.NewRGBA(r)
 				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height) + 20))
-				G.ww.Draw(s, wvR)
+				G.ww.Draw(img, wvR)
 
 				bpmR := image.Rect(width - 150, wvR.Max.Y, width, height)
-				G.bpm.Draw(s, bpmR)
+				G.bpm.Draw(img, bpmR)
 
 				statusR := image.Rect(0, wvR.Max.Y, bpmR.Min.X, height)
-				drawstatus(s, statusR)
+				drawstatus(img, statusR)
 
+				w.Screen().CopyRGBA(img, r)
 				w.FlushImage()
 				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
 				merged = 0
