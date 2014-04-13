@@ -17,7 +17,7 @@ type Score struct {
 	staves []Staff
 	beats []FrameN
 	beatLen *big.Rat
-	notes []Note
+	notes []*Note
 }
 
 type Staff struct {
@@ -155,6 +155,12 @@ func (score *Score) Quantize(beat float64) (int, *big.Rat) {
 	return beati, best
 }
 
+func (note *Note) Set(note2 *Note) {
+	note.Pitch = note2.Pitch
+	note.Offset.Set(note2.Offset)
+	note.Duration.Set(note2.Duration)
+}
+
 func (note *Note) Cmp(note2 *Note) int {
 	d := note.Offset.Cmp(note2.Offset)
 	if d == 0 {
@@ -163,20 +169,20 @@ func (note *Note) Cmp(note2 *Note) int {
 	return d
 }
 
-func (score *Score) AddNote(note Note) {
+func (score *Score) AddNote(note *Note) {
 	if len(score.notes) == 0 {
 		score.notes = append(score.notes, note)
 		return
 	}
-	searchFn := func(i int)bool { return note.Cmp(&score.notes[i]) <= 0 }
+	searchFn := func(i int)bool { return note.Cmp(score.notes[i]) <= 0 }
 	i := sort.Search(len(score.notes), searchFn)
 	if i == len(score.notes) {
 		score.notes = append(score.notes, note)
-	} else if note.Cmp(&score.notes[i]) == 0 {
+	} else if note.Cmp(score.notes[i]) == 0 {
 		/* already have a note at this offset with the same pitch, update the duration */
 		score.notes[i].Duration.Set(note.Duration)
 	} else {
-		score.notes = append(score.notes, Note{})
+		score.notes = append(score.notes, nil)
 		copy(score.notes[i+1:], score.notes[i:])
 		score.notes[i] = note
 	}
