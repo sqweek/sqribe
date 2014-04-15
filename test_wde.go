@@ -32,13 +32,11 @@ var G struct {
 		pt image.Point
 		cursor CursorCtl
 	}
-	bpm BpmWidget
 }
 
 var wg sync.WaitGroup
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool) {
-	doredraw := func() {go func() {redraw <- image.Rect(0, 0, 0, 0)}()}
 	var drag DragFn = nil
 	var dragged bool = false
 	var refreshTimer *time.Timer
@@ -50,10 +48,6 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				dragged = false
 				if e.Where.In(G.ww.Rect()) {
 					drag, _ = G.ww.CursorIconAtPixel(e.Where)
-				} else if e.Where.In(G.bpm.Rect()) {
-					if newBpm := G.bpm.Hit(); newBpm != 0.0 {
-						doredraw()
-					}
 				}
 			}
 		case wde.MouseUpEvent:
@@ -93,6 +87,10 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				G.ww.Zoom(0.5)
 			case wde.KeyDownArrow:
 				G.ww.Zoom(2.0)
+			case wde.KeyF2:
+				G.score.nsharps--
+			case wde.KeyF3:
+				G.score.nsharps++
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
@@ -311,10 +309,7 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height) + 20))
 				G.ww.Draw(img, wvR)
 
-				bpmR := image.Rect(width - 150, wvR.Max.Y, width, height)
-				G.bpm.Draw(img, bpmR)
-
-				statusR := image.Rect(0, wvR.Max.Y, bpmR.Min.X, height)
+				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(img, statusR)
 
 				w.Screen().CopyRGBA(img, r)
@@ -391,8 +386,6 @@ func main() {
 	G.ww.SetWaveform(G.wav)
 	G.score.Init()
 	G.ww.SetScore(&G.score)
-
-	G.bpm = BpmWidget{bpm: 120}
 
 	wg.Add(1)
 	done := make(chan bool)

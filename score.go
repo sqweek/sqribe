@@ -14,16 +14,16 @@ type BeatMap interface {
 }
 
 type Score struct {
-	staves []Staff
+	Staff // TODO multiple staves
 	beats []FrameN
 	beatLen *big.Rat
-	notes []*Note
 }
 
 type Staff struct {
 	name string
-	measures []Measure
-	b0 int /* index of beat the measure starts on */
+	origin uint8	// unaltered pitch of center note (ie. clef)
+	nsharps int	// key signature (-ve for flats)
+	notes []*Note
 }
 
 type Measure struct {
@@ -39,6 +39,7 @@ type Note struct {
 
 func (score *Score) Init() {
 	score.beatLen = big.NewRat(1, 4)
+	score.origin = 59
 }
 
 func (score *Score) ToFrame(beat float64) (FrameN, bool) {
@@ -192,3 +193,71 @@ func (score *Score) AddNote(note *Note) {
 // 3 6 12 24 48 96
 // 5 10 20 40 80
 // 7 14 28 56 112
+
+/* degrees: do di re ri mi fa fi so si la li ti
+ * scales: C D E F G A B */
+var degree2scale []int = []int{0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6}
+var scale2degree []int = []int{0, 2, 4, 5, 7, 9, 11}
+var scaleSharps []int = []int{1, 3, 5, 0, 2, 4, 6}
+
+// delta is the number of scale lines from the stave's center note. +ve = higher pitch
+func (staff *Staff) PitchForLine(delta int) uint8 {
+	pitch := int(staff.origin)
+	scale0 := degree2scale[int(staff.origin % 12)]
+	if scale0 == -1 {
+		panic(staff.origin)
+	}
+	s := scale0 + delta
+	/* first deal with octaves, in "scale" space */
+	for s < 0 {
+		pitch -= 12
+		s += 7
+	}
+	for s >= 7 {
+		pitch += 12
+		s -= 7
+	}
+	/* then apply the intra-scale delta */
+	pitch += scale2degree[s] - scale2degree[scale0]
+	/* finally, apply the key signature */
+	pitch += staff.accidental(s)
+	return uint8(pitch)
+}
+
+func (staff *Staff) accidental(tone int) int {
+	if staff.nsharps > 0 && scaleSharps[tone] < staff.nsharps {
+		return 1
+	} else if staff.nsharps < 0 && scaleSharps[tone] - 6 > staff.nsharps {
+		return -1
+	}
+	return 0
+}
+
+func (staff *Staff) LineForPitch(pitch uint8) (int, *int) {
+	degree0 := int(staff.origin % 12)
+	tone0 := degree2scale[degree0]
+	degree := int(pitch % 12)
+	keys2d := make([]int, len(scale2degree), len(scale2degree))
+	tone := -1
+	for s, _ := range(scale2degree) {
+		keys2d[s] = scale2degree[s] + staff.accidental(s)
+		if keys2d[s] == degree {
+			tone = s
+		}
+	}
+	if tone == -1 {
+		// pitch not in scale; use accidental
+		// TODO consider other notes/accidentals in the bar/song
+		delta, _ := staff.LineForPitch(pitch + 1)
+		tone := ((tone0 + delta) % 7 + 7) % 7
+		a := staff.accidental(tone) - 1
+		if a == -2 {
+			delta, _ = staff.LineForPitch(pitch - 1)
+			tone = ((tone0 + delta) % 7 + 7) % 7
+			a = staff.accidental(tone) + 1
+		}
+		return delta, &a
+	}
+	delta := -tone0 + 7 * ((int(pitch) - (int(staff.origin) - degree0)) / 12) + tone
+	return delta, nil
+}

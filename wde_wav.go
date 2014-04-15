@@ -20,8 +20,6 @@ const (
 
 const beatIncursion = 33 // pixels
 
-const staffOrigin = 61 // B4
-
 const yspacing = 10 // pixels between staff lines
 
 type noteProspect struct {
@@ -207,7 +205,8 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		}
 		x := ww.PixelAtFrame(frame)
 		mid := ww.rect.wave.Min.Y + ww.rect.wave.Dy() / 2
-		y := mid + (yspacing / 2) * (staffOrigin - int(note.Pitch))
+		delta, _ := ww.score.LineForPitch(note.Pitch)
+		y := mid - (yspacing / 2) * (delta)
 		r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
 		if mouse.In(r) {
 			return func(pos image.Point)bool {
@@ -270,7 +269,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 func (ww *WaveWidget) noteAtPixel(pos image.Point) *noteProspect {
 	mid := ww.rect.wave.Min.Y + ww.rect.wave.Dy() / 2
 	noteY := snapto(pos.Y, mid, yspacing / 2)
-	delta := mid - noteY / (yspacing / 2)
+	delta := (mid - noteY) / (yspacing / 2)
 
 	frame := ww.FrameAtPixel(pos.X)
 	beatf, ok := ww.score.ToBeat(frame)
@@ -325,7 +324,7 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
 	b := big.NewRat(int64(beati), 1)
 	offset.Mul(big.NewRat(ww.score.beatLen.Denom().Int64(), 1), offset)
 	b.Add(b, offset)
-	return &Note{uint8(staffOrigin + prospect.delta), ww.score.beatLen, b}
+	return &Note{ww.score.PitchForLine(prospect.delta), ww.score.beatLen, b}
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
@@ -544,9 +543,17 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
 		if frame < f0 || frame > fN {
 			continue
 		}
-		x := r.Min.X + ww.PixelAtFrame(frame)
-		y := mid + (yspacing / 2) * (staffOrigin - int(note.Pitch))
+		x := ww.PixelAtFrame(frame)
+		delta, accidental := ww.score.LineForPitch(note.Pitch)
+		y := mid - (yspacing / 2) * delta
 		draw.Draw(dst, r, &NoteHead{black8, image.Point{x, y}, yspacing/2, 35.0}, r.Min, draw.Over)
+		if accidental != nil {
+			if *accidental > 0 {
+				draw.Draw(dst, image.Rect(x - yspacing, y - yspacing/2, x - yspacing + 1, y + yspacing/2 + 1), &image.Uniform{black8}, r.Min, draw.Over)
+			} else if *accidental < 0 {
+				draw.Draw(dst, image.Rect(x - 3*yspacing/2, y, x - yspacing/2 + 1, y + 1), &image.Uniform{black8}, r.Min, draw.Over)
+			}
+		}
 	}
 }
 
@@ -578,11 +585,11 @@ func colourFor(offset *big.Rat) color.RGBA {
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid int) {
 	black2 := color.RGBA{0x00, 0x00, 0x00, 0x44}
 	s := ww.getMouseState(ww.mouse.pos)
-	noteY := mid - (yspacing / 2) * s.note.delta
-	beatf := s.note.beatf
-	if beatf < 0 {
+	if s.note == nil {
 		return
 	}
+	noteY := mid - (yspacing / 2) * s.note.delta
+	beatf := s.note.beatf
 	beati, offset := ww.score.Quantize(beatf)
 	if beati + 1 >= len(ww.score.beats) {
 		return
@@ -672,8 +679,18 @@ func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {
 
 func (ww *WaveWidget) Status() string {
 	s := ww.getMouseState(ww.mouse.pos)
-	beatf := s.note.beatf
-	beati, offset := ww.score.Quantize(beatf)
+	pitch := uint8(0)
+	delta := 0
+	delta2 := 0
+	beati := 0
+	offset := big.NewRat(1, 1)
+	if s.note != nil {
+		beatf := s.note.beatf
+		delta = s.note.delta
+		beati, offset = ww.score.Quantize(beatf)
+		pitch = ww.score.PitchForLine(delta)
+		delta2, _ = ww.score.LineForPitch(pitch)
+	}
 
-	return fmt.Sprintf("s0=%d spp=%d pitch=%d pos=%d:%v", ww.first_frame, ww.frames_per_pixel, staffOrigin + s.note.delta, beati, offset)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %d pos=%d:%v #%d", delta, delta2, pitch, pitch%12, beati, offset, ww.score.nsharps)
 }
