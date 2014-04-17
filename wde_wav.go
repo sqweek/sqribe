@@ -461,31 +461,6 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	}
 }
 
-type NoteHead struct {
-	col color.RGBA
-	p image.Point
-	r int
-	α float64
-}
-
-func (n *NoteHead) ColorModel() color.Model {
-	return color.RGBAModel
-}
-
-func (n *NoteHead) Bounds() image.Rectangle {
-	return image.Rect(n.p.X - n.r, n.p.Y - n.r, n.p.X + n.r + 1, n.p.Y + n.r + 1)
-}
-
-func (n *NoteHead) At(x, y int) color.Color {
-	xx, yy, rr := float64(x - n.p.X)+0.5, float64(y - n.p.Y)+0.5, float64(n.r)
-	rx := xx * math.Cos(n.α) - yy * math.Sin(n.α)
-	ry := xx * math.Sin(n.α) + yy * math.Cos(n.α)
-	if rx*rx + 1.25*1.25*ry*ry < rr*rr {
-		return n.col
-	}
-	return color.RGBA{0, 0, 0, 0}
-}
-
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	if ww.score == nil {
 		return
@@ -546,13 +521,9 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
 		x := ww.PixelAtFrame(frame)
 		delta, accidental := ww.score.LineForPitch(note.Pitch)
 		y := mid - (yspacing / 2) * delta
-		draw.Draw(dst, r, &NoteHead{black8, image.Point{x, y}, yspacing/2, 35.0}, r.Min, draw.Over)
+		draw.Draw(dst, r, newNoteHead(black8, image.Point{x, y}, yspacing/2, 35.0), r.Min, draw.Over)
 		if accidental != nil {
-			if *accidental > 0 {
-				draw.Draw(dst, image.Rect(x - yspacing, y - yspacing/2, x - yspacing + 1, y + yspacing/2 + 1), &image.Uniform{black8}, r.Min, draw.Over)
-			} else if *accidental < 0 {
-				draw.Draw(dst, image.Rect(x - 3*yspacing/2, y, x - yspacing/2 + 1, y + 1), &image.Uniform{black8}, r.Min, draw.Over)
-			}
+			draw.Draw(dst, r, newAccidental(black8, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
 		}
 	}
 }
@@ -619,7 +590,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid
 		draw.Draw(dst, line, &image.Uniform{black2}, image.ZP, draw.Over)
 	}
 
-	draw.Draw(dst, dst.Bounds(), &NoteHead{colourFor(offset), image.Point{noteX, noteY}, yspacing/2, 35.0}, r.Min, draw.Over)
+	draw.Draw(dst, dst.Bounds(), newNoteHead(colourFor(offset), image.Point{noteX, noteY}, yspacing/2, 35.0), r.Min, draw.Over)
 }
 
 func snapto(x, origin, step int) int {
