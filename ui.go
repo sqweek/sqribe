@@ -8,7 +8,7 @@ import (
 	"fmt"
 )
 
-type DragFn func(image.Point) bool
+type DragFn func(image.Point, bool) bool
 
 type Hoverable interface {
 	MouseMoved(image.Point)

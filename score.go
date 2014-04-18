@@ -170,6 +170,15 @@ func (note *Note) Cmp(note2 *Note) int {
 	return d
 }
 
+func (score *Score) RemoveNote(note *Note) {
+	searchFn := func(i int)bool { return note.Cmp(score.notes[i]) <= 0 }
+	i := sort.Search(len(score.notes), searchFn)
+	if note.Cmp(score.notes[i]) == 0 {
+		copy(score.notes[i:], score.notes[i+1:])
+		score.notes = score.notes[:len(score.notes) - 1]
+	}
+}
+
 func (score *Score) AddNote(note *Note) {
 	if len(score.notes) == 0 {
 		score.notes = append(score.notes, note)

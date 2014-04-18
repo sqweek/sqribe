@@ -75,22 +75,22 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 	return ww.rect.r
 }
 
-func (ww *WaveWidget) SelectAudioByTime(start, end time.Duration) {
+func (ww *WaveWidget) SelectAudio(start, end FrameN) {
 	if ww.wav == nil {
 		return
 	}
-	ww.selection.min = ww.wav.FrameAtTime(start)
-	ww.selection.max = ww.wav.FrameAtTime(end)
+	ww.selection.min = start
+	ww.selection.max = end
 	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
 	ww.refresh <- ww.rect.r
 }
 
-func (ww *WaveWidget) SelectAudioSnapToBeats(start, end time.Duration) {
+func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	if ww.wav == nil || ww.score == nil {
 		return
 	}
-	ww.selection.min = ww.score.NearestBeat(ww.wav.FrameAtTime(start))
-	ww.selection.max = ww.score.NearestBeat(ww.wav.FrameAtTime(end))
+	ww.selection.min = ww.score.NearestBeat(start)
+	ww.selection.max = ww.score.NearestBeat(end)
 	// XXX could avoid redrawing waveform if selection rendered differently
 	ww.renderstate.changed |= WAV
 	ww.refresh <- ww.rect.r
@@ -144,11 +144,6 @@ func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {
 	ww.refresh <- ww.rect.r
 }
 
-func withinGrabDistance(x int, mouse image.Point) bool {
-	dx := mouse.X - x
-	return dx >= -2 && dx <= 2
-}
-
 func (ww *WaveWidget) NFrames() FrameN {
 	if ww.wav == nil {
 		/* TODO allow score without wave */
@@ -172,7 +167,7 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 }
 
 func (ww *WaveWidget) dragFn(min, max FrameN, ptr *FrameN, cm changeMask) DragFn {
-	return func(pos image.Point) bool {
+	return func(pos image.Point, finished bool) bool {
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max {
 			return false
@@ -180,6 +175,22 @@ func (ww *WaveWidget) dragFn(min, max FrameN, ptr *FrameN, cm changeMask) DragFn
 		*ptr = f
 		ww.renderstate.changed |= cm
 		ww.refresh <- ww.rect.r
+		return true
+	}
+}
+
+func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
+	return func(pos image.Point, finished bool)bool {
+		min := ww.FrameAtPixel(pos.X)
+		max := anchor
+		if max < min {
+			min, max = max, min
+		}
+		if snap {
+			ww.SelectAudioSnapToBeats(min, max)
+		} else {
+			ww.SelectAudio(min, max)
+		}
 		return true
 	}
 }
@@ -192,13 +203,16 @@ func padRect(r image.Rectangle, w, h int) image.Rectangle {
 	return image.Rect(r.Min.X - w, r.Min.Y - h, r.Max.X + w, r.Max.Y + h)
 }
 
+func (ww *WaveWidget) vrect(x int) image.Rectangle{
+	return image.Rect(x, ww.rect.r.Min.Y, x + 1, ww.rect.r.Max.Y)
+}
+
 func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	nframes := ww.NFrames()
 
 	f0, fN := ww.VisibleFrameRange()
 	for _, note := range(ww.score.notes) {
 		beatf, _ := note.Offset.Float64()
-		//beatf *= float64(ww.score.beatLen.Denom().Int64())
 		frame, _ := ww.score.ToFrame(beatf)
 		if frame < f0 || frame > fN {
 			continue
@@ -209,13 +223,17 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		y := mid - (yspacing / 2) * (delta)
 		r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
 		if mouse.In(r) {
-			return func(pos image.Point)bool {
+			return func(pos image.Point, finished bool)bool {
 				prospect := ww.noteAtPixel(pos)
 				if prospect == nil {
 					return false
 				}
-				newnote := ww.mkNote(prospect)
-				note.Set(newnote)
+				if finished {
+					ww.score.RemoveNote(note)
+					ww.score.AddNote(ww.mkNote(prospect))
+				} else {
+					ww.getMouseState(pos).note = prospect
+				}
 				ww.renderstate.changed |= SCALE
 				ww.refresh <- ww.rect.r
 				return true
@@ -223,47 +241,36 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		}
 	}
 
-	/* TODO these drags should follow the same snapping rules as normal selection */
-	if withinGrabDistance(ww.PixelAtFrame(ww.selection.min), mouse) {
-		return ww.dragFn(0, ww.selection.max, &ww.selection.min, WAV), ResizeLCursor
+	snap := (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
+	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
+		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
 	}
-	if withinGrabDistance(ww.PixelAtFrame(ww.selection.max), mouse) {
-		return ww.dragFn(ww.selection.min, nframes, &ww.selection.max, WAV), ResizeRCursor
+	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
+		return ww.selectDrag(ww.selection.min, snap), ResizeRCursor
 	}
-	if mouse.Y < ww.rect.r.Min.Y + beatIncursion {
-		f0, fN := ww.VisibleFrameRange()
-		// TODO ignore beat grabs when sufficiently zoomed out
-		for i, beat := range(ww.score.beats) {
-			min, max := FrameN(0), nframes
-			if beat < f0 {
-				min = 0
-				continue
-			} else if beat > fN {
-				break
+
+	// TODO ignore beat grabs when sufficiently zoomed out
+	for i, beat := range(ww.score.beats) {
+		min, max := FrameN(0), nframes
+		if beat < f0 {
+			min = 0
+			continue
+		} else if beat > fN {
+			break
+		}
+		x := ww.PixelAtFrame(beat)
+		y0 := ww.rect.r.Min.Y
+		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
+		if mouse.In(padRect(r, 2, 0)) {
+			if i + 1 < len(ww.score.beats) {
+				max = ww.score.beats[i + 1]
 			}
-			if withinGrabDistance(ww.PixelAtFrame(beat), mouse) {
-				if i + 1 < len(ww.score.beats) {
-					max = ww.score.beats[i + 1]
-				}
-				return ww.dragFn(min, max, &ww.score.beats[i], SCALE), ResizeHCursor
-			}
+			return ww.dragFn(min, max, &ww.score.beats[i], SCALE), ResizeHCursor
 		}
 	}
-	origin := mouse
-	return func(pos image.Point)bool {
-		r := ww.rect.r
-		minT := ww.TimeAtCursor(pos.X)
-		maxT := ww.TimeAtCursor(origin.X)
-		if maxT < minT {
-			minT, maxT = maxT, minT
-		}
-		if origin.Y - r.Min.Y > 4 * r.Dy() / 5 {
-			ww.SelectAudioByTime(minT, maxT)
-		} else {
-			ww.SelectAudioSnapToBeats(minT, maxT)
-		}
-		return true
-	}, NormalCursor
+
+	/* if we're not dragging anything in particular, drag to select */
+	return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), NormalCursor
 }
 
 func (ww *WaveWidget) noteAtPixel(pos image.Point) *noteProspect {
@@ -632,7 +639,6 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	}
 }
 
-/* dx is relative to widget's left edge */
 func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {
 	if ww.wav == nil {
 		return 0.0

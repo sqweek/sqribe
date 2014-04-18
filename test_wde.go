@@ -53,8 +53,12 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 		case wde.MouseUpEvent:
 			switch (e.Which) {
 			case wde.LeftButton:
-				if !dragged && e.Where.In(G.ww.Rect()) {
-					G.ww.LeftClick(e.Where)
+				if e.Where.In(G.ww.Rect()) {
+					if !dragged {
+						G.ww.LeftClick(e.Where)
+					} else {
+						drag(e.Where, true)
+					}
 				}
 			}
 		case wde.MouseDraggedEvent:
@@ -62,7 +66,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			case wde.LeftButton:
 				if drag != nil {
 					dragged = true
-					drag(e.Where)
+					drag(e.Where, false)
 				}
 			}
 		case wde.MouseMovedEvent:
