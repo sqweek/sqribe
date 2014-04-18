@@ -16,15 +16,21 @@ type state interface {
 type stateV1 struct {
 	Filename string
 	Beats []FrameN
+	Nsharps int
+	Notes []*Note
 }
 
 func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.beats
+	s.Nsharps = G.score.nsharps
+	s.Notes = G.score.notes
 }
 
 func (s *stateV1) Restore() {
 	G.score.beats = s.Beats
+	G.score.nsharps = s.Nsharps
+	G.score.notes = s.Notes
 }
 
 type VersionHeader struct {

@@ -334,7 +334,10 @@ func open(filename string, fmt sound.AudioInfo) error {
 		return err
 	}
 	G.audiofile = filename
-	LoadState(filename)
+	err = LoadState(filename)
+	if err != nil {
+		log.Println(err)
+	}
 	return nil
 }
 
