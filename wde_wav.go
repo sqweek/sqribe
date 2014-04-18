@@ -508,23 +508,48 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	ww.drawProspectiveNote(dst, r, mid)
 }
 
-func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
-	black8 := color.RGBA{0x00, 0x00, 0x00, 0xff}
+func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf float64, delta int, accidental *int, prospective bool) {
+	var col, black color.RGBA
+	if prospective {
+		black = color.RGBA{0, 0, 0, 0x44}
+		_, offset := ww.score.Quantize(beatf)
+		col = colourFor(offset)
+	} else {
+		black = color.RGBA{0, 0, 0, 0xff}
+		col = black
+	}
 	f0, fN := ww.VisibleFrameRange()
+	frame, _ := ww.score.ToFrame(beatf)
+	if frame < f0 || frame > fN {
+		return
+	}
+
+	x := ww.PixelAtFrame(frame)
+	y := mid - (yspacing / 2) * delta
+
+	/* ledger lines */
+	ydist := int(math.Abs(float64(y - mid)))
+	sgn := 1
+	if (mid > y) {
+		sgn = -1
+	}
+	for dy := yspacing * 3; dy <= ydist; dy += yspacing {
+		width := yspacing / 2 + 1
+		line := image.Rect(x - width, mid + sgn*dy, x + width + 1, mid + sgn*(dy + 1))
+		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
+	}
+
+	draw.Draw(dst, r, newNoteHead(col, image.Point{x, y}, yspacing/2, 35.0), r.Min, draw.Over)
+	if accidental != nil {
+		draw.Draw(dst, r, newAccidental(col, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
+	}
+}
+
+func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
 	for _, note := range(ww.score.notes) {
 		beatf, _ := note.Offset.Float64()
-		//beatf *= float64(ww.score.beatLen.Denom().Int64())
-		frame, _ := ww.score.ToFrame(beatf)
-		if frame < f0 || frame > fN {
-			continue
-		}
-		x := ww.PixelAtFrame(frame)
 		delta, accidental := ww.score.LineForPitch(note.Pitch)
-		y := mid - (yspacing / 2) * delta
-		draw.Draw(dst, r, newNoteHead(black8, image.Point{x, y}, yspacing/2, 35.0), r.Min, draw.Over)
-		if accidental != nil {
-			draw.Draw(dst, r, newAccidental(black8, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
-		}
+		ww.drawNote(dst, r, mid, beatf, delta, accidental, false)
 	}
 }
 
@@ -554,43 +579,11 @@ func colourFor(offset *big.Rat) color.RGBA {
 }
 
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid int) {
-	black2 := color.RGBA{0x00, 0x00, 0x00, 0x44}
 	s := ww.getMouseState(ww.mouse.pos)
 	if s.note == nil {
 		return
 	}
-	noteY := mid - (yspacing / 2) * s.note.delta
-	beatf := s.note.beatf
-	beati, offset := ww.score.Quantize(beatf)
-	if beati + 1 >= len(ww.score.beats) {
-		return
-	}
-
-	beat0, beat1 := ww.score.beats[beati], ww.score.beats[beati+1]
-//for beatf = float64(beati); beatf <= float64(beati + 1); beatf += 1.0/256.0 {
-//	_, offset = ww.score.Quantize(beatf)
-	α, _ := offset.Float64()
-	α *= float64(ww.score.beatLen.Denom().Int64())
-	frame := FrameN((1 - α) * float64(beat0) + α * float64(beat1))
-	noteX := ww.PixelAtFrame(frame)
-//	l := image.Rect(noteX, mid - 100, noteX + 1, mid + 101)
-//	draw.Draw(dst, l, &image.Uniform{colourFor(offset)}, image.ZP, draw.Src)
-//}
-//	noteX := cur0.X
-
-	/* ledger lines */
-	ydist := int(math.Abs(float64(noteY - mid)))
-	sgn := 1
-	if (mid > noteY) {
-		sgn = -1
-	}
-	for dy := yspacing * 3; dy <= ydist; dy += yspacing {
-		width := yspacing / 2 + 1
-		line := image.Rect(noteX - width, mid + sgn*dy, noteX + width + 1, mid + sgn*(dy + 1))
-		draw.Draw(dst, line, &image.Uniform{black2}, image.ZP, draw.Over)
-	}
-
-	draw.Draw(dst, dst.Bounds(), newNoteHead(colourFor(offset), image.Point{noteX, noteY}, yspacing/2, 35.0), r.Min, draw.Over)
+	ww.drawNote(dst, r, mid, s.note.beatf, s.note.delta, nil, true)
 }
 
 func snapto(x, origin, step int) int {
