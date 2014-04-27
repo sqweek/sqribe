@@ -29,6 +29,7 @@ func initCursors(X *xgbutil.XUtil) {
 	xcursors[ResizeHCursor] = mkCursor(X, xcursor.SBHDoubleArrow)
 	xcursors[ResizeLCursor] = mkCursor(X, xcursor.LeftSide)
 	xcursors[ResizeRCursor] = mkCursor(X, xcursor.RightSide)
+	xcursors[GrabCursor] = mkCursor(X, xcursor.Hand2)
 }
 
 type XgbCursorCtl struct {

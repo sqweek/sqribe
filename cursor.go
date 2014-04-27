@@ -7,6 +7,7 @@ const (
 	ResizeHCursor
 	ResizeLCursor
 	ResizeRCursor
+	GrabCursor
 )
 
 type CursorCtl interface {

@@ -18,7 +18,7 @@ const (
 	CURSOR
 )
 
-const beatIncursion = 33 // pixels
+const beatIncursion = 5 // pixels
 
 const yspacing = 10 // pixels between staff lines
 
@@ -237,7 +237,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 				ww.renderstate.changed |= SCALE
 				ww.refresh <- ww.rect.r
 				return true
-			}, ResizeHCursor
+			}, GrabCursor
 		}
 	}
 
@@ -575,6 +575,7 @@ func colourFor(offset *big.Rat) color.RGBA {
 	case "5/32": fallthrough
 	case "7/32": return color.RGBA{0xff, 0xff, 0x00, α}
 
+	// this is a bit too close to the blue right next door
 	case "1/24": fallthrough
 	case "3/24": fallthrough
 	case "5/24": return color.RGBA{0x88, 0x00, 0x88, α}
