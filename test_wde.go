@@ -165,9 +165,10 @@ func playToggle() {
 	nchan := FrameN(G.wav.Channels)
 	frame0 := G.wav.Frames(f0, f0)
 	frameN := G.wav.Frames(fN, fN)
-	nfPad := FrameN(20)
-	loopPad := make([]int16, nchan*(2*nfPad + 1))
 	N := fN - f0 + 1
+	// pad to nearest 64th frame, minimum 20 frames
+	nfPad := 19 + (64 - (N + 19) % 64)
+	loopPad := make([]int16, nchan*(2*nfPad + 1))
 	for i := FrameN(0); i < nfPad; i++ {
 		α := 1.0 - float64(i)/float64(nfPad)
 		for j := FrameN(0); j < nchan; j++ {
@@ -206,7 +207,7 @@ func playToggle() {
 	sort.Sort(FrameSlice(mframes))
 
 	padN := N + FrameN(len(loopPad))/nchan
-	bufsiz := FrameN(4096) // number of frames per buffer
+	bufsiz := FrameN(64) // number of frames per buffer
 	/* sample feeding i/o thread */
 	go func() {
 		on := false
@@ -223,18 +224,20 @@ func playToggle() {
 			} else if i < padN {
 				buf = loopPad
 			}
+			nf := G.wav.ToFrame(SampleN(len(buf)))
+			/* metronome */
 			if on {
 				G.synth.NoteOff(15, 77)
 				on = false
 			} else {
-				b0, _ := G.score.ToBeat(f0 + i)
-				bN, _ := G.score.ToBeat(f0 + i + bufsiz - 1)
+				b0, _ := G.score.ToBeat(f0 + i - 1)
+				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
 					G.synth.NoteOn(15, 77, 120)
 					on = true
 				}
 			}
-			nf := G.wav.ToFrame(SampleN(len(buf)))
+			/* user placed notes */
 			for mi < len(mframes) && mframes[mi] <= f0 + i + nf {
 				//fmt.Println(f0 + i, f0 + i + nf, mframes[mi])
 				for ev, _ := midi[mframes[mi]]; ev != nil; ev = ev.Next {
