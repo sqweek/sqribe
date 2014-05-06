@@ -32,6 +32,12 @@ var G struct {
 		pt image.Point
 		cursor CursorCtl
 	}
+	mixer struct {
+		metronome bool
+		audio bool
+		midi bool
+		waveBias float64
+	}
 }
 
 var wg sync.WaitGroup
@@ -95,6 +101,16 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				G.score.nsharps--
 			case wde.KeyF3:
 				G.score.nsharps++
+			case wde.KeyPrior:
+				G.mixer.waveBias += 0.1
+				if G.mixer.waveBias >= 1.0 {
+					G.mixer.waveBias = 0.9
+				}
+			case wde.KeyNext:
+				G.mixer.waveBias -= 0.1
+				if G.mixer.waveBias <= 0.0 {
+					G.mixer.waveBias = 0.1
+				}
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
@@ -103,6 +119,12 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				}
 			case wde.KeyS:
 				SaveState(G.audiofile)
+			case wde.KeyT:
+				G.mixer.metronome = !G.mixer.metronome
+			case wde.KeyA:
+				G.mixer.audio = !G.mixer.audio
+			case wde.KeyM:
+				G.mixer.midi = !G.mixer.midi
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -229,7 +251,7 @@ func playToggle() {
 			if on {
 				G.synth.NoteOff(15, 77)
 				on = false
-			} else {
+			} else if G.mixer.metronome {
 				b0, _ := G.score.ToBeat(f0 + i - 1)
 				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
@@ -251,8 +273,15 @@ func playToggle() {
 			}
 			mbuf := G.synth.WriteFrames_int16(int(nf))
 			for j := 0; j < len(buf); j++ {
-				mbuf[j] += buf[j]
-				mbuf[j] /= 2
+				α := G.mixer.waveBias
+				a, m := 0.0, 0.0
+				if G.mixer.audio {
+					a = α * float64(buf[j])
+				}
+				if G.mixer.midi {
+					m = (1 - α) * float64(mbuf[j])
+				}
+				mbuf[j] = int16(a + m)
 			}
 			if AppendAudio(mbuf) == -1 {
 				break
@@ -358,6 +387,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	G.mixer.waveBias = 0.5
+	G.mixer.metronome = true
+	G.mixer.audio = true
+	G.mixer.midi = true
 
 	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)

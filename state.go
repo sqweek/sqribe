@@ -18,6 +18,10 @@ type stateV1 struct {
 	Beats []FrameN
 	Nsharps int
 	Notes []*Note
+	MixWeight float64
+	MetronomeOff bool `json:",omitempty"`
+	WaveOff bool `json:",omitempty"`
+	MidiOff bool `json:",omitempty"`
 }
 
 func (s *stateV1) Capture() {
@@ -25,12 +29,24 @@ func (s *stateV1) Capture() {
 	s.Beats = G.score.beats
 	s.Nsharps = G.score.nsharps
 	s.Notes = G.score.notes
+	s.MixWeight = G.mixer.waveBias
+	s.MetronomeOff = !G.mixer.metronome
+	s.WaveOff = !G.mixer.audio
+	s.MidiOff = !G.mixer.midi
 }
 
 func (s *stateV1) Restore() {
 	G.score.beats = s.Beats
 	G.score.nsharps = s.Nsharps
 	G.score.notes = s.Notes
+	if s.MixWeight == 0.0 {
+		G.mixer.waveBias = 0.5
+	} else {
+		G.mixer.waveBias = s.MixWeight
+	}
+	G.mixer.metronome = !s.MetronomeOff
+	G.mixer.audio = !s.WaveOff
+	G.mixer.midi = !s.MidiOff
 }
 
 type VersionHeader struct {
