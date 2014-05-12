@@ -272,18 +272,7 @@ func playToggle() {
 				mi++
 			}
 			mbuf := G.synth.WriteFrames_int16(int(nf))
-			for j := 0; j < len(buf); j++ {
-				α := G.mixer.waveBias
-				a, m := 0.0, 0.0
-				if G.mixer.audio {
-					a = α * float64(buf[j])
-				}
-				if G.mixer.midi {
-					m = (1 - α) * float64(mbuf[j])
-				}
-				mbuf[j] = int16(a + m)
-			}
-			if AppendAudio(mbuf) == -1 {
+			if AppendAudio(buf, mbuf) == -1 {
 				break
 			}
 			i += nf
