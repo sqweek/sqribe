@@ -156,6 +156,16 @@ func (score *Score) Quantize(beat float64) (int, *big.Rat) {
 	return beati, best
 }
 
+func (note *Note) Beatf() float64 {
+	f, _ := note.Offset.Float64()
+	return f
+}
+
+func (note *Note) Durf() float64 {
+	d, _ := note.Duration.Float64()
+	return d;
+}
+
 func (note *Note) Set(note2 *Note) {
 	note.Pitch = note2.Pitch
 	note.Offset.Set(note2.Offset)

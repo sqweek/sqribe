@@ -34,22 +34,28 @@ type mouseState struct {
 }
 
 type WaveWidget struct {
+	/* data related state */
 	wav *Waveform
 	score *Score
+	iolisten <-chan *Chunk
+
+	/* view related state */
 	first_frame FrameN
 	frames_per_pixel int
 	selection struct {
 		min FrameN
 		max FrameN
 	}
+	rect struct {
+		r image.Rectangle		// the whole widget's rect
+		wave image.Rectangle	// rect of the waveform display
+	}
+
+	/* renderer related state */
 	renderstate struct {
 		img *image.RGBA
 		waveform *image.RGBA
 		changed changeMask
-	}
-	rect struct {
-		r image.Rectangle		// the whole widget's rect
-		wave image.Rectangle	// rect of the waveform display
 	}
 	mouse struct {
 		pos image.Point
@@ -57,7 +63,6 @@ type WaveWidget struct {
 	}
 	cursorX int
 	refresh chan image.Rectangle
-	iolisten <-chan *Chunk
 }
 
 func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
@@ -212,8 +217,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 
 	f0, fN := ww.VisibleFrameRange()
 	for _, note := range(ww.score.notes) {
-		beatf, _ := note.Offset.Float64()
-		frame, _ := ww.score.ToFrame(beatf)
+		frame, _ := ww.score.ToFrame(note.Beatf())
 		if frame < f0 || frame > fN {
 			continue
 		}
@@ -289,20 +293,26 @@ func (ww *WaveWidget) noteAtPixel(pos image.Point) *noteProspect {
 
 func (ww *WaveWidget) getMouseState(pos image.Point) *mouseState {
 	state := ww.mouse.state
-	mouse := ww.mouse.pos
-	if state != nil && pos.Eq(mouse) {
-		// XXX what if some other part of the model has changed?
+	cachedPos := ww.mouse.pos
+	if state != nil && pos.Eq(cachedPos) {
 		return state
 	}
-	state = new(mouseState)
+	state = ww.calcMouseState(pos)
+	ww.mouse.state = state
+	ww.mouse.pos = pos
 
-	dragFn, cursor := ww.dragState(mouse)
+	return state
+}
+
+func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
+	state := new(mouseState)
+
+	dragFn, cursor := ww.dragState(pos)
 	state.dragFn = dragFn
 	state.cursor = cursor
 
-	state.note = ww.noteAtPixel(mouse)
+	state.note = ww.noteAtPixel(pos)
 
-	ww.mouse.state = state
 	return state
 }
 
@@ -335,6 +345,9 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
+}
+
+func (ww *WaveWidget) RightClick(mouse image.Point) {
 	s := ww.getMouseState(mouse)
 	if s.note == nil || ww.score == nil {
 		return
@@ -554,9 +567,8 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf
 
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
 	for _, note := range(ww.score.notes) {
-		beatf, _ := note.Offset.Float64()
 		delta, accidental := ww.score.LineForPitch(note.Pitch)
-		ww.drawNote(dst, r, mid, beatf, delta, accidental, false)
+		ww.drawNote(dst, r, mid, note.Beatf(), delta, accidental, false)
 	}
 }
 
@@ -591,7 +603,8 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid
 	if s.note == nil {
 		return
 	}
-	ww.drawNote(dst, r, mid, s.note.beatf, s.note.delta, nil, true)
+	n := ww.mkNote(s.note)
+	ww.drawNote(dst, r, mid, n.Beatf(), s.note.delta, nil, true)
 }
 
 func snapto(x, origin, step int) int {

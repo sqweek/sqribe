@@ -49,9 +49,9 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 	for ei := range events {
 		switch e := ei.(type) {
 		case wde.MouseDownEvent:
+			dragged = false
 			switch (e.Which) {
 			case wde.LeftButton:
-				dragged = false
 				if e.Where.In(G.ww.Rect()) {
 					drag, _ = G.ww.CursorIconAtPixel(e.Where)
 				}
@@ -66,12 +66,16 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 						drag(e.Where, true)
 					}
 				}
+			case wde.RightButton:
+				if e.Where.In(G.ww.Rect()) && !dragged {
+					G.ww.RightClick(e.Where)
+				}
 			}
 		case wde.MouseDraggedEvent:
+			dragged = true
 			switch (e.Which) {
 			case wde.LeftButton:
 				if drag != nil {
-					dragged = true
 					drag(e.Where, false)
 				}
 			}
@@ -201,10 +205,8 @@ func playToggle() {
 
 	midi := make(map[FrameN]*MidiEv)
 	for _, note := range(G.score.notes) {
-		beatf, _ := note.Offset.Float64()
-		durf, _ := note.Duration.Float64()
-		start, _ := G.score.ToFrame(beatf)
-		end, _ := G.score.ToFrame(beatf + durf)
+		start, _ := G.score.ToFrame(note.Beatf())
+		end, _ := G.score.ToFrame(note.Beatf() + note.Durf())
 		if end <= f0 || start >= fN {
 			continue
 		}
