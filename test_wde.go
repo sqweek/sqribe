@@ -38,6 +38,9 @@ var G struct {
 		midi bool
 		waveBias float64
 	}
+	font struct {
+		luxi *Font
+	}
 }
 
 var wg sync.WaitGroup
@@ -306,7 +309,7 @@ func drawstatus(dst draw.Image, r image.Rectangle) {
 	secs := G.ww.TimeAtCursor(dx)
 	beat, _ := G.score.ToBeat(G.wav.FrameAtTime(secs))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	RenderString(dst, color.Black, r, fmt.Sprintf("%s %s  %f", wstr, secs, beat))
+	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s %s  %f", wstr, secs, beat))
 }
 
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
@@ -370,6 +373,14 @@ func open(filename string, fmt sound.AudioInfo) error {
 
 var audioFile = flag.String("audio", "/d/music/Birds of Tokyo/Circles.mp3", "audio file")
 
+func mustMkFont(filename string, size int) *Font {
+	font, err := NewFont(filename, size)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return font
+}
+
 func main() {
 	//sdl.Init(sdl.INIT_EVERYTHING)
 	sound.Init()
@@ -394,10 +405,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = FontInit()
-	if err != nil {
-		log.Fatal(err)
-	}
+	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
 
 	synth, err := SynthInit(int(sampleRate), "/d/synth/FluidR3_GM.sf2")
 	if err != nil {

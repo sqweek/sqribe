@@ -638,6 +638,7 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	} else {
 		minPerMaj = int(pixPerSecond / targetPixPerTick) - 1
 	}
+	lastTextX := r.Min.X - 30
 	for t := math.Trunc(minT); t <= maxT; t += dTmaj {
 		for i := 1; i <= minPerMaj; i++ {
 			tm := t + float64(i) * (dTmaj / float64(minPerMaj + 1))
@@ -649,6 +650,12 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 		if t >= minT && t <= maxT {
 			x := r.Min.X + int(0.5 + (t - minT) * pixPerSecond)
 			draw.Draw(dst, image.Rect(x, r.Min.Y, x+1, r.Min.Y + 7), &image.Uniform{fg}, image.ZP, draw.Over)
+			if (x > lastTextX + 50) {
+				lastTextX = x
+				dur := time.Duration(t) * time.Second
+				str := fmt.Sprintf("%02d:%02d", int(dur.Minutes()), int(dur.Seconds()) % 60)
+				G.font.luxi.DrawC(dst, fg, r, str, image.Point{x, r.Min.Y + 14})
+			}
 		}
 	}
 }

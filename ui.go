@@ -80,7 +80,7 @@ func (bw *BpmWidget) Draw(dst draw.Image, r image.Rectangle) {
 	bw.area = r
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	RenderString(dst, color.Black, r, fmt.Sprintf("%f", bw.bpm))
+	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%f", bw.bpm))
 }
 
 func (bw *BpmWidget) Hit() float64 {
