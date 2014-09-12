@@ -31,6 +31,10 @@ type mouseState struct {
 	note *noteProspect
 }
 
+type FrameRange struct {
+	min, max FrameN
+}
+
 type WaveWidget struct {
 	/* data related state */
 	wav *Waveform
@@ -40,10 +44,7 @@ type WaveWidget struct {
 	/* view related state */
 	first_frame FrameN
 	frames_per_pixel int
-	selection struct {
-		min FrameN
-		max FrameN
-	}
+	selection *FrameRange
 	rect struct {
 		r image.Rectangle		// the whole widget's rect
 		wave image.Rectangle	// rect of the waveform display
@@ -68,6 +69,7 @@ func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
 	ww.rect.r = image.Rect(0,0,0,0)
+	ww.selection = &FrameRange{0, 0}
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -79,24 +81,22 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 }
 
 func (ww *WaveWidget) SelectAudio(start, end FrameN) {
-	if ww.wav == nil {
-		return
-	}
-	ww.selection.min = start
-	ww.selection.max = end
-	ww.renderstate.changed |= WAV // XXX doesn't really need to redraw waveform
+	sel := FrameRange{start, end}
+	ww.selection = &sel
+
+	G.plumb.selection.C <- sel
+	// XXX could avoid redrawing waveform if selection rendered differently
+	ww.renderstate.changed |= WAV
 	ww.refresh <- ww.rect.r
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
-	if ww.wav == nil || ww.score == nil {
-		return
+	score := ww.score
+	if score == nil {
+		ww.SelectAudio(start, end)
+	} else {
+		ww.SelectAudio(score.NearestBeat(start), score.NearestBeat(end))
 	}
-	ww.selection.min = ww.score.NearestBeat(start)
-	ww.selection.max = ww.score.NearestBeat(end)
-	// XXX could avoid redrawing waveform if selection rendered differently
-	ww.renderstate.changed |= WAV
-	ww.refresh <- ww.rect.r
 }
 
 func (ww *WaveWidget) GetSelectedFrameRange() (FrameN, FrameN) {

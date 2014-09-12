@@ -21,11 +21,15 @@ var G struct {
 	wav *Waveform
 	synth *fluidsynth.Synth
 
+	/* plumbing */
+	plumb struct {
+		selection *PlumbPort
+	}
+
 	/* ui stuff */
 	ww *WaveWidget
 	mouse struct {
 		pt image.Point
-		cursor CursorCtl
 	}
 	mixer struct {
 		metronome bool
@@ -235,6 +239,8 @@ func main() {
 	G.mixer.audio = true
 	G.mixer.midi = true
 
+	G.plumb.selection = MkPort()
+
 	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)
 
@@ -256,13 +262,12 @@ func main() {
 
 	redraw := make(chan image.Rectangle, 10)
 
-	cursorCtl, wg := InitWde(redraw)
-	G.mouse.cursor = cursorCtl
-
 	G.ww = NewWaveWidget(redraw)
 	G.ww.SetWaveform(G.wav)
 	G.score.Init()
 	G.ww.SetScore(&G.score)
+
+	wg := InitWde(redraw)
 
 	redraw <- image.Rect(0,0,0,0)
 
