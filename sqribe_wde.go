@@ -17,6 +17,10 @@ import (
 var cursorCtl CursorCtl
 
 func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool, wg *sync.WaitGroup) {
+	defer func() {
+		done <- true
+		wg.Done()
+	}()
 	var drag DragFn = nil
 	var dragged bool = false
 	var refreshTimer *time.Timer
@@ -103,6 +107,10 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				G.mixer.audio = !G.mixer.audio
 			case wde.KeyM:
 				G.mixer.midi = !G.mixer.midi
+			case wde.KeyQ:
+				c := make(chan bool)
+				G.quantize.apply <- c
+				<-c
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {
@@ -110,66 +118,92 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			}
 			refreshTimer = time.AfterFunc(50*time.Millisecond, func() {redraw <- image.Rect(0, 0, 0, 0)})
 		case wde.CloseEvent:
-			done <- true
-			wg.Done()
 			return
 		}
 	}
 }
 
 type QuantizeBeats struct {
-	nb int
-	nf, error FrameN
+	b0, bN int
+	f0, fN FrameN
+	df float64
+	error *FrameN
 }
-
-var quantize *QuantizeBeats
 
 func intBeat(score *Score, f FrameN) int {
 	b, _ := score.ToBeat(f)
 	return int(b)
 }
 
-func quantizeCalc() {
-	c := make(chan interface{})
-	G.plumb.selection.Sub <- c
-	for ev := range(c) {
-		switch e := ev.(type) {
-		case FrameRange:
-			f0, fN := G.score.NearestBeat(e.min), G.score.NearestBeat(e.max)
-			b0, bN := intBeat(&G.score, f0), intBeat(&G.score, fN)
-			q := QuantizeBeats{nb: bN - b0, nf: fN - f0}
-			df := float64(q.nf) / float64(q.nb)
-			for i := 0; i < q.nb; i++ {
-				qf := f0 + FrameN(float64(i) * df)
-				af, _ := G.score.ToFrame(float64(b0 + i))
-				ef := FrameN(int64(math.Abs(float64(qf - af))))
-				if ef > q.error {
-					q.error = ef
+func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan QuantizeBeats, redraw chan image.Rectangle) {
+	var q QuantizeBeats
+	for {
+		select {
+		case ev := <-selxn:
+			switch e := ev.(type) {
+			case FrameRange:
+				q.f0, q.fN = G.score.NearestBeat(e.min), G.score.NearestBeat(e.max)
+				q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
+				q.df = float64(q.fN - q.f0) / float64(q.bN - q.b0)
+				q.error = nil
+			}
+		case reply := <-apply:
+			fmt.Println("quantize apply:", q)
+			for ib := q.b0 + 1; ib <= q.bN - 1; ib++ {
+				fmt.Println("FROM", G.score.beats[ib])
+				G.score.beats[ib] = q.f0 + FrameN(float64(ib - q.b0) * q.df)
+				fmt.Println("  TO", G.score.beats[ib])
+			}
+			redraw <- image.Rect(0, 0, 0, 0)
+			reply <- true
+		case reply := <-calc:
+			if q.error == nil {
+				q.error = new(FrameN)
+				for ib := q.b0; ib <= q.bN; ib++ {
+					qf := q.f0 + FrameN(float64(ib - q.b0) * q.df)
+					af, _ := G.score.ToFrame(float64(ib))
+					ef := FrameN(int64(math.Abs(float64(qf - af))))
+					if ef > *q.error {
+						*q.error = ef
+					}
 				}
 			}
-			quantize = &q
+			reply <- q
 		}
 	}
 }
 
+/* rounds sub-second duration to nearest ms/μs/ns */
+func niceDur(dur time.Duration) string {
+	if dur >= time.Second {
+		return dur.String()
+	}
+	switch {
+	case dur >= time.Millisecond:
+		return fmt.Sprintf("%dms", int(dur / time.Millisecond))
+	case dur >= time.Microsecond:
+		return fmt.Sprintf("%dµs", int(dur / time.Microsecond))
+	default:
+		return fmt.Sprintf("%dns", int(dur))
+	}
+}
+
 func quantizeStr() string {
-	q := quantize
-	if q == nil {
+	c := make(chan QuantizeBeats)
+	G.quantize.calc <- c
+	q := <-c
+	if q.b0 == 0 && q.bN == 0 {
 		return ""
 	}
-	bpm := 60.0 * float64(time.Second) / (float64(G.wav.TimeAtFrame(q.nf)) / float64(q.nb))
-	errd := G.wav.TimeAtFrame(q.error)
-	return fmt.Sprintf("%.1fbpm ±%v", bpm, errd)
+	bpm := 60.0 * float64(time.Second) / (float64(G.wav.TimeAtFrame(q.fN - q.f0 + 1)) / float64(q.bN - q.b0))
+	errd := G.wav.TimeAtFrame(*q.error)
+	return fmt.Sprintf("%.1fbpm ±%v", bpm, niceDur(errd))
 }
 
 func drawstatus(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
-	wstr := G.ww.Status()
-	dx := G.mouse.pt.X - dst.Bounds().Min.X
-	secs := G.ww.TimeAtCursor(dx)
-	beat, _ := G.score.ToBeat(G.wav.FrameAtTime(secs))
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s %s  %f  %s", wstr, secs, beat, quantizeStr()))
+	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s  %s", G.ww.Status(), quantizeStr()))
 }
 
 func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
@@ -215,12 +249,12 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 }
 
 func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
-	dw, err := wde.NewWindow(400, 400)
+	dw, err := wde.NewWindow(600, 400)
 	if err != nil {
 		log.Fatal(err)
 	}
 	dw.SetTitle("Sqribe")
-	dw.SetSize(400, 400)
+	dw.SetSize(600, 400)
 	dw.Show()
 
 	wg := sync.WaitGroup{}
@@ -228,7 +262,11 @@ func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
 
 	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
-	go quantizeCalc()
+
+	selxn := make(chan interface{})
+	G.plumb.selection.Sub <- selxn
+	go quantizer(selxn, G.quantize.apply, G.quantize.calc, redraw)
+
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)
 

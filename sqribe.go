@@ -21,6 +21,11 @@ var G struct {
 	wav *Waveform
 	synth *fluidsynth.Synth
 
+	quantize struct {
+		apply chan chan bool
+		calc chan chan QuantizeBeats
+	}
+
 	/* plumbing */
 	plumb struct {
 		selection *PlumbPort
@@ -238,6 +243,9 @@ func main() {
 	G.mixer.metronome = true
 	G.mixer.audio = true
 	G.mixer.midi = true
+
+	G.quantize.apply = make(chan chan bool)
+	G.quantize.calc = make(chan chan QuantizeBeats)
 
 	G.plumb.selection = MkPort()
 
