@@ -69,15 +69,23 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	csel := color.RGBA{0xdd, 0xdd, 0xdd, 255}
 	f0 := ww.first_frame
 	fpp := FrameN(ww.frames_per_pixel)
+	f0_get, dx0 := f0, 0
+	if f0 < 0 {
+		f0_get = 0
+		dx0 = 1 + int(-f0 / fpp)
+	}
+	size := r.Size()
+	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
+	if dx0 >= size.X {
+		return
+	}
 	sel0, selN := ww.GetSelectedFrameRange()
 	selR := image.Rect(int((sel0 - f0)/fpp), r.Min.Y, int((selN - f0)/fpp), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
-	size := r.Size()
 	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))
-	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
-	chunks := ww.wav.GetFrames(f0, f0 + FrameN(size.X) * fpp)
-	for dx := 0; dx < size.X; dx++ {
+	chunks := ww.wav.GetFrames(f0_get, f0 + FrameN(size.X) * fpp)
+	for dx := dx0; dx < size.X; dx++ {
 		pixS0, pixSN := ww.wav.SampleRange(f0 + fpp * FrameN(dx), f0 + fpp * FrameN(dx+1))
 		pixSamples := Extract(chunks, pixS0, pixSN)
 		ext := ww.wav.ChannelExtents(pixSamples)

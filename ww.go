@@ -377,14 +377,18 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 }
 
 func (ww *WaveWidget) Zoom(factor float64) float64 {
-	/* TODO preserve mouse position */
-	original := float64(ww.frames_per_pixel)
-	ww.frames_per_pixel = int(original * factor)
-	if ww.frames_per_pixel < 1 {
-		ww.frames_per_pixel = 1
+	/* XXX should probably only account for cursor when mouse is over widget */
+	x := ww.mouse.pos.X
+	frameAtMouse := ww.FrameAtPixel(x)
+	fpp := int(float64(ww.frames_per_pixel) * factor)
+	if fpp < 1 {
+		fpp = 1
 	}
-	delta := float64(ww.frames_per_pixel) / original
+	delta := float64(fpp) / float64(ww.frames_per_pixel)
 	if delta != 1.0 {
+		dx := x - ww.rect.r.Min.X
+		ww.first_frame = frameAtMouse - FrameN(dx * fpp)
+		ww.frames_per_pixel = fpp
 		ww.renderstate.changed |= WAV | CURSOR
 		ww.mouse.state = nil
 		ww.refresh <- ww.rect.r
