@@ -169,15 +169,38 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return ww.rect.r.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-func (ww *WaveWidget) dragFn(min, max FrameN, ptr *FrameN, cm changeMask) DragFn {
+/* XXX taking a pointer is hacky */
+func (ww *WaveWidget) dragBeat(min, max FrameN, ptr *FrameN) DragFn {
+	var updateSelection func(FrameN) = nil
+	if ww.selection.min != ww.selection.max {
+		if *ptr == ww.selection.min {
+			updateSelection = func(f FrameN) {
+				if f < ww.selection.max {
+					ww.SelectAudio(f, ww.selection.max)
+				}
+			}
+		} else if *ptr == ww.selection.max {
+			updateSelection = func(f FrameN) {
+				if f > ww.selection.min {
+					ww.SelectAudio(ww.selection.min, f)
+				}
+			}
+		}
+	}
 	return func(pos image.Point, finished bool) bool {
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max {
 			return false
 		}
-		*ptr = f
-		ww.renderstate.changed |= cm
-		ww.refresh <- ww.rect.r
+		orig := *ptr
+		if f != orig {
+			*ptr = f
+			if updateSelection != nil {
+				updateSelection(f)
+			}
+			ww.renderstate.changed |= SCALE
+			ww.refresh <- ww.rect.r
+		}
 		return true
 	}
 }
@@ -243,14 +266,6 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		}
 	}
 
-	snap := (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
-	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
-		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
-	}
-	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
-		return ww.selectDrag(ww.selection.min, snap), ResizeRCursor
-	}
-
 	// TODO ignore beat grabs when sufficiently zoomed out
 	for i, beat := range(ww.score.beats) {
 		min, max := FrameN(0), nframes
@@ -267,8 +282,16 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			if i + 1 < len(ww.score.beats) {
 				max = ww.score.beats[i + 1]
 			}
-			return ww.dragFn(min, max, &ww.score.beats[i], SCALE), ResizeHCursor
+			return ww.dragBeat(min, max, &ww.score.beats[i]), ResizeHCursor
 		}
+	}
+
+	snap := (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
+	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
+		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
+	}
+	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
+		return ww.selectDrag(ww.selection.min, snap), ResizeRCursor
 	}
 
 	/* if we're not dragging anything in particular, drag to select */
