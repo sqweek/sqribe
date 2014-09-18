@@ -48,7 +48,7 @@ func (score *Score) ToFrame(beat float64) (FrameN, bool) {
 	if (α < 1e-6 && i + 1 == len(score.beats)) {
 		return score.beats[i], true
 	}
-	if i + 1 < len(score.beats) {
+	if i >= 0 && i + 1 < len(score.beats) {
 		return FrameN((1 - α) * float64(score.beats[i]) + α * float64(score.beats[i+1])), true
 	}
 	return -1, false

@@ -261,7 +261,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			break
 		}
 		x := ww.PixelAtFrame(beat)
-		y0 := ww.rect.r.Min.Y
+		y0 := ww.rect.wave.Min.Y
 		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 		if mouse.In(padRect(r, 2, 0)) {
 			if i + 1 < len(ww.score.beats) {
