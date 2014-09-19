@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image/color"
 	"image"
 	"math/big"
 	"time"
@@ -360,7 +359,6 @@ func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
 	beati, offset := ww.score.Quantize(prospect.beatf)
 	b := big.NewRat(int64(beati), 1)
-	offset.Mul(big.NewRat(ww.score.beatLen.Denom().Int64(), 1), offset)
 	b.Add(b, offset)
 	return &Note{ww.score.PitchForLine(prospect.delta), ww.score.beatLen, b}
 }
@@ -417,32 +415,6 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 		ww.refresh <- ww.rect.r
 	}
 	return delta
-}
-
-func colourFor(offset *big.Rat) color.RGBA {
-	α := uint8(0xff)
-	switch (offset.RatString()) {
-	case "1": fallthrough
-	case "0": fallthrough
-	case "1/8": return color.RGBA{0xff, 0x00, 0x00, α}
-
-	case "1/16": fallthrough
-	case "3/16": return color.RGBA{0x00, 0x00, 0xff, α}
-
-	case "1/32": fallthrough
-	case "3/32": fallthrough
-	case "5/32": fallthrough
-	case "7/32": return color.RGBA{0xff, 0xff, 0x00, α}
-
-	// this is a bit too close to the blue right next door
-	case "1/24": fallthrough
-	case "3/24": fallthrough
-	case "5/24": return color.RGBA{0x88, 0x00, 0x88, α}
-
-	case "1/12": fallthrough
-	case "1/6": return color.RGBA{0xff, 0x00, 0xff, α}
-	}
-	return color.RGBA{0x00, 0x00, 0x00, α}
 }
 
 func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {

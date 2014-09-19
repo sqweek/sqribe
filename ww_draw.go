@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"math/big"
 	"time"
 )
 
@@ -49,6 +50,32 @@ func slog(s int16) float64 {
 	} else {
 		return math.Log(float64(s))
 	}
+}
+
+func colourFor(offset *big.Rat) color.RGBA {
+	α := uint8(0xff)
+	switch (offset.RatString()) {
+	case "1": fallthrough
+	case "0": fallthrough
+	case "1/2": return color.RGBA{0xff, 0x00, 0x00, α}
+
+	case "1/4": fallthrough
+	case "3/4": return color.RGBA{0x00, 0x00, 0xff, α}
+
+	case "1/8": fallthrough
+	case "3/8": fallthrough
+	case "5/8": fallthrough
+	case "7/8": return color.RGBA{0xff, 0xff, 0x00, α}
+
+	// this is a bit too close to the blue right next door
+	case "1/6": fallthrough
+	case "3/6": fallthrough
+	case "5/6": return color.RGBA{0x88, 0x00, 0x88, α}
+
+	case "1/3": fallthrough
+	case "4/6": return color.RGBA{0xff, 0x00, 0xff, α}
+	}
+	return color.RGBA{0x00, 0x00, 0x00, α}
 }
 
 func scale(chMin, chMax int16, yscale float64) (int, int) {

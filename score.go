@@ -152,7 +152,6 @@ func (score *Score) Quantize(beat float64) (int, *big.Rat) {
 		beati++
 		best = big.NewRat(0, 1)
 	}
-	best.Mul(best, score.beatLen)
 	return beati, best
 }
 
