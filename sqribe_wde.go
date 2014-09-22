@@ -140,19 +140,21 @@ func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan Quan
 	for {
 		select {
 		case ev := <-selxn:
+			if len(G.score.beats) > 0 {
 			switch e := ev.(type) {
-			case FrameRange:
-				q.f0, q.fN = G.score.NearestBeat(e.min), G.score.NearestBeat(e.max)
-				q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
-				q.df = float64(q.fN - q.f0) / float64(q.bN - q.b0)
-				q.error = nil
+				case FrameRange:
+					q.f0, q.fN = G.score.NearestBeat(e.min).frame, G.score.NearestBeat(e.max).frame
+					q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
+					q.df = float64(q.fN - q.f0) / float64(q.bN - q.b0)
+					q.error = nil
+				}
 			}
 		case reply := <-apply:
 			fmt.Println("quantize apply:", q)
 			for ib := q.b0 + 1; ib <= q.bN - 1; ib++ {
-				fmt.Println("FROM", G.score.beats[ib])
-				G.score.beats[ib] = q.f0 + FrameN(float64(ib - q.b0) * q.df)
-				fmt.Println("  TO", G.score.beats[ib])
+				fmt.Println("FROM", G.score.beats[ib].frame)
+				G.score.beats[ib].frame = q.f0 + FrameN(float64(ib - q.b0) * q.df)
+				fmt.Println("  TO", G.score.beats[ib].frame)
 			}
 			redraw <- image.Rect(0, 0, 0, 0)
 			reply <- true

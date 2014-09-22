@@ -94,7 +94,7 @@ func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	if score == nil {
 		ww.SelectAudio(start, end)
 	} else {
-		ww.SelectAudio(score.NearestBeat(start), score.NearestBeat(end))
+		ww.SelectAudio(score.NearestBeat(start).frame, score.NearestBeat(end).frame)
 	}
 }
 
@@ -168,17 +168,16 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return ww.rect.r.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-/* XXX taking a pointer is hacky */
-func (ww *WaveWidget) dragBeat(min, max FrameN, ptr *FrameN) DragFn {
+func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
 	var updateSelection func(FrameN) = nil
 	if ww.selection.min != ww.selection.max {
-		if *ptr == ww.selection.min {
+		if beat.frame == ww.selection.min {
 			updateSelection = func(f FrameN) {
 				if f < ww.selection.max {
 					ww.SelectAudio(f, ww.selection.max)
 				}
 			}
-		} else if *ptr == ww.selection.max {
+		} else if beat.frame == ww.selection.max {
 			updateSelection = func(f FrameN) {
 				if f > ww.selection.min {
 					ww.SelectAudio(ww.selection.min, f)
@@ -191,9 +190,9 @@ func (ww *WaveWidget) dragBeat(min, max FrameN, ptr *FrameN) DragFn {
 		if f <= min || f >= max {
 			return false
 		}
-		orig := *ptr
+		orig := beat.frame
 		if f != orig {
-			*ptr = f
+			beat.frame = f
 			if updateSelection != nil {
 				updateSelection(f)
 			}
@@ -237,7 +236,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 
 	f0, fN := ww.VisibleFrameRange()
 	for _, note := range(ww.score.notes) {
-		frame, _ := ww.score.ToFrame(note.Beatf())
+		frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
 		if frame < f0 || frame > fN {
 			continue
 		}
@@ -268,20 +267,20 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	// TODO ignore beat grabs when sufficiently zoomed out
 	for i, beat := range(ww.score.beats) {
 		min, max := FrameN(0), nframes
-		if beat < f0 {
+		if beat.frame < f0 {
 			min = 0
 			continue
-		} else if beat > fN {
+		} else if beat.frame > fN {
 			break
 		}
-		x := ww.PixelAtFrame(beat)
+		x := ww.PixelAtFrame(beat.frame)
 		y0 := ww.rect.wave.Min.Y
 		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 		if mouse.In(padRect(r, 2, 0)) {
 			if i + 1 < len(ww.score.beats) {
-				max = ww.score.beats[i + 1]
+				max = ww.score.beats[i + 1].frame
 			}
-			return ww.dragBeat(min, max, &ww.score.beats[i]), ResizeHCursor
+			return ww.dragBeat(min, max, beat), ResizeHCursor
 		}
 	}
 
@@ -357,10 +356,8 @@ func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 }
 
 func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
-	beati, offset := ww.score.Quantize(prospect.beatf)
-	b := big.NewRat(int64(beati), 1)
-	b.Add(b, offset)
-	return &Note{ww.score.PitchForLine(prospect.delta), ww.score.beatLen, b}
+	beat, offset := ww.score.Quantize(prospect.beatf)
+	return &Note{ww.score.PitchForLine(prospect.delta), ww.score.beatLen, beat, offset}
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
@@ -435,7 +432,9 @@ func (ww *WaveWidget) Status() string {
 	if s.note != nil {
 		beatf := s.note.beatf
 		delta = s.note.delta
-		beati, offset = ww.score.Quantize(beatf)
+		beat, o := ww.score.Quantize(beatf)
+		beati = beat.index
+		offset = o
 		pitch = ww.score.PitchForLine(delta)
 		delta2, _ = ww.score.LineForPitch(pitch)
 	}

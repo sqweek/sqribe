@@ -109,8 +109,8 @@ func playToggle() {
 
 	midi := make(map[FrameN]*MidiEv)
 	for _, note := range(G.score.notes) {
-		start, _ := G.score.ToFrame(note.Beatf())
-		end, _ := G.score.ToFrame(note.Beatf() + note.Durf())
+		start, _ := G.score.ToFrame(G.score.Beatf(note))
+		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
 		if end <= f0 || start >= fN {
 			continue
 		}

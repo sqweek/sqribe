@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"sync"
 	"math"
 	"math/big"
 )
@@ -14,9 +15,15 @@ type BeatMap interface {
 }
 
 type Score struct {
+	sync.RWMutex
 	Staff // TODO multiple staves
-	beats []FrameN
+	beats []*BeatRef
 	beatLen *big.Rat
+}
+
+type BeatRef struct {
+	index int
+	frame FrameN
 }
 
 type Staff struct {
@@ -34,6 +41,7 @@ type Measure struct {
 type Note struct {
 	Pitch uint8 /* midi pitch */
 	Duration *big.Rat
+	Beat *BeatRef
 	Offset *big.Rat
 }
 
@@ -43,13 +51,15 @@ func (score *Score) Init() {
 }
 
 func (score *Score) ToFrame(beat float64) (FrameN, bool) {
+	score.RLock()
+	defer score.RUnlock()
 	i := int(beat)
 	α := beat - float64(i)
 	if (α < 1e-6 && i + 1 == len(score.beats)) {
-		return score.beats[i], true
+		return score.beats[i].frame, true
 	}
 	if i >= 0 && i + 1 < len(score.beats) {
-		return FrameN((1 - α) * float64(score.beats[i]) + α * float64(score.beats[i+1])), true
+		return FrameN((1 - α) * float64(score.beats[i].frame) + α * float64(score.beats[i+1].frame)), true
 	}
 	return -1, false
 }
@@ -57,13 +67,13 @@ func (score *Score) ToFrame(beat float64) (FrameN, bool) {
 /* returns insertion index and true if the frame is already present */
 func (score *Score) index(frame FrameN) (int, bool) {
 	/* TODO binary search instead of linear */
-	if len(score.beats) == 0 || frame < score.beats[0] {
+	if len(score.beats) == 0 || frame < score.beats[0].frame {
 		return 0, false
 	}
 	for i := 0; i < len(score.beats); i++ {
-		if frame == score.beats[i] {
+		if frame == score.beats[i].frame {
 			return i, true
-		} else if i + 1 >= len(score.beats) || frame < score.beats[i+1] {
+		} else if i + 1 >= len(score.beats) || frame < score.beats[i+1].frame {
 			return i+1, false
 		}
 	}
@@ -72,7 +82,9 @@ func (score *Score) index(frame FrameN) (int, bool) {
 
 /* returns a fractional beat, and true if it is within the defined beat range */
 func (score *Score) ToBeat(frame FrameN) (float64, bool) {
-	if len(score.beats) == 0 || frame < score.beats[0] || frame > score.beats[len(score.beats)-1] {
+	score.RLock()
+	defer score.RUnlock()
+	if len(score.beats) == 0 || frame < score.beats[0].frame || frame > score.beats[len(score.beats)-1].frame {
 		/* should perhaps extrapolate based on bpm... */
 		return -1, false
 	}
@@ -80,40 +92,77 @@ func (score *Score) ToBeat(frame FrameN) (float64, bool) {
 	if exact {
 		return float64(i), true
 	}
-	α := float64(frame - score.beats[i-1]) / float64(score.beats[i] - score.beats[i-1])
+	α := float64(frame - score.beats[i-1].frame) / float64(score.beats[i].frame - score.beats[i-1].frame)
 	return float64(i-1) + α, true
 }
 
+func (score *Score) BeatFrames() []FrameN {
+	score.RLock()
+	defer score.RUnlock()
+	f := make([]FrameN, 0, len(G.score.beats))
+	for i := 0; i < len(G.score.beats); i++ {
+		f = append(f, G.score.beats[i].frame)
+	}
+	return f
+}
+
+func newBeat(index int, frame FrameN) *BeatRef {
+	beat := new(BeatRef)
+	beat.index = index
+	beat.frame = frame
+	return beat
+}
+
+func (score *Score) BeatIndex(beat *BeatRef) int {
+	score.RLock()
+	defer score.RUnlock()
+	return beat.index
+}
+
+func (score *Score) LoadBeats(f []FrameN) {
+	score.Lock()
+	defer score.Unlock()
+	if len(score.beats) > 0 {
+		score.beats = score.beats[0:0]
+	}
+	for i := 0; i < len(f); i++ {
+		score.beats = append(score.beats, newBeat(i, f[i]))
+	}
+}
+
 func (score *Score) AddBeat(frame FrameN) {
+	score.Lock()
+	defer score.Unlock()
 	if len(score.beats) == 0 {
-		score.beats = append(score.beats, frame)
+		score.beats = append(score.beats, newBeat(0, frame))
 		return
 	}
-	tolerance := FrameN(20000) //XXX should be based on sample rate/bpm
+	tolerance := FrameN(10000) //XXX should be based on sample rate/bpm
 	i, exact := score.index(frame)
 	if exact {
 		return
 	}
-	if i == 0 {
-		score.beats = append(score.beats, 0)
-		copy(score.beats[1:], score.beats[0:])
-		score.beats[0] = frame
-	} else if frame - score.beats[i-1] < tolerance {
-		score.beats[i-1] = (score.beats[i-1] + frame) / 2
+	if i > 0 && frame - score.beats[i-1].frame < tolerance {
+		score.beats[i-1].frame = (score.beats[i-1].frame + frame) / 2
 	} else if i == len(score.beats) {
-		score.beats = append(score.beats, frame)
-	} else if score.beats[i] - frame < tolerance {
-		score.beats[i] = (score.beats[i] + frame) / 2
+		score.beats = append(score.beats, newBeat(len(score.beats), frame))
+	} else if score.beats[i].frame - frame < tolerance {
+		score.beats[i].frame = (score.beats[i].frame + frame) / 2
 	} else {
-		score.beats = append(score.beats, 0)
+		score.beats = append(score.beats, nil)
 		copy(score.beats[i+1:], score.beats[i:])
-		score.beats[i] = frame
+		score.beats[i] = newBeat(i, frame)
+		for j := i+1; j < len(score.beats); j++ {
+			score.beats[j].index = j
+		}
 	}
 }
 
-func (score *Score) NearestBeat(frame FrameN) FrameN {
+func (score *Score) NearestBeat(frame FrameN) *BeatRef {
+	score.RLock()
+	defer score.RUnlock()
 	if len(score.beats) == 0 {
-		return 0
+		return nil
 	}
 	i, exact := score.index(frame)
 	if exact || i == 0 {
@@ -122,14 +171,14 @@ func (score *Score) NearestBeat(frame FrameN) FrameN {
 	if i == len(score.beats) {
 		return score.beats[len(score.beats) - 1]
 	}
-	if frame - score.beats[i-1] < score.beats[i] - frame {
+	if frame - score.beats[i-1].frame < score.beats[i].frame - frame {
 		return score.beats[i - 1]
 	} else {
 		return score.beats[i]
 	}
 }
 
-func (score *Score) Quantize(beat float64) (int, *big.Rat) {
+func (score *Score) Quantize(beat float64) (*BeatRef, *big.Rat) {
 	beati := int(beat)
 	frac := beat - float64(beati)
 	best := big.NewRat(0, 1)
@@ -152,11 +201,40 @@ func (score *Score) Quantize(beat float64) (int, *big.Rat) {
 		beati++
 		best = big.NewRat(0, 1)
 	}
-	return beati, best
+	return score.beats[beati], best
 }
 
-func (note *Note) Beatf() float64 {
-	f, _ := note.Offset.Float64()
+func (score *Score) SavedNotes() []SavedNote {
+	out := make([]SavedNote, 0, len(score.notes))
+	score.RLock()
+	defer score.RUnlock()
+	for _, note := range score.notes {
+		b := big.NewRat(int64(note.Beat.index), 1)
+		b.Add(b, note.Offset)
+		out = append(out, SavedNote{note.Pitch, note.Duration, b})
+	}
+	return out
+}
+
+func (score *Score) LoadNotes(in []SavedNote) {
+	if len(score.notes) > 0 {
+		score.notes = score.notes[0:0]
+	}
+	for _, saved := range in {
+		beatf, _ := saved.Offset.Float64()
+		beati := int(beatf)
+		saved.Offset.Sub(saved.Offset, big.NewRat(int64(beati), 1))
+		note := &Note{saved.Pitch, saved.Duration, score.beats[beati], saved.Offset}
+		score.notes = append(score.notes, note)
+	}
+}
+
+func (score *Score) Beatf(note *Note) float64 {
+	score.RLock()
+	defer score.RUnlock()
+	b := big.NewRat(int64(note.Beat.index), 1)
+	b.Add(b, note.Offset)
+	f, _ := b.Float64()
 	return f
 }
 
@@ -172,9 +250,13 @@ func (note *Note) Set(note2 *Note) {
 }
 
 func (note *Note) Cmp(note2 *Note) int {
-	d := note.Offset.Cmp(note2.Offset)
+	// XXX race condition if index changes
+	d := note.Beat.index - note2.Beat.index
 	if d == 0 {
-		return int(note.Pitch - note2.Pitch)
+		d = note.Offset.Cmp(note2.Offset)
+		if d == 0 {
+			return int(note.Pitch - note2.Pitch)
+		}
 	}
 	return d
 }

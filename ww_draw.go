@@ -141,15 +141,15 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	_, lastFrame := ww.VisibleFrameRange()
 	minX, maxX := -1, -1
 	for i, beat := range(ww.score.beats) {
-		if beat < ww.first_frame {
+		if beat.frame < ww.first_frame {
 			minX = r.Min.X
 			continue
 		}
-		if beat > lastFrame {
+		if beat.frame > lastFrame {
 			maxX = r.Max.X
 			break
 		}
-		x := ww.PixelAtFrame(beat)
+		x := ww.PixelAtFrame(beat.frame)
 		if minX == -1 {
 			minX = x
 		}
@@ -219,7 +219,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
 	for _, note := range(ww.score.notes) {
 		delta, accidental := ww.score.LineForPitch(note.Pitch)
-		ww.drawNote(dst, r, mid, note.Beatf(), delta, accidental, false)
+		ww.drawNote(dst, r, mid, ww.score.Beatf(note), delta, accidental, false)
 	}
 }
 
@@ -229,7 +229,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid
 		return
 	}
 	n := ww.mkNote(s.note)
-	ww.drawNote(dst, r, mid, n.Beatf(), s.note.delta, nil, true)
+	ww.drawNote(dst, r, mid, ww.score.Beatf(n), s.note.delta, nil, true)
 }
 
 func snapto(x, origin, step int) int {
@@ -310,8 +310,8 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	label := func(beatf float64) string {
 		return fmt.Sprintf("b%d", int(beatf) + 1)
 	}
-	b0, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Min.X)))
-	bN, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Max.X)))
+	b0, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Min.X)).frame)
+	bN, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Max.X)).frame)
 	ww.drawTicks(dst, r, true, b0, bN, 1.0, beatToX, label)
 }
 
