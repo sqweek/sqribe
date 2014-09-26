@@ -16,7 +16,7 @@ type BeatMap interface {
 
 type Score struct {
 	sync.RWMutex
-	Staff // TODO multiple staves
+	staves []*Staff
 	beats []*BeatRef
 	beatLen *big.Rat
 }
@@ -28,6 +28,7 @@ type BeatRef struct {
 
 type Staff struct {
 	name string
+	voice int
 	origin uint8	// unaltered pitch of center note (ie. clef)
 	nsharps int	// key signature (-ve for flats)
 	notes []*Note
@@ -45,9 +46,18 @@ type Note struct {
 	Offset *big.Rat
 }
 
+func NewTrebleStaff() *Staff {
+	return &Staff{name: "Treble", origin: 59}
+}
+
+func NewBassStaff() *Staff {
+	return &Staff{name: "Bass", origin: 41}
+}
+
 func (score *Score) Init() {
+	score.staves = append(score.staves, NewTrebleStaff())
+	score.staves = append(score.staves, NewBassStaff())
 	score.beatLen = big.NewRat(1, 4)
-	score.origin = 59
 }
 
 func (score *Score) ToFrame(beat float64) (FrameN, bool) {
@@ -204,11 +214,19 @@ func (score *Score) Quantize(beat float64) (*BeatRef, *big.Rat) {
 	return score.beats[beati], best
 }
 
-func (score *Score) SavedNotes() []SavedNote {
-	out := make([]SavedNote, 0, len(score.notes))
+func (score *Score) SavedStaves() []SavedStaff {
 	score.RLock()
 	defer score.RUnlock()
-	for _, note := range score.notes {
+	saved := make([]SavedStaff, 0, len(score.staves))
+	for _, staff := range score.staves {
+		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.origin, staff.nsharps, staff.SavedNotes()})
+	}
+	return saved
+}
+
+func (staff *Staff) SavedNotes() []SavedNote {
+	out := make([]SavedNote, 0, len(staff.notes))
+	for _, note := range staff.notes {
 		b := big.NewRat(int64(note.Beat.index), 1)
 		b.Add(b, note.Offset)
 		out = append(out, SavedNote{note.Pitch, note.Duration, b})
@@ -216,16 +234,25 @@ func (score *Score) SavedNotes() []SavedNote {
 	return out
 }
 
-func (score *Score) LoadNotes(in []SavedNote) {
-	if len(score.notes) > 0 {
-		score.notes = score.notes[0:0]
+func (score *Score) LoadStaves(in []SavedStaff) {
+	score.staves = score.staves[0:0]
+	for _, saved := range in {
+		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, nil}
+		staff.LoadNotes(score, saved.Notes)
+		score.staves = append(score.staves, staff)
+	}
+}
+
+func (staff *Staff) LoadNotes(score *Score, in []SavedNote) {
+	if len(staff.notes) > 0 {
+		staff.notes = staff.notes[0:0]
 	}
 	for _, saved := range in {
 		beatf, _ := saved.Offset.Float64()
 		beati := int(beatf)
 		saved.Offset.Sub(saved.Offset, big.NewRat(int64(beati), 1))
 		note := &Note{saved.Pitch, saved.Duration, score.beats[beati], saved.Offset}
-		score.notes = append(score.notes, note)
+		staff.notes = append(staff.notes, note)
 	}
 }
 
@@ -261,31 +288,31 @@ func (note *Note) Cmp(note2 *Note) int {
 	return d
 }
 
-func (score *Score) RemoveNote(note *Note) {
-	searchFn := func(i int)bool { return note.Cmp(score.notes[i]) <= 0 }
-	i := sort.Search(len(score.notes), searchFn)
-	if note.Cmp(score.notes[i]) == 0 {
-		copy(score.notes[i:], score.notes[i+1:])
-		score.notes = score.notes[:len(score.notes) - 1]
+func (staff *Staff) RemoveNote(note *Note) {
+	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
+	i := sort.Search(len(staff.notes), searchFn)
+	if note.Cmp(staff.notes[i]) == 0 {
+		copy(staff.notes[i:], staff.notes[i+1:])
+		staff.notes = staff.notes[:len(staff.notes) - 1]
 	}
 }
 
-func (score *Score) AddNote(note *Note) {
-	if len(score.notes) == 0 {
-		score.notes = append(score.notes, note)
+func (staff *Staff) AddNote(note *Note) {
+	if len(staff.notes) == 0 {
+		staff.notes = append(staff.notes, note)
 		return
 	}
-	searchFn := func(i int)bool { return note.Cmp(score.notes[i]) <= 0 }
-	i := sort.Search(len(score.notes), searchFn)
-	if i == len(score.notes) {
-		score.notes = append(score.notes, note)
-	} else if note.Cmp(score.notes[i]) == 0 {
+	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
+	i := sort.Search(len(staff.notes), searchFn)
+	if i == len(staff.notes) {
+		staff.notes = append(staff.notes, note)
+	} else if note.Cmp(staff.notes[i]) == 0 {
 		/* already have a note at this offset with the same pitch, update the duration */
-		score.notes[i].Duration.Set(note.Duration)
+		staff.notes[i].Duration.Set(note.Duration)
 	} else {
-		score.notes = append(score.notes, nil)
-		copy(score.notes[i+1:], score.notes[i:])
-		score.notes[i] = note
+		staff.notes = append(staff.notes, nil)
+		copy(staff.notes[i+1:], staff.notes[i:])
+		staff.notes[i] = note
 	}
 }
 

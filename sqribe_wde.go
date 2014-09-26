@@ -80,9 +80,13 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			case wde.KeyDownArrow:
 				G.ww.Zoom(2.0)
 			case wde.KeyF2:
-				G.score.nsharps--
+				for _, staff := range(G.score.staves) {
+					staff.nsharps--
+				}
 			case wde.KeyF3:
-				G.score.nsharps++
+				for _, staff := range(G.score.staves) {
+					staff.nsharps++
+				}
 			case wde.KeyPrior:
 				G.mixer.waveBias += 0.1
 				if G.mixer.waveBias >= 1.0 {

@@ -62,6 +62,28 @@ func addEv(midi map[FrameN]*MidiEv, frame FrameN, ev MidiEv) {
 	}
 }
 
+func orderNotes(score *Score, notes chan<- *Note) {
+	defer close(notes)
+	n := len(score.staves)
+	idx := make([]int, n)
+	for {
+		best := -1
+		for j := 0; j < n; j++ {
+			staff := score.staves[j]
+			if idx[j] < len(staff.notes) {
+				if best == -1 || staff.notes[idx[j]].Cmp(score.staves[best].notes[idx[best]]) < 0 {
+					best = j
+				}
+			}
+		}
+		if best == -1 {
+			break
+		}
+		notes <- score.staves[best].notes[idx[best]]
+		idx[best]++
+	}
+}
+
 type FrameSlice []FrameN
 
 func (f FrameSlice) Len() int {
@@ -108,7 +130,9 @@ func playToggle() {
 	}
 
 	midi := make(map[FrameN]*MidiEv)
-	for _, note := range(G.score.notes) {
+	notes := make(chan *Note, 5)
+	go orderNotes(&G.score, notes)
+	for note := range(notes) {
 		start, _ := G.score.ToFrame(G.score.Beatf(note))
 		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
 		if end <= f0 || start >= fN {
@@ -244,6 +268,8 @@ func main() {
 	G.mixer.audio = true
 	G.mixer.midi = true
 
+	G.score.Init()
+
 	G.quantize.apply = make(chan chan bool)
 	G.quantize.calc = make(chan chan QuantizeBeats)
 
@@ -272,7 +298,6 @@ func main() {
 
 	G.ww = NewWaveWidget(redraw)
 	G.ww.SetWaveform(G.wav)
-	G.score.Init()
 	G.ww.SetScore(&G.score)
 
 	wg := InitWde(redraw)

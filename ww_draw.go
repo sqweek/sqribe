@@ -22,14 +22,24 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 		axish := 20
 		ww.rect.r = r
 		ww.rect.wave = image.Rect(r.Min.X, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
+		if change & SCALE != 0 && ww.score != nil {
+			// TODO clear map
+			scoreh := ww.rect.wave.Dy() / len(ww.score.staves)
+			minh := yspacing * 8
+			if scoreh < minh {
+				scoreh = minh
+			}
+			for i := 0; i < len(ww.score.staves); i++ {
+				ww.rect.staves[ww.score.staves[i]] = image.Rect(ww.rect.wave.Min.X, ww.rect.wave.Min.Y + i * scoreh, ww.rect.wave.Max.X, ww.rect.wave.Min.Y + (i + 1) * scoreh + 1)
+			}
+		}
 		ww.renderstate.img = image.NewRGBA(ww.rect.r)
 		if ww.wav != nil {
 			if change & WAV != 0 || ww.renderstate.waveform == nil {
 				ww.renderstate.waveform = image.NewRGBA(ww.rect.wave)
 				ww.drawWave(ww.renderstate.waveform, ww.rect.wave)
 			}
-			wMin := image.Point{r.Min.X, r.Min.Y + axish}
-			draw.Draw(ww.renderstate.img, ww.rect.wave, ww.renderstate.waveform, wMin, draw.Src)
+			draw.Draw(ww.renderstate.img, ww.rect.wave, ww.renderstate.waveform, ww.rect.wave.Min, draw.Src)
 		}
 		ww.drawScale(ww.renderstate.img, ww.rect.wave)
 
@@ -167,16 +177,19 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 	if minX >= maxX {
 		return
 	}
-	mid := r.Min.Y + r.Dy() / 2
-	minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
-	for y := minY; y <= maxY; y += yspacing {
-		line := image.Rect(minX, y, maxX, y+1)
-		draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
+	for _, staff := range ww.score.staves {
+		rect := ww.rect.staves[staff]
+		mid := rect.Min.Y + rect.Dy() / 2
+		minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
+		for y := minY; y <= maxY; y += yspacing {
+			line := image.Rect(minX, y, maxX, y+1)
+			draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
+		}
+
+		ww.drawNotes(dst, rect, staff, mid)
+
+		ww.drawProspectiveNote(dst, rect, staff, mid)
 	}
-
-	ww.drawNotes(dst, r, mid)
-
-	ww.drawProspectiveNote(dst, r, mid)
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf float64, delta int, accidental *int, prospective bool) {
@@ -216,16 +229,16 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf
 	}
 }
 
-func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, mid int) {
-	for _, note := range(ww.score.notes) {
-		delta, accidental := ww.score.LineForPitch(note.Pitch)
+func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *Staff, mid int) {
+	for _, note := range(staff.notes) {
+		delta, accidental := staff.LineForPitch(note.Pitch)
 		ww.drawNote(dst, r, mid, ww.score.Beatf(note), delta, accidental, false)
 	}
 }
 
-func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, mid int) {
+func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *Staff, mid int) {
 	s := ww.getMouseState(ww.mouse.pos)
-	if s.note == nil {
+	if s.note == nil || s.note.staff != staff {
 		return
 	}
 	n := ww.mkNote(s.note)

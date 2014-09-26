@@ -22,6 +22,7 @@ const yspacing = 10 // pixels between staff lines
 type noteProspect struct {
 	delta int
 	beatf float64
+	staff *Staff
 }
 
 type mouseState struct {
@@ -47,6 +48,7 @@ type WaveWidget struct {
 	rect struct {
 		r image.Rectangle		// the whole widget's rect
 		wave image.Rectangle	// rect of the waveform display
+		staves map[*Staff] image.Rectangle
 	}
 
 	/* renderer related state */
@@ -68,6 +70,7 @@ func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
 	ww.rect.r = image.Rect(0,0,0,0)
+	ww.rect.staves = make(map[*Staff]image.Rectangle)
 	ww.selection = &FrameRange{0, 0}
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
@@ -235,32 +238,38 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	nframes := ww.NFrames()
 
 	f0, fN := ww.VisibleFrameRange()
-	for _, note := range(ww.score.notes) {
-		frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
-		if frame < f0 || frame > fN {
+	for staff, rect := range ww.rect.staves {
+		if !mouse.In(rect) {
 			continue
 		}
-		x := ww.PixelAtFrame(frame)
-		mid := ww.rect.wave.Min.Y + ww.rect.wave.Dy() / 2
-		delta, _ := ww.score.LineForPitch(note.Pitch)
-		y := mid - (yspacing / 2) * (delta)
-		r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
-		if mouse.In(r) {
-			return func(pos image.Point, finished bool)bool {
-				prospect := ww.noteAtPixel(pos)
-				if prospect == nil {
-					return false
-				}
-				if finished {
-					ww.score.RemoveNote(note)
-					ww.score.AddNote(ww.mkNote(prospect))
-				} else {
-					ww.getMouseState(pos).note = prospect
-				}
-				ww.renderstate.changed |= SCALE
-				ww.refresh <- ww.rect.r
-				return true
-			}, GrabCursor
+		mid := rect.Min.Y + rect.Dy() / 2
+		for _, note := range(staff.notes) {
+			frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
+			if frame < f0 || frame > fN {
+				continue
+			}
+			x := ww.PixelAtFrame(frame)
+			delta, _ := staff.LineForPitch(note.Pitch)
+			y := mid - (yspacing / 2) * (delta)
+			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
+			if mouse.In(r) {
+				staff := staff
+				return func(pos image.Point, finished bool)bool {
+					prospect := ww.noteAtPixel(staff, pos)
+					if prospect == nil {
+						return false
+					}
+					if finished {
+						staff.RemoveNote(note)
+						staff.AddNote(ww.mkNote(prospect))
+					} else {
+						ww.getMouseState(pos).note = prospect
+					}
+					ww.renderstate.changed |= SCALE
+					ww.refresh <- ww.rect.r
+					return true
+				}, GrabCursor
+			}
 		}
 	}
 
@@ -296,8 +305,18 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), NormalCursor
 }
 
-func (ww *WaveWidget) noteAtPixel(pos image.Point) *noteProspect {
-	mid := ww.rect.wave.Min.Y + ww.rect.wave.Dy() / 2
+func (ww *WaveWidget) staffContaining(pos image.Point) *Staff {
+	for staff, rect := range ww.rect.staves {
+		if pos.In(rect) {
+			return staff
+		}
+	}
+	return nil
+}
+
+func (ww *WaveWidget) noteAtPixel(staff *Staff, pos image.Point) *noteProspect {
+	rect := ww.rect.staves[staff]
+	mid := rect.Min.Y + rect.Dy() / 2
 	noteY := snapto(pos.Y, mid, yspacing / 2)
 	delta := (mid - noteY) / (yspacing / 2)
 
@@ -307,7 +326,7 @@ func (ww *WaveWidget) noteAtPixel(pos image.Point) *noteProspect {
 		return nil
 	}
 
-	return &noteProspect{delta, beatf}
+	return &noteProspect{delta, beatf, staff}
 }
 
 func (ww *WaveWidget) getMouseState(pos image.Point) *mouseState {
@@ -330,7 +349,11 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	state.dragFn = dragFn
 	state.cursor = cursor
 
-	state.note = ww.noteAtPixel(pos)
+	staff := ww.staffContaining(pos)
+	if staff == nil {
+		staff = ww.score.staves[0]
+	}
+	state.note = ww.noteAtPixel(staff, pos)
 
 	return state
 }
@@ -357,7 +380,7 @@ func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 
 func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
 	beat, offset := ww.score.Quantize(prospect.beatf)
-	return &Note{ww.score.PitchForLine(prospect.delta), ww.score.beatLen, beat, offset}
+	return &Note{prospect.staff.PitchForLine(prospect.delta), ww.score.beatLen, beat, offset}
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
@@ -368,7 +391,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if s.note == nil || ww.score == nil {
 		return
 	}
-	ww.score.AddNote(ww.mkNote(s.note))
+	s.note.staff.AddNote(ww.mkNote(s.note))
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
@@ -429,15 +452,17 @@ func (ww *WaveWidget) Status() string {
 	delta2 := 0
 	beati := 0
 	offset := big.NewRat(1, 1)
+	nsharps := 0
 	if s.note != nil {
 		beatf := s.note.beatf
 		delta = s.note.delta
 		beat, o := ww.score.Quantize(beatf)
 		beati = beat.index
 		offset = o
-		pitch = ww.score.PitchForLine(delta)
-		delta2, _ = ww.score.LineForPitch(pitch)
+		pitch = s.note.staff.PitchForLine(delta)
+		delta2, _ = s.note.staff.LineForPitch(pitch)
+		nsharps = s.note.staff.nsharps
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %d pos=%d:%v #%d", delta, delta2, pitch, pitch%12, beati, offset, ww.score.nsharps)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %d pos=%d:%v #%d", delta, delta2, pitch, pitch%12, beati, offset, nsharps)
 }

@@ -20,11 +20,18 @@ type SavedNote struct {
 	Offset *big.Rat
 }
 
+type SavedStaff struct {
+	Name string
+	Voice int
+	Origin uint8
+	Nsharps int
+	Notes []SavedNote
+}
+
 type stateV1 struct {
 	Filename string
 	Beats []FrameN
-	Nsharps int
-	Notes []SavedNote
+	Staves []SavedStaff
 	MixWeight float64
 	MetronomeOff bool `json:",omitempty"`
 	WaveOff bool `json:",omitempty"`
@@ -34,8 +41,7 @@ type stateV1 struct {
 func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.BeatFrames()
-	s.Nsharps = G.score.nsharps
-	s.Notes = G.score.SavedNotes()
+	s.Staves = G.score.SavedStaves()
 	s.MixWeight = G.mixer.waveBias
 	s.MetronomeOff = !G.mixer.metronome
 	s.WaveOff = !G.mixer.audio
@@ -44,8 +50,7 @@ func (s *stateV1) Capture() {
 
 func (s *stateV1) Restore() {
 	G.score.LoadBeats(s.Beats)
-	G.score.nsharps = s.Nsharps
-	G.score.LoadNotes(s.Notes)
+	G.score.LoadStaves(s.Staves)
 	if s.MixWeight == 0.0 {
 		G.mixer.waveBias = 0.5
 	} else {
