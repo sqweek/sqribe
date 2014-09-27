@@ -31,6 +31,7 @@ type Staff struct {
 	voice int
 	origin uint8	// unaltered pitch of center note (ie. clef)
 	nsharps int	// key signature (-ve for flats)
+	Muted bool
 	notes []*Note
 }
 
@@ -219,7 +220,7 @@ func (score *Score) SavedStaves() []SavedStaff {
 	defer score.RUnlock()
 	saved := make([]SavedStaff, 0, len(score.staves))
 	for _, staff := range score.staves {
-		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.origin, staff.nsharps, staff.SavedNotes()})
+		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.origin, staff.nsharps, staff.Muted, staff.SavedNotes()})
 	}
 	return saved
 }
@@ -237,7 +238,7 @@ func (staff *Staff) SavedNotes() []SavedNote {
 func (score *Score) LoadStaves(in []SavedStaff) {
 	score.staves = score.staves[0:0]
 	for _, saved := range in {
-		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, nil}
+		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, saved.Muted, nil}
 		staff.LoadNotes(score, saved.Notes)
 		score.staves = append(score.staves, staff)
 	}

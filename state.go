@@ -25,6 +25,7 @@ type SavedStaff struct {
 	Voice int
 	Origin uint8
 	Nsharps int
+	Muted bool `json:",omitempty"`
 	Notes []SavedNote
 }
 

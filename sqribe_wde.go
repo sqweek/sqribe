@@ -38,7 +38,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			switch (e.Which) {
 			case wde.LeftButton:
 				if e.Where.In(G.ww.Rect()) {
-					if !dragged {
+					if !dragged || drag == nil {
 						G.ww.LeftClick(e.Where)
 					} else {
 						drag(e.Where, true)
@@ -61,7 +61,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			G.mouse.pt = e.Where
 			if G.mouse.pt.In(G.ww.Rect()) {
 				if !IsPlaying() {
-					G.ww.SetCursorByPixel(e.Where)
+					G.ww.MouseMoved(e.Where)
 				}
 				_, cur := G.ww.CursorIconAtPixel(e.Where)
 				cursorCtl.Set(cur)

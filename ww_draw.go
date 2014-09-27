@@ -10,6 +10,22 @@ import (
 	"time"
 )
 
+func leftRect(src image.Rectangle, width int) image.Rectangle {
+	return image.Rect(src.Min.X - width, src.Min.Y, src.Min.X, src.Max.Y)
+}
+
+func rightRect(src image.Rectangle, width int) image.Rectangle {
+	return image.Rect(src.Max.X, src.Min.Y, src.Max.X + width, src.Max.Y)
+}
+
+func aboveRect(src image.Rectangle, height int) image.Rectangle {
+	return image.Rect(src.Min.X, src.Min.Y - height, src.Max.X, src.Min.Y)
+}
+
+func belowRect(src image.Rectangle, height int) image.Rectangle {
+	return image.Rect(src.Min.X, src.Max.Y, src.Max.X, src.Max.Y + height)
+}
+
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
@@ -20,8 +36,9 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	}
 	if change != 0 {
 		axish := 20
+		infow := 100
 		ww.rect.r = r
-		ww.rect.wave = image.Rect(r.Min.X, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
+		ww.rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 		if change & SCALE != 0 && ww.score != nil {
 			// TODO clear map
 			scoreh := ww.rect.wave.Dy() / len(ww.score.staves)
@@ -41,12 +58,12 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 			}
 			draw.Draw(ww.renderstate.img, ww.rect.wave, ww.renderstate.waveform, ww.rect.wave.Min, draw.Src)
 		}
-		ww.drawScale(ww.renderstate.img, ww.rect.wave)
+		ww.drawScale(ww.renderstate.img, ww.rect.wave, infow)
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursorX, r.Min.Y, ww.cursorX+1, r.Max.Y), &image.Uniform{curcol}, r.Min, draw.Src)
-		ww.drawBeatAxis(ww.renderstate.img, image.Rect(r.Min.X, r.Min.Y, r.Max.X, r.Min.Y + axish))
-		ww.drawTimeAxis(ww.renderstate.img, image.Rect(r.Min.X, r.Max.Y - axish, r.Max.X, r.Max.Y))
+		ww.drawBeatAxis(ww.renderstate.img, aboveRect(ww.rect.wave, axish))
+		ww.drawTimeAxis(ww.renderstate.img, belowRect(ww.rect.wave, axish))
 	}
 	draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 }
@@ -118,7 +135,7 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 		return
 	}
 	sel0, selN := ww.GetSelectedFrameRange()
-	selR := image.Rect(int((sel0 - f0)/fpp), r.Min.Y, int((selN - f0)/fpp), r.Max.Y)
+	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
@@ -142,7 +159,7 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	}
 }
 
-func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	if ww.score == nil {
 		return
 	}
@@ -186,10 +203,36 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle) {
 			draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 		}
 
+		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)
+
 		ww.drawNotes(dst, rect, staff, mid)
 
 		ww.drawProspectiveNote(dst, rect, staff, mid)
 	}
+}
+
+func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill color.RGBA) {
+	top := image.Rect(r.Min.X, r.Min.Y, r.Max.X, r.Min.Y + 1)
+	left := image.Rect(r.Min.X, r.Min.Y, r.Min.X + 1, r.Max.Y)
+	bot := image.Rect(r.Min.X, r.Max.Y - 1, r.Max.X, r.Max.Y)
+	right := image.Rect(r.Max.X - 1, r.Min.Y, r.Max.X, r.Max.Y)
+	draw.Draw(dst, r, &image.Uniform{fill}, image.ZP, draw.Over)
+	for _, line := range []image.Rectangle{top, left, bot, right} {
+		draw.Draw(dst, line, &image.Uniform{border}, image.ZP, draw.Over)
+	}
+}
+
+func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *Staff) {
+	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
+	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
+	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
+	var fill color.RGBA
+	if staff.Muted {
+		fill = bg
+	} else {
+		fill = fg
+	}
+	drawBorders(dst, r, border, fill)
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf float64, delta int, accidental *int, prospective bool) {
@@ -342,7 +385,7 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 		dur := time.Duration(t) * time.Second
 		return fmt.Sprintf("%02d:%02d", int(dur.Minutes()), int(dur.Seconds()) % 60)
 	}
-	t0 := math.Trunc(ww.TimeAtCursor(0).Seconds())
-	tN := math.Ceil(ww.TimeAtCursor(r.Dx()).Seconds())
+	t0 := math.Trunc(ww.TimeAtCursor(r.Min.X).Seconds())
+	tN := math.Ceil(ww.TimeAtCursor(r.Max.X).Seconds())
 	ww.drawTicks(dst, r, false, t0, tN, 1.0, tToX, label)
 }

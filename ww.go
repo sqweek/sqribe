@@ -162,13 +162,13 @@ func (ww *WaveWidget) FrameAtCursor() FrameN {
 }
 
 func (ww *WaveWidget) FrameAtPixel(x int) FrameN {
-	dx := x - ww.rect.r.Min.X
+	dx := x - ww.rect.wave.Min.X
 	return ww.first_frame + FrameN(dx * ww.frames_per_pixel)
 }
 
 func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	/* TODO rounding */
-	return ww.rect.r.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
+	return ww.rect.wave.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
 func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
@@ -302,7 +302,10 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	}
 
 	/* if we're not dragging anything in particular, drag to select */
-	return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), NormalCursor
+	if mouse.In(ww.rect.wave) {
+		return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), NormalCursor
+	}
+	return nil, NormalCursor
 }
 
 func (ww *WaveWidget) staffContaining(pos image.Point) *Staff {
@@ -363,7 +366,7 @@ func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
 	return s.dragFn, s.cursor
 }
 
-func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
+func (ww *WaveWidget) MouseMoved(mousePos image.Point) {
 	if !mousePos.Eq(ww.mouse.pos) {
 		ww.mouse.pos = mousePos
 		ww.mouse.state = nil
@@ -371,7 +374,7 @@ func (ww *WaveWidget) SetCursorByPixel(mousePos image.Point) {
 		ww.renderstate.changed |= CURSOR
 		ww.refresh <- ww.rect.r
 	}
-	if ww.cursorX != mousePos.X {
+	if ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
 		ww.cursorX = mousePos.X
 		ww.renderstate.changed |= CURSOR
 		ww.refresh <- ww.rect.r
@@ -384,6 +387,14 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
+	indent := ww.rect.wave.Min.X - ww.rect.r.Min.X
+	for staff, rect := range ww.rect.staves {
+		if mouse.In(leftRect(rect, indent)) {
+			staff.Muted = !staff.Muted
+			ww.renderstate.changed |= SCALE
+			ww.refresh <- ww.rect.r
+		}
+	}
 }
 
 func (ww *WaveWidget) RightClick(mouse image.Point) {

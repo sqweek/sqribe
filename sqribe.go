@@ -66,10 +66,14 @@ func orderNotes(score *Score, notes chan<- *Note) {
 	defer close(notes)
 	n := len(score.staves)
 	idx := make([]int, n)
+	for j, staff := range score.staves {
+		if staff.Muted {
+			idx[j] = len(staff.notes)
+		}
+	}
 	for {
 		best := -1
-		for j := 0; j < n; j++ {
-			staff := score.staves[j]
+		for j, staff := range(score.staves) {
 			if idx[j] < len(staff.notes) {
 				if best == -1 || staff.notes[idx[j]].Cmp(score.staves[best].notes[idx[best]]) < 0 {
 					best = j
