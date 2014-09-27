@@ -39,7 +39,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 		infow := 100
 		ww.rect.r = r
 		ww.rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
-		if change & SCALE != 0 && ww.score != nil {
+		if change & SCALE != 0 && ww.score != nil && len(ww.score.staves) > 0 {
 			// TODO clear map
 			scoreh := ww.rect.wave.Dy() / len(ww.score.staves)
 			minh := yspacing * 8
@@ -353,7 +353,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 
 func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	score := ww.score
-	if score == nil {
+	if score == nil || len(score.beats) == 0 {
 		return
 	}
 	beatToX := func(beatf float64) int {

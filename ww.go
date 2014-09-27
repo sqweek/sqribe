@@ -292,7 +292,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		}
 	}
 
-	snap := (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
+	snap := len(ww.score.beats) > 0 && (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
 	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
 		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
 	}
