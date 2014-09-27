@@ -353,6 +353,7 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 
 	staff := ww.staffContaining(pos)
 	if staff == nil {
+		// TODO should have no prospective note in this case
 		staff = ww.score.staves[0]
 	}
 	state.note = ww.noteAtPixel(staff, pos)

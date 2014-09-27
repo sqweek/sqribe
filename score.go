@@ -52,7 +52,7 @@ func NewTrebleStaff() *Staff {
 }
 
 func NewBassStaff() *Staff {
-	return &Staff{name: "Bass", origin: 41}
+	return &Staff{name: "Bass", origin: 38}
 }
 
 func (score *Score) Init() {
@@ -363,11 +363,11 @@ func (staff *Staff) LineForPitch(pitch uint8) (int, *int) {
 	degree0 := int(staff.origin % 12)
 	tone0 := degree2scale[degree0]
 	degree := int(pitch % 12)
-	keys2d := make([]int, len(scale2degree), len(scale2degree))
+	//keys2d := make([]int, len(scale2degree), len(scale2degree))
 	tone := -1
 	for s, _ := range(scale2degree) {
-		keys2d[s] = scale2degree[s] + staff.accidental(s)
-		if keys2d[s] == degree {
+		//keys2d[s] = scale2degree[s] + staff.accidental(s)
+		if scale2degree[s] + staff.accidental(s) == degree {
 			tone = s
 		}
 	}
@@ -384,6 +384,16 @@ func (staff *Staff) LineForPitch(pitch uint8) (int, *int) {
 		}
 		return delta, &a
 	}
-	delta := -tone0 + 7 * ((int(pitch) - (int(staff.origin) - degree0)) / 12) + tone
+	octave := 0
+	d := int(pitch) - (int(staff.origin) - degree0)
+	for d < 0 {
+		octave -= 7
+		d += 12
+	}
+	for d >= 12 {
+		octave += 7
+		d -= 12
+	}
+	delta := -tone0 + octave + tone
 	return delta, nil
 }
