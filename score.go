@@ -253,7 +253,7 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote) {
 		beati := int(beatf)
 		saved.Offset.Sub(saved.Offset, big.NewRat(int64(beati), 1))
 		note := &Note{saved.Pitch, saved.Duration, score.beats[beati], saved.Offset}
-		staff.notes = append(staff.notes, note)
+		staff.AddNote(note)
 	}
 }
 
@@ -271,20 +271,15 @@ func (note *Note) Durf() float64 {
 	return d;
 }
 
-func (note *Note) Set(note2 *Note) {
-	note.Pitch = note2.Pitch
-	note.Offset.Set(note2.Offset)
-	note.Duration.Set(note2.Duration)
-}
-
 func (note *Note) Cmp(note2 *Note) int {
-	// XXX race condition if index changes
-	d := note.Beat.index - note2.Beat.index
+	if note.Beat.frame < note2.Beat.frame {
+		return -1
+	} else if note.Beat.frame > note2.Beat.frame {
+		return 1
+	}
+	d := note.Offset.Cmp(note2.Offset)
 	if d == 0 {
-		d = note.Offset.Cmp(note2.Offset)
-		if d == 0 {
-			return int(note.Pitch - note2.Pitch)
-		}
+		return int(note.Pitch) - int(note2.Pitch)
 	}
 	return d
 }
@@ -292,6 +287,9 @@ func (note *Note) Cmp(note2 *Note) int {
 func (staff *Staff) RemoveNote(note *Note) {
 	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
 	i := sort.Search(len(staff.notes), searchFn)
+	if i == len(staff.notes) {
+		return
+	}
 	if note.Cmp(staff.notes[i]) == 0 {
 		copy(staff.notes[i:], staff.notes[i+1:])
 		staff.notes = staff.notes[:len(staff.notes) - 1]

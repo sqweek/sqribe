@@ -253,7 +253,6 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			y := mid - (yspacing / 2) * (delta)
 			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
 			if mouse.In(r) {
-				staff := staff
 				return func(pos image.Point, finished bool)bool {
 					prospect := ww.noteAtPixel(staff, pos)
 					if prospect == nil {
