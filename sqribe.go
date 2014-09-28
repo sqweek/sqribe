@@ -56,6 +56,7 @@ type MidiEv struct {
 func addEv(midi map[FrameN]*MidiEv, frame FrameN, ev MidiEv) {
 	prev, ok := midi[frame]
 	if ok {
+		for ; prev.Next != nil; prev = prev.Next {}
 		prev.Next = &ev
 	} else {
 		midi[frame] = &ev
