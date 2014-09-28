@@ -48,11 +48,11 @@ type Note struct {
 }
 
 func NewTrebleStaff() *Staff {
-	return &Staff{name: "Treble", origin: 59}
+	return &Staff{name: "Treble", origin: 71}
 }
 
 func NewBassStaff() *Staff {
-	return &Staff{name: "Bass", origin: 38}
+	return &Staff{name: "Bass", origin: 50}
 }
 
 func (score *Score) Init() {

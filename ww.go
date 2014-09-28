@@ -475,5 +475,5 @@ func (ww *WaveWidget) Status() string {
 		nsharps = s.note.staff.nsharps
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %d pos=%d:%v #%d", delta, delta2, pitch, pitch%12, beati, offset, nsharps)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v #%d", delta, delta2, pitch, PitchName(pitch), beati, offset, nsharps)
 }
