@@ -57,16 +57,6 @@ type SharpGlyph struct {
 	CenteredGlyph
 }
 
-func ceil(n, d int) int {
-	q, r := n / d, n % d
-	if r == 0 {
-		return q
-	} else if n < 0 {
-		return q
-	}
-	return q + 1
-}
-
 func (s *SharpGlyph) At(x, y int) color.Color {
 	dx, dy := s.p.X - x, s.p.Y - y
 	line := dy + ceil(dx, 2)
@@ -79,17 +69,6 @@ func (s *SharpGlyph) At(x, y int) color.Color {
 
 type NaturalGlyph struct {
 	CenteredGlyph
-}
-
-/* divides n by d, rounding away from zero. assumes d is positive */
-func divØ(n, d int) int {
-	q, r := n / d, n % d
-	if r == 0 {
-		return q
-	} else if n < 0 {
-		return q - 1
-	}
-	return q + 1
 }
 
 func (n *NaturalGlyph) At(x, y int) color.Color {

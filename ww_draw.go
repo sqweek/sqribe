@@ -10,22 +10,6 @@ import (
 	"time"
 )
 
-func leftRect(src image.Rectangle, width int) image.Rectangle {
-	return image.Rect(src.Min.X - width, src.Min.Y, src.Min.X, src.Max.Y)
-}
-
-func rightRect(src image.Rectangle, width int) image.Rectangle {
-	return image.Rect(src.Max.X, src.Min.Y, src.Max.X + width, src.Max.Y)
-}
-
-func aboveRect(src image.Rectangle, height int) image.Rectangle {
-	return image.Rect(src.Min.X, src.Min.Y - height, src.Max.X, src.Min.Y)
-}
-
-func belowRect(src image.Rectangle, height int) image.Rectangle {
-	return image.Rect(src.Min.X, src.Max.Y, src.Max.X, src.Max.Y + height)
-}
-
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
@@ -66,17 +50,6 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 		ww.drawTimeAxis(ww.renderstate.img, belowRect(ww.rect.wave, axish))
 	}
 	draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
-}
-
-func slog(s int16) float64 {
-	return float64(s)
-	if s == 0 {
-		return 0.0
-	} else if s < 0 {
-		return -math.Log(float64(-s))
-	} else {
-		return math.Log(float64(s))
-	}
 }
 
 func colourFor(offset *big.Rat) color.RGBA {
@@ -286,28 +259,6 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	}
 	n := ww.mkNote(s.note)
 	ww.drawNote(dst, r, mid, ww.score.Beatf(n), s.note.delta, nil, true)
-}
-
-func snapto(x, origin, step int) int {
-	d := x - origin
-	var sgn int
-	if (d < 0) {
-		sgn = -1
-	} else {
-		sgn = 1
-	}
-	rem := (sgn * d) % step
-	if rem < step/2 {
-		return x - sgn * rem
-	}
-	return x + sgn * (step - rem)
-}
-
-func tickRect(r image.Rectangle, bottom bool, x, size int) image.Rectangle {
-	if bottom {
-		return image.Rect(x, r.Max.Y - size, x + 1, r.Max.Y)
-	}
-	return image.Rect(x, r.Min.Y, x + 1, r.Min.Y + size)
 }
 
 /* a0: axis value of first tick. aN: axis value of last tick. Δa: distance between major ticks */

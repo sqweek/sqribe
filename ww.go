@@ -222,18 +222,6 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
-func padPt(center image.Point, w, h int) image.Rectangle {
-	return image.Rect(center.X - w, center.Y - h, center.X + w + 1, center.Y + h + 1)
-}
-
-func padRect(r image.Rectangle, w, h int) image.Rectangle {
-	return image.Rect(r.Min.X - w, r.Min.Y - h, r.Max.X + w, r.Max.Y + h)
-}
-
-func (ww *WaveWidget) vrect(x int) image.Rectangle{
-	return image.Rect(x, ww.rect.r.Min.Y, x + 1, ww.rect.r.Max.Y)
-}
-
 func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	nframes := ww.NFrames()
 
@@ -293,10 +281,10 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	}
 
 	snap := len(ww.score.beats) > 0 && (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
-	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
+	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
 		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
 	}
-	if mouse.In(padRect(ww.vrect(ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
+	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
 		return ww.selectDrag(ww.selection.min, snap), ResizeRCursor
 	}
 
