@@ -23,20 +23,27 @@ func (g *CenteredGlyph) Bounds() image.Rectangle {
 type NoteHead struct {
 	CenteredGlyph
 	α float64
+	hollowness float64
 }
 
 func (n *NoteHead) At(x, y int) color.Color {
 	xx, yy, rr := float64(x - n.p.X)+0.5, float64(y - n.p.Y)+0.5, float64(n.r)
 	rx := xx * math.Cos(n.α) - yy * math.Sin(n.α)
 	ry := xx * math.Sin(n.α) + yy * math.Cos(n.α)
-	if rx*rx + 1.25*1.25*ry*ry < rr*rr {
+	rr2 := rr*rr
+	dist2 := rx*rx + 1.25*1.25*ry*ry
+	if dist2 < rr2 && dist2 >= n.hollowness * rr2 {
 		return n.col
 	}
 	return color.RGBA{0, 0, 0, 0}
 }
 
 func newNoteHead(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
-	return &NoteHead{CenteredGlyph{col, p, r}, α}
+	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.0}
+}
+
+func newHollowNote(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
+	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.6}
 }
 
 type FlatGlyph struct {

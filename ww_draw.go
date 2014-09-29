@@ -208,18 +208,17 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *Sta
 	drawBorders(dst, r, border, fill)
 }
 
-func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf float64, delta int, accidental *int, prospective bool) {
+func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *Note, delta int, accidental *int, prospective bool) {
 	var col, black color.RGBA
 	if prospective {
 		black = color.RGBA{0, 0, 0, 0x44}
-		_, offset := ww.score.Quantize(beatf)
-		col = colourFor(offset)
+		col = colourFor(note.Offset)
 	} else {
 		black = color.RGBA{0, 0, 0, 0xff}
 		col = black
 	}
 	f0, fN := ww.VisibleFrameRange()
-	frame, _ := ww.score.ToFrame(beatf)
+	frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
 	if frame < f0 || frame > fN {
 		return
 	}
@@ -239,7 +238,13 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
 
-	draw.Draw(dst, r, newNoteHead(col, image.Point{x, y}, yspacing/2, 35.0), r.Min, draw.Over)
+	var head *NoteHead
+	if note.Durf() < 2 {
+		head = newNoteHead(col, image.Point{x, y}, yspacing/2, 35.0)
+	} else {
+		head = newHollowNote(col, image.Point{x, y}, yspacing/2, 35.0)
+	}
+	draw.Draw(dst, r, head, r.Min, draw.Over)
 	if accidental != nil {
 		draw.Draw(dst, r, newAccidental(col, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
 	}
@@ -248,7 +253,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, beatf
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *Staff, mid int) {
 	for _, note := range(staff.notes) {
 		delta, accidental := staff.LineForPitch(note.Pitch)
-		ww.drawNote(dst, r, mid, ww.score.Beatf(note), delta, accidental, false)
+		ww.drawNote(dst, r, mid, note, delta, accidental, false)
 	}
 }
 
@@ -258,7 +263,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		return
 	}
 	n := ww.mkNote(s.note)
-	ww.drawNote(dst, r, mid, ww.score.Beatf(n), s.note.delta, nil, true)
+	ww.drawNote(dst, r, mid, n, s.note.delta, nil, true)
 }
 
 /* a0: axis value of first tick. aN: axis value of last tick. Δa: distance between major ticks */
