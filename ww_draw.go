@@ -245,6 +245,18 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note 
 		head = newHollowNote(col, image.Point{x, y}, yspacing/2, 35.0)
 	}
 	draw.Draw(dst, r, head, r.Min, draw.Over)
+	if note.Durf() <= 3 {
+		beamTop := image.Pt(x + yspacing/2 - 1, y - yspacing * 2.5 - 1)
+		beam := image.Rectangle{beamTop, image.Pt(x + yspacing/2, y)}
+		draw.Draw(dst, beam, &image.Uniform{col}, r.Min, draw.Over)
+		i := 0
+		/* TODO dotted durations, triplets */
+		for d := 0.5; d >= note.Durf(); d /= 2 {
+			c := image.Pt(beamTop.X, beamTop.Y + i * 3)
+			i++
+			draw.Draw(dst, r, &NoteTail{CenteredGlyph{col, c, 4*yspacing/(2*5)}}, r.Min, draw.Over)
+		}
+	}
 	if accidental != nil {
 		draw.Draw(dst, r, newAccidental(col, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
 	}

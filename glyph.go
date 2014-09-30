@@ -46,6 +46,18 @@ func newHollowNote(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
 	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.6}
 }
 
+type NoteTail struct {
+	CenteredGlyph
+}
+
+func (t *NoteTail) At(x, y int) color.Color {
+	dx, dy := x - t.p.X, y - t.p.Y
+	if dx > 0 && dx - dy == 0 {
+		return t.col
+	}
+	return color.RGBA{0, 0, 0, 0}
+}
+
 type FlatGlyph struct {
 	CenteredGlyph
 }
