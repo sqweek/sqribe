@@ -33,6 +33,10 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				if e.Where.In(G.ww.Rect()) {
 					drag, _ = G.ww.CursorIconAtPixel(e.Where)
 				}
+			case wde.RightButton:
+				if e.Where.In(G.ww.Rect()) {
+					G.ww.RightButtonDown(e.Where)
+				}
 			}
 		case wde.MouseUpEvent:
 			switch (e.Which) {
@@ -45,8 +49,8 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 					}
 				}
 			case wde.RightButton:
-				if e.Where.In(G.ww.Rect()) && !dragged {
-					G.ww.RightClick(e.Where)
+				if !G.noteMenu.Rect().Empty() {
+					G.noteMenu.RightButtonUp(e.Where)
 				}
 			}
 		case wde.MouseDraggedEvent:
@@ -56,10 +60,15 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				if drag != nil {
 					drag(e.Where, false)
 				}
+			case wde.RightButton:
+				if !G.noteMenu.Rect().Empty() {
+					G.noteMenu.MouseMoved(e.Where)
+				}
 			}
 		case wde.MouseMovedEvent:
-			G.mouse.pt = e.Where
-			if G.mouse.pt.In(G.ww.Rect()) {
+			if e.Where.In(G.noteMenu.Rect()) {
+				G.noteMenu.MouseMoved(e.Where)
+			} else if e.Where.In(G.ww.Rect()) {
 				if !IsPlaying() {
 					G.ww.MouseMoved(e.Where)
 				}
@@ -242,6 +251,9 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(img, statusR)
 
+				if !G.noteMenu.Rect().Empty() {
+					G.noteMenu.Draw(img, G.noteMenu.Rect())
+				}
 				w.Screen().CopyRGBA(img, r)
 				w.FlushImage()
 				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)

@@ -73,6 +73,11 @@ func (font *Font) PixelWidth(str string) int {
 	return roundFix(width, 6)
 }
 
+func (font *Font) PixelHeight() int {
+	b := font.font.Bounds(font.fontscale)
+	return 1 + roundFix(b.YMax - b.YMin, 6)
+}
+
 func (font *Font) Draw(dst draw.Image, colour color.Color, r image.Rectangle, str string) {
 	font.fc.SetDst(dst)
 	font.fc.SetSrc(&image.Uniform{colour})
@@ -85,7 +90,7 @@ func (font *Font) Draw(dst draw.Image, colour color.Color, r image.Rectangle, st
 func (font *Font) DrawC(dst draw.Image, colour color.Color, clip image.Rectangle, str string, pt image.Point) {
 	w := font.PixelWidth(str)
 	b := font.font.Bounds(font.fontscale)
-	h := 1 + roundFix(b.YMax - b.YMin, 6)
+	h := font.PixelHeight()
 	left := pt.X - w / 2
 	baseline := pt.Y + h / 2 + roundFix(b.YMin, 6)
 	font.fc.SetDst(dst)

@@ -248,7 +248,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 					}
 					if finished {
 						staff.RemoveNote(note)
-						staff.AddNote(ww.mkNote(prospect))
+						staff.AddNote(ww.mkNote(prospect, note.Duration))
 					} else {
 						ww.getMouseState(pos).note = prospect
 					}
@@ -369,9 +369,9 @@ func (ww *WaveWidget) MouseMoved(mousePos image.Point) {
 	}
 }
 
-func (ww *WaveWidget) mkNote(prospect *noteProspect) *Note {
+func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *Note {
 	beat, offset := ww.score.Quantize(prospect.beatf)
-	return &Note{prospect.staff.PitchForLine(prospect.delta), ww.score.beatLen, beat, offset}
+	return &Note{prospect.staff.PitchForLine(prospect.delta), dur, beat, offset}
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
@@ -385,12 +385,22 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	}
 }
 
-func (ww *WaveWidget) RightClick(mouse image.Point) {
+func (ww *WaveWidget) RightButtonDown(mouse image.Point) {
 	s := ww.getMouseState(mouse)
 	if s.note == nil || ww.score == nil {
 		return
 	}
-	s.note.staff.AddNote(ww.mkNote(s.note))
+	note := s.note
+	reply := G.noteMenu.Popup(ww.rect.r, ww.refresh, mouse)
+	go func() {
+		item := <-reply
+		str, ok := item.(MenuString)
+		if item != nil && ok {
+			var dur *big.Rat = new(big.Rat)
+			dur.SetString(string(str))
+			s.note.staff.AddNote(ww.mkNote(note, dur))
+		}
+	}()
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {

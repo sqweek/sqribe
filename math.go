@@ -2,6 +2,14 @@ package main
 
 import "math"
 
+func mod(n, d int) int {
+	r := n % d
+	if r < 0 {
+		return d + r
+	}
+	return r
+}
+
 func ceil(n, d int) int {
 	q, r := n / d, n % d
 	if r == 0 {

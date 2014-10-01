@@ -33,9 +33,7 @@ var G struct {
 
 	/* ui stuff */
 	ww *WaveWidget
-	mouse struct {
-		pt image.Point
-	}
+	noteMenu MenuWidget
 	mixer struct {
 		metronome bool
 		audio bool
@@ -291,6 +289,7 @@ func main() {
 	}
 
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
+	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
 	synth, err := SynthInit(int(sampleRate), "/d/synth/FluidR3_GM.sf2")
 	if err != nil {

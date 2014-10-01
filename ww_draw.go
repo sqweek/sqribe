@@ -274,7 +274,10 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	if s.note == nil || s.note.staff != staff {
 		return
 	}
-	n := ww.mkNote(s.note)
+	item, _ := G.noteMenu.options[G.noteMenu.lastSelected].(MenuString)
+	var dur big.Rat
+	dur.SetString(string(item))
+	n := ww.mkNote(s.note, &dur)
 	ww.drawNote(dst, r, mid, n, s.note.delta, nil, true)
 }
 
