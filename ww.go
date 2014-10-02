@@ -436,7 +436,7 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	}
 	delta := float64(fpp) / float64(ww.frames_per_pixel)
 	if delta != 1.0 {
-		dx := x - ww.rect.r.Min.X
+		dx := x - ww.rect.wave.Min.X
 		ww.first_frame = frameAtMouse - FrameN(dx * fpp)
 		ww.frames_per_pixel = fpp
 		ww.renderstate.changed |= WAV | CURSOR
