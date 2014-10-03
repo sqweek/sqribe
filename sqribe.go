@@ -182,13 +182,13 @@ func playToggle() {
 			nf := G.wav.ToFrame(SampleN(len(buf)))
 			/* metronome */
 			if on {
-				G.synth.NoteOff(15, 77)
+				G.synth.NoteOff(15, pitchF6)
 				on = false
 			} else if G.mixer.metronome {
 				b0, _ := G.score.ToBeat(f0 + i - 1)
 				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
-					G.synth.NoteOn(15, 77, 120)
+					G.synth.NoteOn(15, pitchF6, 120)
 					on = true
 				}
 			}
@@ -296,7 +296,7 @@ func main() {
 		log.Fatal(err)
 	}
 	G.synth = synth
-	synth.ProgramChange(15, 115) // woodblock
+	synth.ProgramChange(15, instWoodblock)
 
 	redraw := make(chan image.Rectangle, 10)
 
