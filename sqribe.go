@@ -29,6 +29,7 @@ var G struct {
 	/* plumbing */
 	plumb struct {
 		selection *PlumbPort
+		score *PlumbPort
 	}
 
 	/* ui stuff */
@@ -271,12 +272,13 @@ func main() {
 	G.mixer.audio = true
 	G.mixer.midi = true
 
-	G.score.Init()
-
 	G.quantize.apply = make(chan chan bool)
 	G.quantize.calc = make(chan chan QuantizeBeats)
 
 	G.plumb.selection = MkPort()
+	G.plumb.score = MkPort()
+
+	G.score.Init(G.plumb.score)
 
 	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)

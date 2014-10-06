@@ -154,7 +154,7 @@ func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan Quan
 		select {
 		case ev := <-selxn:
 			if len(G.score.beats) > 0 {
-			switch e := ev.(type) {
+				switch e := ev.(type) {
 				case FrameRange:
 					q.f0, q.fN = G.score.NearestBeat(e.min).frame, G.score.NearestBeat(e.max).frame
 					q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
@@ -169,6 +169,8 @@ func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan Quan
 				G.score.beats[ib].frame = q.f0 + FrameN(float64(ib - q.b0) * q.df)
 				fmt.Println("  TO", G.score.beats[ib].frame)
 			}
+			G.plumb.score.C <- BeatChanged{}
+			*q.error = 0
 			redraw <- image.Rect(0, 0, 0, 0)
 			reply <- true
 		case reply := <-calc:
@@ -282,7 +284,7 @@ func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
 	done := make(chan bool)
 
 	selxn := make(chan interface{})
-	G.plumb.selection.Sub <- selxn
+	G.plumb.selection.Sub(&G.quantize, selxn)
 	go quantizer(selxn, G.quantize.apply, G.quantize.calc, redraw)
 
 	go drawstuff(dw, redraw, done)

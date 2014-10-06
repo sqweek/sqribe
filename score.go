@@ -19,6 +19,7 @@ type Score struct {
 	staves []*Staff
 	beats []*BeatRef
 	beatLen *big.Rat
+	events *PlumbPort
 }
 
 type BeatRef struct {
@@ -33,6 +34,7 @@ type Staff struct {
 	nsharps int	// key signature (-ve for flats)
 	Muted bool
 	notes []*Note
+	events *PlumbPort
 }
 
 type Measure struct {
@@ -47,18 +49,26 @@ type Note struct {
 	Offset *big.Rat
 }
 
-func NewTrebleStaff() *Staff {
-	return &Staff{name: "Treble", origin: pitchB5}
+type BeatChanged struct {
 }
 
-func NewBassStaff() *Staff {
-	return &Staff{name: "Bass", origin: pitchD4}
+type StaffChanged struct {
+	Staff *Staff
 }
 
-func (score *Score) Init() {
-	score.staves = append(score.staves, NewTrebleStaff())
-	score.staves = append(score.staves, NewBassStaff())
+func (score *Score) NewTrebleStaff() *Staff {
+	return &Staff{name: "Treble", origin: pitchB5, events: score.events}
+}
+
+func (score *Score) NewBassStaff() *Staff {
+	return &Staff{name: "Bass", origin: pitchD4, events: score.events}
+}
+
+func (score *Score) Init(events *PlumbPort) {
+	score.staves = append(score.staves, score.NewTrebleStaff())
+	score.staves = append(score.staves, score.NewBassStaff())
 	score.beatLen = big.NewRat(1, 4)
+	score.events = events
 }
 
 func (score *Score) ToFrame(beat float64) (FrameN, bool) {
@@ -139,6 +149,7 @@ func (score *Score) LoadBeats(f []FrameN) {
 	for i := 0; i < len(f); i++ {
 		score.beats = append(score.beats, newBeat(i, f[i]))
 	}
+	score.events.C <- BeatChanged{}
 }
 
 func (score *Score) AddBeat(frame FrameN) {
@@ -167,6 +178,7 @@ func (score *Score) AddBeat(frame FrameN) {
 			score.beats[j].index = j
 		}
 	}
+	score.events.C <- BeatChanged{}
 }
 
 func (score *Score) NearestBeat(frame FrameN) *BeatRef {
@@ -236,9 +248,11 @@ func (staff *Staff) SavedNotes() []SavedNote {
 }
 
 func (score *Score) LoadStaves(in []SavedStaff) {
-	score.staves = score.staves[0:0]
+	if len(score.staves) > 0 {
+		score.staves = score.staves[0:0]
+	}
 	for _, saved := range in {
-		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, saved.Muted, nil}
+		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, saved.Muted, nil, score.events}
 		staff.LoadNotes(score, saved.Notes)
 		score.staves = append(score.staves, staff)
 	}
@@ -255,6 +269,7 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote) {
 		note := &Note{saved.Pitch, saved.Duration, score.beats[beati], saved.Offset}
 		staff.AddNote(note)
 	}
+	score.events.C <- StaffChanged{staff}
 }
 
 func (score *Score) Beatf(note *Note) float64 {
@@ -294,9 +309,13 @@ func (staff *Staff) RemoveNote(note *Note) {
 		copy(staff.notes[i:], staff.notes[i+1:])
 		staff.notes = staff.notes[:len(staff.notes) - 1]
 	}
+	staff.events.C <- StaffChanged{staff}
 }
 
 func (staff *Staff) AddNote(note *Note) {
+	defer func() {
+		staff.events.C <- StaffChanged{staff}
+	}()
 	if len(staff.notes) == 0 {
 		staff.notes = append(staff.notes, note)
 		return

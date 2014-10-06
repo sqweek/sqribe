@@ -133,8 +133,22 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 }
 
 func (ww *WaveWidget) SetScore(score *Score) {
+	if ww.score != nil {
+		ww.score.events.Unsub(ww)
+	}
 	ww.score = score
-	//TODO listener stuff
+	if score != nil {
+		events := make(chan interface{})
+		ww.score.events.Sub(ww, events)
+		go func() {
+			for ev := range events {
+				_ = ev
+				// XXX could avoid redraw if the staff/beats aren't visible...
+				ww.renderstate.changed |= SCALE
+				ww.refresh <- ww.rect.r
+			}
+		}()
+	}
 }
 
 func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
@@ -251,9 +265,9 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 						staff.AddNote(ww.mkNote(prospect, note.Duration))
 					} else {
 						ww.getMouseState(pos).note = prospect
+						ww.renderstate.changed |= SCALE
+						ww.refresh <- ww.rect.r
 					}
-					ww.renderstate.changed |= SCALE
-					ww.refresh <- ww.rect.r
 					return true
 				}, GrabCursor
 			}
