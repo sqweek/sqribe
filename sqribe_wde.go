@@ -143,6 +143,10 @@ type QuantizeBeats struct {
 	error *FrameN
 }
 
+func (q QuantizeBeats) Nop() bool {
+	return q.b0 == 0 && q.bN == 0
+}
+
 func intBeat(score *Score, f FrameN) int {
 	b, _ := score.ToBeat(f)
 	return int(b)
@@ -153,16 +157,25 @@ func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan Quan
 	for {
 		select {
 		case ev := <-selxn:
+			q.b0, q.bN = 0, 0
 			if len(G.score.beats) > 0 {
 				switch e := ev.(type) {
 				case FrameRange:
-					q.f0, q.fN = G.score.NearestBeat(e.min).frame, G.score.NearestBeat(e.max).frame
+					f0, fN := G.score.NearestBeat(e.min).frame, G.score.NearestBeat(e.max).frame
+					if Δf(f0, e.min) > 1000 || Δf(fN, e.max) > 1000 {
+						continue
+					}
+					q.f0, q.fN = f0, fN
 					q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
 					q.df = float64(q.fN - q.f0) / float64(q.bN - q.b0)
 					q.error = nil
 				}
 			}
 		case reply := <-apply:
+			if q.Nop() {
+				reply <- true
+				continue
+			}
 			fmt.Println("quantize apply:", q)
 			for ib := q.b0 + 1; ib <= q.bN - 1; ib++ {
 				fmt.Println("FROM", G.score.beats[ib].frame)
@@ -209,7 +222,7 @@ func quantizeStr() string {
 	c := make(chan QuantizeBeats)
 	G.quantize.calc <- c
 	q := <-c
-	if q.b0 == 0 && q.bN == 0 {
+	if q.Nop() {
 		return ""
 	}
 	bpm := 60.0 * float64(time.Second) / (float64(G.wav.TimeAtFrame(q.fN - q.f0 + 1)) / float64(q.bN - q.b0))

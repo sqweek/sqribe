@@ -57,3 +57,9 @@ func snapto(x, origin, step int) int {
 	return x + sgn * (step - rem)
 }
 
+func Δf(f1, f2 FrameN) FrameN {
+	if f1 > f2 {
+		return f1 - f2
+	}
+	return f2 - f1
+}
