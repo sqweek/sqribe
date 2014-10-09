@@ -137,14 +137,22 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 }
 
 type QuantizeBeats struct {
+	beats BeatRange
 	b0, bN int
-	f0, fN FrameN
 	df float64
 	error *FrameN
 }
 
 func (q QuantizeBeats) Nop() bool {
-	return q.b0 == 0 && q.bN == 0
+	return q.beats.First == nil || q.beats.Last == nil
+}
+
+func (q *QuantizeBeats) reset() {
+	f0, fN := q.beats.First.frame, q.beats.Last.frame
+	/* XXX should be a quantizer per score instead of referencing G.score */
+	q.b0, q.bN = G.score.BeatIndex(q.beats.First), G.score.BeatIndex(q.beats.Last)
+	q.df = float64(fN - f0) / float64(q.bN - q.b0)
+	q.error = nil
 }
 
 func intBeat(score *Score, f FrameN) int {
@@ -152,23 +160,22 @@ func intBeat(score *Score, f FrameN) int {
 	return int(b)
 }
 
-func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan QuantizeBeats, redraw chan image.Rectangle) {
+func quantizer(selxn chan interface{}, beats chan interface{}, apply chan chan bool, calc chan chan QuantizeBeats, redraw chan image.Rectangle) {
 	var q QuantizeBeats
 	for {
 		select {
+		case ev := <-beats:
+			if _, ok := ev.(BeatChanged); ok && !q.Nop() {
+				q.reset()
+			}
 		case ev := <-selxn:
-			q.b0, q.bN = 0, 0
 			if len(G.score.beats) > 0 {
 				switch e := ev.(type) {
 				case FrameRange:
-					f0, fN := G.score.NearestBeat(e.min).frame, G.score.NearestBeat(e.max).frame
-					if Δf(f0, e.min) > 1000 || Δf(fN, e.max) > 1000 {
-						continue
-					}
-					q.f0, q.fN = f0, fN
-					q.b0, q.bN = intBeat(&G.score, q.f0), intBeat(&G.score, q.fN)
-					q.df = float64(q.fN - q.f0) / float64(q.bN - q.b0)
-					q.error = nil
+					q.beats = BeatRange{nil, nil}
+				case BeatRange:
+					q.beats = e
+					q.reset()
 				}
 			}
 		case reply := <-apply:
@@ -177,20 +184,26 @@ func quantizer(selxn chan interface{}, apply chan chan bool, calc chan chan Quan
 				continue
 			}
 			fmt.Println("quantize apply:", q)
+			f0 := q.beats.First.frame
 			for ib := q.b0 + 1; ib <= q.bN - 1; ib++ {
 				fmt.Println("FROM", G.score.beats[ib].frame)
-				G.score.beats[ib].frame = q.f0 + FrameN(float64(ib - q.b0) * q.df)
+				G.score.beats[ib].frame = f0 + FrameN(float64(ib - q.b0) * q.df)
 				fmt.Println("  TO", G.score.beats[ib].frame)
 			}
-			G.plumb.score.C <- BeatChanged{}
 			*q.error = 0
+			G.plumb.score.C <- BeatChanged{}
 			redraw <- image.Rect(0, 0, 0, 0)
 			reply <- true
 		case reply := <-calc:
+			if q.Nop() {
+				reply <- q
+				continue
+			}
 			if q.error == nil {
 				q.error = new(FrameN)
+				f0 := q.beats.First.frame
 				for ib := q.b0; ib <= q.bN; ib++ {
-					qf := q.f0 + FrameN(float64(ib - q.b0) * q.df)
+					qf := f0 + FrameN(float64(ib - q.b0) * q.df)
 					af, _ := G.score.ToFrame(float64(ib))
 					ef := FrameN(int64(math.Abs(float64(qf - af))))
 					if ef > *q.error {
@@ -225,7 +238,7 @@ func quantizeStr() string {
 	if q.Nop() {
 		return ""
 	}
-	bpm := 60.0 * float64(time.Second) / (float64(G.wav.TimeAtFrame(q.fN - q.f0 + 1)) / float64(q.bN - q.b0))
+	bpm := 60.0 * float64(time.Second) / (float64(G.wav.TimeAtFrame(q.beats.Last.frame - q.beats.First.frame + 1)) / float64(q.bN - q.b0))
 	errd := G.wav.TimeAtFrame(*q.error)
 	return fmt.Sprintf("%.1fbpm ±%v", bpm, niceDur(errd))
 }
@@ -296,9 +309,10 @@ func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
 	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
 
-	selxn := make(chan interface{})
+	selxn, beats := make(chan interface{}), make(chan interface{})
 	G.plumb.selection.Sub(&G.quantize, selxn)
-	go quantizer(selxn, G.quantize.apply, G.quantize.calc, redraw)
+	G.plumb.score.Sub(&G.quantize, beats)
+	go quantizer(selxn, beats, G.quantize.apply, G.quantize.calc, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)

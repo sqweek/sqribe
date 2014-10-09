@@ -31,8 +31,33 @@ type mouseState struct {
 	note *noteProspect
 }
 
+type TimeRange interface {
+	MinFrame() FrameN
+	MaxFrame() FrameN
+}
+
 type FrameRange struct {
-	min, max FrameN
+	Min, Max FrameN
+}
+
+func (r FrameRange) MinFrame() FrameN {
+	return r.Min
+}
+
+func (r FrameRange) MaxFrame() FrameN {
+	return r.Max
+}
+
+type BeatRange struct {
+	First, Last *BeatRef
+}
+
+func (r BeatRange) MinFrame() FrameN {
+	return r.First.frame
+}
+
+func (r BeatRange) MaxFrame() FrameN {
+	return r.Last.frame
 }
 
 type WaveWidget struct {
@@ -44,7 +69,7 @@ type WaveWidget struct {
 	/* view related state */
 	first_frame FrameN
 	frames_per_pixel int
-	selection *FrameRange
+	selection TimeRange
 	rect struct {
 		r image.Rectangle		// the whole widget's rect
 		wave image.Rectangle	// rect of the waveform display
@@ -82,10 +107,8 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 	return ww.rect.r
 }
 
-func (ww *WaveWidget) SelectAudio(start, end FrameN) {
-	sel := FrameRange{start, end}
-	ww.selection = &sel
-
+func (ww *WaveWidget) SelectAudio(sel TimeRange) {
+	ww.selection = sel
 	G.plumb.selection.C <- sel
 	// XXX could avoid redrawing waveform if selection rendered differently
 	ww.renderstate.changed |= WAV
@@ -95,14 +118,15 @@ func (ww *WaveWidget) SelectAudio(start, end FrameN) {
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	score := ww.score
 	if score == nil {
-		ww.SelectAudio(start, end)
+		ww.SelectAudio(FrameRange{start, end})
 	} else {
-		ww.SelectAudio(score.NearestBeat(start).frame, score.NearestBeat(end).frame)
+		beats := BeatRange{score.NearestBeat(start), score.NearestBeat(end)}
+		ww.SelectAudio(beats)
 	}
 }
 
 func (ww *WaveWidget) GetSelectedFrameRange() (FrameN, FrameN) {
-	return ww.selection.min, ww.selection.max
+	return ww.selection.MinFrame(), ww.selection.MaxFrame()
 }
 
 func (ww *WaveWidget) SetWaveform(wav *Waveform) {
@@ -186,22 +210,6 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 }
 
 func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
-	var updateSelection func(FrameN) = nil
-	if ww.selection.min != ww.selection.max {
-		if beat.frame == ww.selection.min {
-			updateSelection = func(f FrameN) {
-				if f < ww.selection.max {
-					ww.SelectAudio(f, ww.selection.max)
-				}
-			}
-		} else if beat.frame == ww.selection.max {
-			updateSelection = func(f FrameN) {
-				if f > ww.selection.min {
-					ww.SelectAudio(ww.selection.min, f)
-				}
-			}
-		}
-	}
 	return func(pos image.Point, finished bool) bool {
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max {
@@ -210,9 +218,7 @@ func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
 		orig := beat.frame
 		if f != orig {
 			beat.frame = f
-			if updateSelection != nil {
-				updateSelection(f)
-			}
+			ww.score.events.C <- BeatChanged{}
 			ww.renderstate.changed |= SCALE
 			ww.refresh <- ww.rect.r
 		}
@@ -230,7 +236,7 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 		if snap {
 			ww.SelectAudioSnapToBeats(min, max)
 		} else {
-			ww.SelectAudio(min, max)
+			ww.SelectAudio(FrameRange{min, max})
 		}
 		return true
 	}
@@ -294,12 +300,12 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 		}
 	}
 
-	snap := len(ww.score.beats) > 0 && (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
-	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.min)), 2, 0)) {
-		return ww.selectDrag(ww.selection.max, snap), ResizeLCursor
+	snap := ww.score != nil && len(ww.score.beats) > 0 && (mouse.Y - ww.rect.r.Min.Y < 4 * ww.rect.r.Dy() / 5)
+	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.MinFrame())), 2, 0)) {
+		return ww.selectDrag(ww.selection.MaxFrame(), snap), ResizeLCursor
 	}
-	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.max)), 2, 0)) {
-		return ww.selectDrag(ww.selection.min, snap), ResizeRCursor
+	if mouse.In(padRect(vrect(ww.rect.r, ww.PixelAtFrame(ww.selection.MaxFrame())), 2, 0)) {
+		return ww.selectDrag(ww.selection.MinFrame(), snap), ResizeRCursor
 	}
 
 	/* if we're not dragging anything in particular, drag to select */
