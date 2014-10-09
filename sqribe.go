@@ -124,12 +124,15 @@ func playToggle() {
 	N := fN - f0 + 1
 	// pad to nearest 64th frame, minimum 20 frames
 	nfPad := 19 + (64 - (N + 19) % 64)
-	loopPad := make([]int16, nchan*(2*nfPad + 1))
+	loopPad := make([]int16, nchan*nfPad)
 	for i := FrameN(0); i < nfPad; i++ {
 		α := 1.0 - float64(i)/float64(nfPad)
 		for j := FrameN(0); j < nchan; j++ {
-			loopPad[nchan*i + j] = int16(float64(frameN[j]) * α)
-			loopPad[nchan*(2*nfPad - i) + j] = int16(float64(frame0[j]) * α)
+			if α <= 0.5 {
+				loopPad[nchan*i + j] = int16(float64(frame0[j]) * 2 * (0.5 - α))
+			} else {
+				loopPad[nchan*i + j] = int16(float64(frameN[j]) * 2 * (α - 0.5))
+			}
 		}
 	}
 
