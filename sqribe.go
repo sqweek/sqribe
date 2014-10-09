@@ -210,7 +210,7 @@ func playToggle() {
 				break
 			}
 			i += nf
-			if i > padN {
+			if i >= padN {
 				i = 0
 				mi = 0
 			}

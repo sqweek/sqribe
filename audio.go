@@ -154,8 +154,8 @@ func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 		return
 	}
 	w, v := mixVolumes()
-	buf.Mix(out, w, v)
-	currentIndex += SampleN(len(out))
+	n := buf.Mix(out, w, v)
+	currentIndex += SampleN(n)
 	currentIndex %= currentLen
 	currentTime = time
 }
