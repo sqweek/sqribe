@@ -125,8 +125,8 @@ func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	}
 }
 
-func (ww *WaveWidget) GetSelectedFrameRange() (FrameN, FrameN) {
-	return ww.selection.MinFrame(), ww.selection.MaxFrame()
+func (ww *WaveWidget) GetSelectedTimeRange() TimeRange {
+	return ww.selection
 }
 
 func (ww *WaveWidget) SetWaveform(wav *Waveform) {

@@ -107,7 +107,8 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	if dx0 >= size.X {
 		return
 	}
-	sel0, selN := ww.GetSelectedFrameRange()
+	rng := ww.GetSelectedTimeRange()
+	sel0, selN := rng.MinFrame(), rng.MaxFrame()
 	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))

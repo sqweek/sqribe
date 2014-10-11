@@ -109,7 +109,8 @@ func playToggle() {
 		return
 	}
 
-	f0, fN := G.ww.GetSelectedFrameRange()
+	rng := G.ww.GetSelectedTimeRange()
+	f0, fN := rng.MinFrame(), rng.MaxFrame()
 
 	if f0 == fN {
 		fN = G.wav.ToFrame(G.wav.NSamples) - 1

@@ -112,18 +112,31 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				if s, playing := CurrentSample(); playing {
 					G.score.AddBeat(G.wav.ToFrame(s))
 				}
-			case wde.KeyS:
-				SaveState(G.audiofile)
-			case wde.KeyT:
-				G.mixer.metronome = !G.mixer.metronome
-			case wde.KeyA:
-				G.mixer.audio = !G.mixer.audio
-			case wde.KeyM:
-				G.mixer.midi = !G.mixer.midi
-			case wde.KeyQ:
-				c := make(chan bool)
-				G.quantize.apply <- c
-				<-c
+			case wde.KeyDelete:
+				rng := G.ww.GetSelectedTimeRange()
+				if beats, ok := rng.(BeatRange); ok {
+					G.score.RemoveNotes(beats)
+				}
+			default:
+				switch e.Glyph {
+				case "%":
+					rng := G.ww.GetSelectedTimeRange()
+					if beats, ok := rng.(BeatRange); ok {
+						G.score.RepeatNotes(beats)
+					}
+				case "s", "S":
+					SaveState(G.audiofile)
+				case "t", "T":
+					G.mixer.metronome = !G.mixer.metronome
+				case "a", "A":
+					G.mixer.audio = !G.mixer.audio
+				case "m", "M":
+					G.mixer.midi = !G.mixer.midi
+				case "q", "Q":
+					c := make(chan bool)
+					G.quantize.apply <- c
+					<-c
+				}
 			}
 		case wde.ResizeEvent:
 			if refreshTimer != nil {

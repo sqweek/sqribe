@@ -313,9 +313,11 @@ func (staff *Staff) RemoveNote(note *Note) {
 }
 
 func (staff *Staff) AddNote(note *Note) {
-	defer func() {
-		staff.events.C <- StaffChanged{staff}
-	}()
+	staff.addNote(note)
+	staff.events.C <- StaffChanged{staff}
+}
+
+func (staff *Staff) addNote(note *Note) {
 	if len(staff.notes) == 0 {
 		staff.notes = append(staff.notes, note)
 		return
@@ -331,6 +333,57 @@ func (staff *Staff) AddNote(note *Note) {
 		staff.notes = append(staff.notes, nil)
 		copy(staff.notes[i+1:], staff.notes[i:])
 		staff.notes[i] = note
+	}
+}
+
+func (score *Score) RepeatNotes(rng BeatRange) {
+	if rng.First == rng.Last {
+		return
+	}
+	score.RLock()
+	defer score.RUnlock()
+	n := rng.Last.index - rng.First.index
+	if extra := rng.Last.index + n - len(score.beats); extra > 0 {
+		/* truncate the source range so we don't go past the defined beats */
+		rng = BeatRange{rng.First, score.beats[rng.Last.index - extra]}
+	}
+	repeatNote := func (staff *Staff, note *Note) {
+		note2 := Note{note.Pitch, note.Duration, score.beats[note.Beat.index + n], note.Offset}
+		staff.AddNote(&note2)
+	}
+	score.perStaffNote(rng, repeatNote)
+}
+
+func (score *Score) RemoveNotes(rng BeatRange) {
+	f := func(staff *Staff, note *Note) {
+		staff.RemoveNote(note)
+	}
+	score.perStaffNote(rng, f)
+}
+
+func (score *Score) perStaffNote(rng BeatRange, f func(staff *Staff, note *Note)) {
+	for i := 0; i < len(score.staves); i++ {
+		staff := score.staves[i]
+		if !staff.Muted {
+			staff.perNote(rng, func(note *Note) {f(staff, note)})
+			/* XXX should be a way to prevent the change event */
+			staff.events.C <- StaffChanged{staff}
+		}
+	}
+}
+
+func (staff *Staff) perNote(rng BeatRange, f func(note *Note)) {
+	searchFn := func(i int)bool { return rng.First.frame <= staff.notes[i].Beat.frame }
+	selectedNotes := make([]*Note, 0, 16)
+	for i := sort.Search(len(staff.notes), searchFn); i < len(staff.notes); i++ {
+		note := staff.notes[i]
+		if note.Beat.frame > rng.Last.frame {
+			break
+		}
+		selectedNotes = append(selectedNotes, note)
+	}
+	for _, note := range selectedNotes {
+		f(note)
 	}
 }
 
