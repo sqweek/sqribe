@@ -110,6 +110,11 @@ func (c *cache) fetcher() *Chunk {
 			go func() { time.Sleep(1000 * time.Millisecond); c.iochan <- id }()
 			continue
 		}
+		if c.bytesWritten == -1 && id > c.lastChunkId {
+			/* this chunk is past EOF; cache a nil chunk */
+			c.add(id, nil)
+			continue
+		}
 		file, err := os.Open(filename)
 		if err != nil {
 			Printf("fetcher: %v\n", err)
@@ -139,6 +144,9 @@ func (c *cache) add(id uint64, chunk *Chunk) {
 	c.iodone.L.Lock()
 	c.iodone.Broadcast()
 	c.iodone.L.Unlock()
+	if chunk == nil {
+		return
+	}
 	c.broadcast(chunk)
 	gone := c.lru.add(chunk)
 	if (gone != nil) {

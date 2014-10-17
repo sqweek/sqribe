@@ -98,7 +98,6 @@ func (chunk *Chunk) copy(samples []int16, i0 SampleN) {
 /* Blocks until frames from f0 to fN (inclusive) have been read from disk */
 func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
 	s0, sN := wav.SampleRange(f0, fN)
-	samples := make([]int16, sN - s0 + 1)
 	chunk0, chunkN := wav.cache.Bounds(s0, sN)
 	//Println("Frames", f0, fN, s0, sN, chunk0, chunkN)
 	if chunk0 == chunkN {
@@ -107,6 +106,7 @@ func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
 		//Println("Frames: chunk", chunk.id, chunk.I0, len(chunk.Data))
 		return chunk.Data[s0 - chunk.I0:sN - chunk.I0 + 1]
 	}
+	samples := make([]int16, sN - s0 + 1)
 	chunks := make(chan *Chunk, chunkN - chunk0 + 1)
 	for id := chunk0; id <= chunkN; id++ {
 		go func(i uint64) { chunks <- wav.cache.Wait(i) }(id)
@@ -168,7 +168,10 @@ func (wav *Waveform) TimeAtFrame(frame FrameN) time.Duration {
 }
 
 func (wav *Waveform) FrameAtTime(t time.Duration) FrameN {
-	f := FrameN(float64(t) / float64(time.Second) * float64(wav.rate))
+	return FrameN(float64(t) / float64(time.Second) * float64(wav.rate))
+}
+
+func (wav *Waveform) ClipFrame(f FrameN) FrameN {
 	if f < 0 {
 		f = 0
 	}

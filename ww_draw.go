@@ -165,19 +165,19 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		draw.Draw(dst, image.Rect(x-1, r.Min.Y+2, x+2, r.Min.Y+3), &image.Uniform{black}, r.Min, draw.Over)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
-	if minX >= maxX {
-		return
-	}
 	for _, staff := range ww.score.staves {
 		rect := ww.rect.staves[staff]
+		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)
+		if minX >= maxX {
+			continue
+		}
+
 		mid := rect.Min.Y + rect.Dy() / 2
 		minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
 		for y := minY; y <= maxY; y += yspacing {
 			line := image.Rect(minX, y, maxX, y+1)
 			draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 		}
-
-		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)
 
 		ww.drawNotes(dst, rect, staff, mid)
 
@@ -290,10 +290,13 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	x0 := aToX(a0)
 	xN := aToX(aN)
-	pixPerMaj := float64(xN - x0) / (aN - a0)
+	pixPerMaj := math.Abs(float64(xN - x0) / (aN - a0))
 	ΔMaj := Δa
 	minPerMaj := 0
-	if (pixPerMaj < targetPixPerTick) {
+	if math.Abs(aN - a0) < 1e-6 {
+		pixPerMaj = float64(r.Dx() * 2)
+	}
+	if pixPerMaj < targetPixPerTick {
 		ΔMaj = math.Trunc(0.5 + targetPixPerTick / pixPerMaj)
 	} else {
 		minPerMaj = int(pixPerMaj / targetPixPerTick) - 1
@@ -307,13 +310,13 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	for a := a0; aToX(a) < xN + int(pixPerMaj); a += ΔMaj {
 		for i := 1; i <= minPerMaj; i++ {
 			am := a + float64(i) * (ΔMaj / float64(minPerMaj + 1))
-			if am >= a0 && am <= aN {
-				x := aToX(am)
+			x := aToX(am)
+			if x >= r.Min.X && x < r.Max.X {
 				draw.Draw(dst, tickRect(r, bottom, x, 4), &image.Uniform{fg}, image.ZP, draw.Over)
 			}
 		}
-		if a >= a0 && a <= aN {
-			x := aToX(a)
+		x := aToX(a)
+		if x >= r.Min.X && x < r.Max.X {
 			draw.Draw(dst, tickRect(r, bottom, x, 7), &image.Uniform{fg}, image.ZP, draw.Over)
 			if x > lastTextX + textSpacing {
 				lastTextX = x
@@ -338,13 +341,12 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	label := func(beatf float64) string {
 		return fmt.Sprintf("b%d", int(beatf) + 1)
 	}
-	b0, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Min.X)).frame)
-	bN, _ := score.ToBeat(score.NearestBeat(ww.FrameAtPixel(r.Max.X)).frame)
-	ww.drawTicks(dst, r, true, b0, bN, 1.0, beatToX, label)
+	b0 := score.BeatIndex(score.NearestBeat(ww.FrameAtPixel(r.Min.X)))
+	bN := score.BeatIndex(score.NearestBeat(ww.FrameAtPixel(r.Max.X)))
+	ww.drawTicks(dst, r, true, float64(b0), float64(bN), 1.0, beatToX, label)
 }
 
 
-/* assumes 'r' covers the widget's width */
 func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	wav := ww.wav
 	if wav == nil {
