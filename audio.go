@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.google.com/p/portaudio-go/portaudio"
+	"log"
 	"runtime"
 	"sync"
 )
@@ -25,6 +26,18 @@ var (
 	currentTime portaudio.StreamCallbackTimeInfo
 )
 
+func HostApi() *portaudio.HostApiInfo {
+	/* TODO allow user to override host api */
+	for _, api := range PlatformHostApis() {
+		hostApi, err := portaudio.HostApi(api)
+		if err == nil {
+			return hostApi
+		}
+		log.Println(err)
+	}
+	return nil
+}
+
 func AudioInit() (uint8, uint32, error) {
 	err := portaudio.Initialize()
 	if err != nil {
@@ -33,8 +46,11 @@ func AudioInit() (uint8, uint32, error) {
 
 	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
 
-	jack, err := portaudio.HostApi(portaudio.JACK)
-	dev := jack.DefaultOutputDevice
+	host := HostApi()
+	if host == nil {
+		log.Fatal("no host APIs available!")
+	}
+	dev := host.DefaultOutputDevice
 	params := portaudio.HighLatencyParameters(nil, dev)
 	s, err := portaudio.OpenStream(params, paCallback)
 	if err != nil {
