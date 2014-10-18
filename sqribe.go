@@ -230,7 +230,7 @@ func playToggle() {
 				break
 			}
 			G.ww.SetCursorByFrame(G.wav.ToFrame(s))
-			time.Sleep(33 * time.Millisecond)
+			time.Sleep(66 * time.Millisecond)
 		}
 	}()
 }

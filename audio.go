@@ -123,6 +123,7 @@ func (ring *RingBuffer) Mix(dest []int16, volw, volm float64) int {
 		ring.mix(dest, ring.head, newHead, volw, volm)
 	}
 	ring.head = newHead
+	// XXX we are in the audio callback; is Signal guaranteed not to block?
 	ring.write.Signal() // there might be a thread waiting for space in Append
 	return n
 }
