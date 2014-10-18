@@ -28,3 +28,7 @@ func CacheFile() string {
 func SaveDir() string {
 	return saveDir
 }
+
+func ReplaceFile(src, dst string) error {
+	return os.Rename(src, dst)
+}

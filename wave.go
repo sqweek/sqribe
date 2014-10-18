@@ -35,6 +35,9 @@ func (wav *Waveform) decodefn(sample *sound.Sample) func() []int16 {
 	/* returns zero-length slice at EOF */
 	return func() []int16 {
 		n := sample.Decode()
+		if sample.Flags() & (1 << 30) != 0 {
+			Println("decode error:", sound.GetError())
+		}
 		if n > 0 {
 			samps := sample.Buffer_int16()
 			Printf("decoded %d bytes (%d samples)\n", n, len(samps))

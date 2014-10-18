@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"strings"
@@ -77,7 +78,7 @@ func stateV(hdr VersionHeader) state {
 }
 
 func flatpath(r rune) rune {
-	if r < 26 || strings.ContainsRune(" /", r) {
+	if r < 26 || strings.ContainsRune(" /:\\", r) {
 		return '_'
 	}
 	return r
@@ -117,16 +118,24 @@ func SaveState(filename string) error {
 	if err != nil {
 		return err
 	}
+	err = WriteState(tmpfile)
+	if err != nil {
+		return err
+	}
+	err = ReplaceFile(tmpfile.Name(), SaveDir() + "/" + k)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func WriteState(tmpfile io.WriteCloser) error {
 	defer tmpfile.Close()
 	j := json.NewEncoder(tmpfile)
 	j.Encode(&currentVersion)
 	s := stateV(currentVersion)
 	s.Capture()
-	err = j.Encode(s)
-	if err != nil {
-		return err
-	}
-	err = os.Rename(tmpfile.Name(), SaveDir() + "/" + k)
+	err := j.Encode(s)
 	if err != nil {
 		return err
 	}
