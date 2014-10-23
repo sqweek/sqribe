@@ -293,10 +293,9 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	pixPerMaj := math.Abs(float64(xN - x0) / (aN - a0))
 	ΔMaj := Δa
 	minPerMaj := 0
-	if math.Abs(aN - a0) < 1e-6 {
+	if math.Abs(aN - a0) < 1e-6 || xN <= x0 {
 		pixPerMaj = float64(r.Dx() * 2)
-	}
-	if pixPerMaj < targetPixPerTick {
+	} else if pixPerMaj < targetPixPerTick {
 		ΔMaj = math.Trunc(0.5 + targetPixPerTick / pixPerMaj)
 	} else {
 		minPerMaj = int(pixPerMaj / targetPixPerTick) - 1
@@ -307,7 +306,12 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 		textY = r.Max.Y - 14
 	}
 	lastTextX := r.Min.X - textSpacing
+	prevA := math.NaN()
 	for a := a0; aToX(a) < xN + int(pixPerMaj); a += ΔMaj {
+		if !math.IsNaN(prevA) && aToX(a) <= aToX(prevA) {
+			break
+		}
+		prevA = a
 		for i := 1; i <= minPerMaj; i++ {
 			am := a + float64(i) * (ΔMaj / float64(minPerMaj + 1))
 			x := aToX(am)
@@ -334,7 +338,7 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	beatToX := func(beatf float64) int {
 		frame, ok := score.ToFrame(beatf)
 		if !ok {
-			return r.Max.X * 2
+			return r.Max.X + r.Dx()
 		}
 		return ww.PixelAtFrame(frame)
 	}
