@@ -142,27 +142,34 @@ func (score *Score) BeatIndex(beat *BeatRef) int {
 
 func (score *Score) LoadBeats(f []FrameN) {
 	score.Lock()
-	defer score.Unlock()
 	if len(score.beats) > 0 {
 		score.beats = score.beats[0:0]
 	}
 	for i := 0; i < len(f); i++ {
 		score.beats = append(score.beats, newBeat(i, f[i]))
 	}
+	score.Unlock()
 	score.events.C <- BeatChanged{}
 }
 
 func (score *Score) AddBeat(frame FrameN) {
 	score.Lock()
-	defer score.Unlock()
+	changed := score.addBeat(frame)
+	score.Unlock()
+	if changed {
+		score.events.C <- BeatChanged{}
+	}
+}
+
+func (score *Score) addBeat(frame FrameN) bool {
 	if len(score.beats) == 0 {
 		score.beats = append(score.beats, newBeat(0, frame))
-		return
+		return true
 	}
 	tolerance := FrameN(10000) //XXX should be based on sample rate/bpm
 	i, exact := score.index(frame)
 	if exact {
-		return
+		return false
 	}
 	if i > 0 && frame - score.beats[i-1].frame < tolerance {
 		score.beats[i-1].frame = (score.beats[i-1].frame + frame) / 2
@@ -178,7 +185,7 @@ func (score *Score) AddBeat(frame FrameN) {
 			score.beats[j].index = j
 		}
 	}
-	score.events.C <- BeatChanged{}
+	return true
 }
 
 func (score *Score) NearestBeat(frame FrameN) *BeatRef {
@@ -341,24 +348,35 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 		return
 	}
 	score.RLock()
-	defer score.RUnlock()
 	n := rng.Last.index - rng.First.index
 	if extra := rng.Last.index + n - len(score.beats); extra > 0 {
 		/* truncate the source range so we don't go past the defined beats */
 		rng = BeatRange{rng.First, score.beats[rng.Last.index - extra]}
 	}
+	affectedStaves := make(map[*Staff]bool)
 	repeatNote := func (staff *Staff, note *Note) {
 		note2 := Note{note.Pitch, note.Duration, score.beats[note.Beat.index + n], note.Offset}
-		staff.AddNote(&note2)
+		staff.addNote(&note2)
+		affectedStaves[staff] = true
 	}
 	score.perStaffNote(rng, repeatNote)
+	score.RUnlock()
+	for staff, _ := range affectedStaves {
+		staff.events.C <- StaffChanged{staff}
+	}
 }
 
+
 func (score *Score) RemoveNotes(rng BeatRange) {
+	affectedStaves := make(map[*Staff]bool)
 	f := func(staff *Staff, note *Note) {
 		staff.RemoveNote(note)
+		affectedStaves[staff] = true
 	}
 	score.perStaffNote(rng, f)
+	for staff, _ := range affectedStaves {
+		staff.events.C <- StaffChanged{staff}
+	}
 }
 
 func (score *Score) perStaffNote(rng BeatRange, f func(staff *Staff, note *Note)) {
@@ -366,8 +384,6 @@ func (score *Score) perStaffNote(rng BeatRange, f func(staff *Staff, note *Note)
 		staff := score.staves[i]
 		if !staff.Muted {
 			staff.perNote(rng, func(note *Note) {f(staff, note)})
-			/* XXX should be a way to prevent the change event */
-			staff.events.C <- StaffChanged{staff}
 		}
 	}
 }
