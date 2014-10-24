@@ -252,8 +252,6 @@ func open(filename string, fmt sound.AudioInfo) error {
 	return nil
 }
 
-var audioFile = flag.String("audio", "/d/music/Birds of Tokyo/Circles.mp3", "audio file")
-
 func mustMkFont(filename string, size int) *Font {
 	font, err := NewFont(filename, size)
 	if err != nil {
@@ -288,10 +286,13 @@ func main() {
 	fmt.Println(actualFmt)
 
 	flag.Parse()
+	audioFile := flag.Arg(0)
 
-	err = open(*audioFile, actualFmt)
-	if err != nil {
-		log.Fatal(err)
+	if len(audioFile) > 0 {
+		err = open(audioFile, actualFmt)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
