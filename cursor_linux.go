@@ -51,6 +51,7 @@ func NewCursorCtl(wdewin wde.Window) CursorCtl {
 		panic("wdewin is not *wdexgb.Window")
 	}
 	if len(xcursors) == 0 {
+		// note Win() is a local wde hack to get the native window handle
 		initCursors(xgbwin.Win().X)
 	}
 	return &XgbCursorCtl{xwin: xgbwin.Win()}
