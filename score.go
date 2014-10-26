@@ -117,6 +117,18 @@ func (score *Score) ToBeat(frame FrameN) (float64, bool) {
 	return float64(i-1) + α, true
 }
 
+func (score *Score) ClipBeat(index int) int {
+	if index == -1 || len(score.beats) == 0 {
+		return -1
+	}
+	score.RLock()
+	defer score.RUnlock()
+	if index > len(score.beats) {
+		return len(score.beats) - 1
+	}
+	return index
+}
+
 func (score *Score) BeatFrames() []FrameN {
 	score.RLock()
 	defer score.RUnlock()
