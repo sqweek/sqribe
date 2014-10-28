@@ -166,8 +166,8 @@ func (wav *Waveform) MaxAmp() int16 {
 }
 
 func (wav *Waveform) TimeAtFrame(frame FrameN) time.Duration {
-	durPerFrame := time.Second / time.Duration(wav.rate)
-	return time.Duration(frame) * durPerFrame
+	secs := float64(frame) / float64(wav.rate)
+	return time.Duration(secs * 1000000) * time.Microsecond
 }
 
 func (wav *Waveform) FrameAtTime(t time.Duration) FrameN {

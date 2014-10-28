@@ -16,12 +16,14 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	ww.renderstate.changed = 0
 	if !r.Eq(ww.rect.r) {
 		/* our widget size has chaged, redraw everything */
-		change |= WAV | SCALE | CURSOR
+		change |= EVERYTHING
+		ww.renderstate.waveRulers = nil
 	}
 	if change != 0 {
 		axish := 20
 		infow := 100
 		ww.rect.r = r
+		ww.rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
 		ww.rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 		if change & SCALE != 0 && ww.score != nil && len(ww.score.staves) > 0 {
 			// TODO clear map
@@ -35,17 +37,24 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 			}
 		}
 		ww.renderstate.img = image.NewRGBA(ww.rect.r)
-		if change & WAV != 0 || ww.renderstate.waveform == nil {
-			ww.renderstate.waveform = image.NewRGBA(ww.rect.wave)
-			ww.drawWave(ww.renderstate.waveform, ww.rect.wave)
+		if ww.renderstate.waveRulers == nil {
+			ww.renderstate.waveRulers = image.NewRGBA(ww.rect.waveRulers)
+			change |= WAV | BEATS | VIEWPOS
 		}
-		draw.Draw(ww.renderstate.img, ww.rect.wave, ww.renderstate.waveform, ww.rect.wave.Min, draw.Src)
+		if change & WAV != 0 {
+			ww.drawWave(ww.renderstate.waveRulers, ww.rect.wave)
+		}
+		if change & BEATS != 0 || change & VIEWPOS != 0 {
+			ww.drawBeatAxis(ww.renderstate.waveRulers, aboveRect(ww.rect.wave, axish))
+		}
+		if change & VIEWPOS != 0 {
+			ww.drawTimeAxis(ww.renderstate.waveRulers, belowRect(ww.rect.wave, axish))
+		}
+		draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
 		ww.drawScale(ww.renderstate.img, ww.rect.wave, infow)
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursorX, r.Min.Y, ww.cursorX+1, r.Max.Y), &image.Uniform{curcol}, r.Min, draw.Src)
-		ww.drawBeatAxis(ww.renderstate.img, aboveRect(ww.rect.wave, axish))
-		ww.drawTimeAxis(ww.renderstate.img, belowRect(ww.rect.wave, axish))
 	}
 	draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 }
@@ -297,10 +306,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	lastTextX := r.Min.X - textSpacing
 	for i, a := range vals {
 		x := aToX(a)
-		if x < r.Min.X || x < lastMajX + targetPixPerTick {
-			continue
-		}
-		if x < r.Max.X {
+		if x >= r.Min.X && x < r.Max.X && x >= lastMajX + targetPixPerTick {
 			lastMajX = x
 			draw.Draw(dst, tickRect(r, bottom, x, 7), &image.Uniform{fg}, image.ZP, draw.Over)
 			if x > lastTextX + textSpacing {
@@ -358,7 +364,7 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	wav := ww.wav
 	tToX := func(t float64) int {
-		return ww.PixelAtFrame(wav.FrameAtTime(time.Duration(t) * time.Second))
+		return ww.PixelAtFrame(wav.FrameAtTime(time.Duration(t * 1000.0) * time.Millisecond))
 	}
 	label := func(t float64) string {
 		dur := time.Duration(t) * time.Second

@@ -10,9 +10,13 @@ import (
 type changeMask int
 
 const (
-	WAV changeMask = 1 << iota + 1
+	WAV changeMask = 1 << iota
 	SCALE
 	CURSOR
+	BEATS
+	VIEWPOS
+	MAXBIT
+	EVERYTHING changeMask = MAXBIT - 1
 )
 
 const beatIncursion = 5 // pixels
@@ -73,13 +77,14 @@ type WaveWidget struct {
 	rect struct {
 		r image.Rectangle		// the whole widget's rect
 		wave image.Rectangle	// rect of the waveform display
+		waveRulers image.Rectangle	// waveform + rulers
 		staves map[*Staff] image.Rectangle
 	}
 
 	/* renderer related state */
 	renderstate struct {
 		img *image.RGBA
-		waveform *image.RGBA
+		waveRulers *image.RGBA
 		changed changeMask
 	}
 	mouse struct {
@@ -152,7 +157,7 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 			}
 		}()
 	}
-	ww.renderstate.changed |= WAV
+	ww.renderstate.changed |= WAV | VIEWPOS
 	ww.refresh <- ww.rect.r
 }
 
@@ -166,7 +171,9 @@ func (ww *WaveWidget) SetScore(score *Score) {
 		ww.score.events.Sub(ww, events)
 		go func() {
 			for ev := range events {
-				_ = ev
+				if _, ok := ev.(BeatChanged); ok {
+					ww.renderstate.changed |= BEATS
+				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
 				ww.renderstate.changed |= SCALE
 				ww.refresh <- ww.rect.r
@@ -219,7 +226,7 @@ func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
 		if f != orig {
 			beat.frame = f
 			ww.score.events.C <- BeatChanged{}
-			ww.renderstate.changed |= SCALE
+			ww.renderstate.changed |= SCALE | BEATS
 			ww.refresh <- ww.rect.r
 		}
 		return true
@@ -439,7 +446,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 	}
 	diff := int(ww.first_frame - original)
 	if diff != 0 {
-		ww.renderstate.changed |= WAV | CURSOR
+		ww.renderstate.changed |= WAV | CURSOR | VIEWPOS
 		ww.mouse.state = nil
 		ww.refresh <- ww.rect.r
 	}
@@ -459,7 +466,7 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 		dx := x - ww.rect.wave.Min.X
 		ww.first_frame = frameAtMouse - FrameN(dx * fpp)
 		ww.frames_per_pixel = fpp
-		ww.renderstate.changed |= WAV | CURSOR
+		ww.renderstate.changed |= WAV | CURSOR | VIEWPOS
 		ww.mouse.state = nil
 		ww.refresh <- ww.rect.r
 	}
