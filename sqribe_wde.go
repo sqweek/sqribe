@@ -37,6 +37,10 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				if e.Where.In(G.ww.Rect()) {
 					G.ww.RightButtonDown(e.Where)
 				}
+			case wde.WheelUpButton:
+				G.ww.Zoom(0.75)
+			case wde.WheelDownButton:
+				G.ww.Zoom(1.50)
 			}
 		case wde.MouseUpEvent:
 			switch (e.Which) {
