@@ -175,6 +175,7 @@ func (ww *WaveWidget) SetScore(score *Score) {
 			}
 		}()
 	}
+	ww.renderstate.changed |= SCALE
 	ww.publish(score)
 }
 
