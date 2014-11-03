@@ -95,7 +95,7 @@ type WaveWidget struct {
 	cursorX int
 }
 
-func NewWaveWidget(refresh chan image.Rectangle) *WaveWidget {
+func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	var ww WaveWidget
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512

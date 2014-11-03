@@ -5,7 +5,6 @@ import (
 	"github.com/neagix/Go-SDL/sdl/audio"
 	"github.com/neagix/Go-SDL/sound"
 	"github.com/sqweek/fluidsynth"
-	"image"
 	"sort"
 	"time"
 	"flag"
@@ -296,7 +295,7 @@ func main() {
 	G.synth = synth
 	synth.ProgramChange(15, instWoodblock)
 
-	redraw := make(chan image.Rectangle, 10)
+	redraw := make(chan Widget, 10)
 
 	G.ww = NewWaveWidget(redraw)
 
@@ -313,7 +312,7 @@ func main() {
 	G.ww.SetWaveform(G.wav)
 	G.ww.SetScore(&G.score)
 
-	redraw <- image.Rect(0,0,0,0)
+	redraw <- nil
 
 	wg.Wait()
 

@@ -10,6 +10,10 @@ import (
 
 type DragFn func(image.Point, bool) bool
 
+type Widget interface {
+	Rect() image.Rectangle
+}
+
 type Hoverable interface {
 	MouseMoved(image.Point)
 }
@@ -105,7 +109,7 @@ func (bw *BpmWidget) SetBpm(bpm float64) {
 type WidgetCore struct {
 	r image.Rectangle
 	event chan<- interface{}
-	refresh chan image.Rectangle
+	refresh chan Widget
 }
 
 func (w *WidgetCore) Rect() image.Rectangle {
@@ -114,7 +118,7 @@ func (w *WidgetCore) Rect() image.Rectangle {
 
 func (w *WidgetCore) publish(ev interface{}) {
 	if w.refresh != nil {
-		w.refresh <- w.Rect()
+		w.refresh <- w
 	}
 	if w.event != nil {
 		w.event <- ev
@@ -130,7 +134,7 @@ type SliderMoved struct {
 	Slider *SliderWidget
 }
 
-func NewSlider(α float64, refresh chan image.Rectangle) *SliderWidget {
+func NewSlider(α float64, refresh chan Widget) *SliderWidget {
 	return &SliderWidget{WidgetCore{refresh: refresh}, α}
 }
 

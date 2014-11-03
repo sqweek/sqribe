@@ -16,7 +16,7 @@ import (
 
 var cursorCtl CursorCtl
 
-func event(events <-chan interface{}, redraw chan image.Rectangle, done chan bool, wg *sync.WaitGroup) {
+func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
 	defer func() {
 		done <- true
 		wg.Done()
@@ -144,7 +144,7 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 			if refreshTimer != nil {
 				refreshTimer.Stop()
 			}
-			refreshTimer = time.AfterFunc(50*time.Millisecond, func() {redraw <- image.Rect(0, 0, 0, 0)})
+			refreshTimer = time.AfterFunc(50*time.Millisecond, func() {redraw <- nil})
 		case wde.CloseEvent:
 			return
 		}
@@ -175,7 +175,7 @@ func intBeat(score *Score, f FrameN) int {
 	return int(b)
 }
 
-func quantizer(selxn chan interface{}, beats chan interface{}, apply chan chan bool, calc chan chan QuantizeBeats, redraw chan image.Rectangle) {
+func quantizer(selxn chan interface{}, beats chan interface{}, apply chan chan bool, calc chan chan QuantizeBeats, redraw chan Widget) {
 	var q QuantizeBeats
 	for {
 		select {
@@ -207,7 +207,7 @@ func quantizer(selxn chan interface{}, beats chan interface{}, apply chan chan b
 			}
 			*q.error = 0
 			G.plumb.score.C <- BeatChanged{}
-			redraw <- image.Rect(0, 0, 0, 0)
+			redraw <- G.ww
 			reply <- true
 		case reply := <-calc:
 			if q.Nop() {
@@ -264,21 +264,21 @@ func drawstatus(dst draw.Image, r image.Rectangle) {
 	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s  %s", G.ww.Status(), quantizeStr()))
 }
 
-func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
+func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 	rate := time.Millisecond * 33 /* maximum refresh rate */
 	lastframe := time.Now().Add(-rate)
 	var refresh func()
 	merged := 0
 	for {
 		select {
-		case <-redraw:
+		case widget := <-redraw:
 			now := time.Now()
 			nextframe := lastframe.Add(rate)
 			if refresh != nil || now.Before(nextframe) {
 				merged++
 				if refresh == nil {
 					refresh = func() {
-						redraw <- image.Rect(0,0,0,0)
+						redraw <- widget
 						refresh = nil
 					}
 					time.AfterFunc(nextframe.Sub(now), refresh)
@@ -312,7 +312,7 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 	}
 }
 
-func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
+func InitWde(redraw chan Widget) *sync.WaitGroup {
 	dw, err := wde.NewWindow(600, 400)
 	if err != nil {
 		log.Fatal(err)
