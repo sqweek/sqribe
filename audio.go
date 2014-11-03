@@ -156,7 +156,7 @@ func (ring *RingBuffer) Size() int {
 
 func mixVolumes() (audio, midi float64) {
 	audio, midi = 0, 0
-	bias := G.mixer.waveBias
+	bias := G.mixer.waveBias.Value()
 	if G.mixer.audio {
 		audio = bias
 	}

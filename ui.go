@@ -1,11 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"image/draw"
 	"image/color"
 	"image"
 	"time"
-	"fmt"
 )
 
 type DragFn func(image.Point, bool) bool
@@ -15,11 +15,11 @@ type Hoverable interface {
 }
 
 type LeftClickable interface {
-	MouseLeftClicked(image.Point)
+	LeftClick(image.Point)
 }
 
 type RightClickable interface {
-	MouseRightClicked(image.Point)
+	RightClick(image.Point)
 }
 
 type MouseDraggable interface {
@@ -99,4 +99,80 @@ func (bw *BpmWidget) Hit() float64 {
 
 func (bw *BpmWidget) SetBpm(bpm float64) {
 	bw.bpm = bpm
+}
+
+
+type WidgetCore struct {
+	r image.Rectangle
+	event chan<- interface{}
+	refresh chan image.Rectangle
+}
+
+func (w *WidgetCore) Rect() image.Rectangle {
+	return w.r
+}
+
+func (w *WidgetCore) publish(ev interface{}) {
+	if w.refresh != nil {
+		w.refresh <- w.Rect()
+	}
+	if w.event != nil {
+		w.event <- ev
+	}
+}
+
+type SliderWidget struct {
+	WidgetCore
+	α float64
+}
+
+type SliderMoved struct {
+	Slider *SliderWidget
+}
+
+func NewSlider(α float64, refresh chan image.Rectangle) *SliderWidget {
+	return &SliderWidget{WidgetCore{refresh: refresh}, α}
+}
+
+// α is on range [0,1]
+func (s *SliderWidget) SetSlider(α float64) {
+	δ := α - s.α
+	if δ != 0 {
+		s.α = α
+		s.publish(SliderMoved{s})
+	}
+}
+
+func (s *SliderWidget) Value() float64 {
+	return s.α
+}
+
+func (s *SliderWidget) Shunt(delta float64) {
+	α := s.α + delta
+	if α < 0 {
+		α = 0
+	}
+	if α > 1 {
+		α = 1
+	}
+	s.SetSlider(α)
+}
+
+func (s *SliderWidget) LeftClick(mouse image.Point) {
+	s.Shunt(-0.05)
+}
+
+func (s *SliderWidget) RightClick(mouse image.Point) {
+	s.Shunt(0.05)
+}
+
+func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
+	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
+	fg := color.RGBA{0x00, 0x00, 0x00, 255}
+	s.r = r
+	mid := r.Min.Y + r.Dy() / 2
+	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
+	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
+	x := int(float64(r.Min.X) + s.α * float64(r.Dx()) + 0.5)
+	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }

@@ -39,7 +39,7 @@ var G struct {
 		metronome bool
 		audio bool
 		midi bool
-		waveBias float64
+		waveBias *SliderWidget
 	}
 	font struct {
 		luxi *Font
@@ -264,12 +264,13 @@ func main() {
 	//sdl.Init(sdl.INIT_EVERYTHING)
 	sound.Init()
 
+	flag.Parse()
+
 	channels, sampleRate, err := AudioInit()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	G.mixer.waveBias = 0.5
 	G.mixer.metronome = true
 	G.mixer.audio = true
 	G.mixer.midi = true
@@ -285,16 +286,6 @@ func main() {
 	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)
 
-	flag.Parse()
-	audioFile := flag.Arg(0)
-
-	if len(audioFile) > 0 {
-		err = open(audioFile, actualFmt)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
@@ -308,10 +299,19 @@ func main() {
 	redraw := make(chan image.Rectangle, 10)
 
 	G.ww = NewWaveWidget(redraw)
-	G.ww.SetWaveform(G.wav)
-	G.ww.SetScore(&G.score)
 
 	wg := InitWde(redraw)
+
+	audioFile := flag.Arg(0)
+	if len(audioFile) > 0 {
+		err = open(audioFile, actualFmt)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	G.ww.SetWaveform(G.wav)
+	G.ww.SetScore(&G.score)
 
 	redraw <- image.Rect(0,0,0,0)
 

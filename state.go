@@ -44,7 +44,7 @@ func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.BeatFrames()
 	s.Staves = G.score.SavedStaves()
-	s.MixWeight = G.mixer.waveBias
+	s.MixWeight = G.mixer.waveBias.Value()
 	s.MetronomeOff = !G.mixer.metronome
 	s.WaveOff = !G.mixer.audio
 	s.MidiOff = !G.mixer.midi
@@ -54,9 +54,9 @@ func (s *stateV1) Restore() {
 	G.score.LoadBeats(s.Beats)
 	G.score.LoadStaves(s.Staves)
 	if s.MixWeight == 0.0 {
-		G.mixer.waveBias = 0.5
+		G.mixer.waveBias.SetSlider(0.5)
 	} else {
-		G.mixer.waveBias = s.MixWeight
+		G.mixer.waveBias.SetSlider(s.MixWeight)
 	}
 	G.mixer.metronome = !s.MetronomeOff
 	G.mixer.audio = !s.WaveOff

@@ -43,18 +43,22 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 				G.ww.Zoom(1.50)
 			}
 		case wde.MouseUpEvent:
+			if dragged {
+				drag(e.Where, true)
+				continue
+			}
 			switch (e.Which) {
 			case wde.LeftButton:
 				if e.Where.In(G.ww.Rect()) {
-					if !dragged || drag == nil {
-						G.ww.LeftClick(e.Where)
-					} else {
-						drag(e.Where, true)
-					}
+					G.ww.LeftClick(e.Where)
+				} else if e.Where.In(G.mixer.waveBias.Rect()) {
+					G.mixer.waveBias.LeftClick(e.Where)
 				}
 			case wde.RightButton:
 				if !G.noteMenu.Rect().Empty() {
 					G.noteMenu.RightButtonUp(e.Where)
+				} else if e.Where.In(G.mixer.waveBias.Rect()) {
+					G.mixer.waveBias.RightClick(e.Where)
 				}
 			}
 		case wde.MouseDraggedEvent:
@@ -101,15 +105,9 @@ func event(events <-chan interface{}, redraw chan image.Rectangle, done chan boo
 					staff.nsharps++
 				}
 			case wde.KeyPrior:
-				G.mixer.waveBias += 0.1
-				if G.mixer.waveBias >= 1.0 {
-					G.mixer.waveBias = 0.9
-				}
+				G.mixer.waveBias.Shunt(0.1)
 			case wde.KeyNext:
-				G.mixer.waveBias -= 0.1
-				if G.mixer.waveBias <= 0.0 {
-					G.mixer.waveBias = 0.1
-				}
+				G.mixer.waveBias.Shunt(-0.1)
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
@@ -293,6 +291,9 @@ func drawstuff(w wde.Window, redraw chan image.Rectangle, done chan bool) {
 				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height) + 20))
 				G.ww.Draw(img, wvR)
 
+				mixR := image.Rect(width - 50, wvR.Min.Y - 15, width, wvR.Min.Y)
+				G.mixer.waveBias.Draw(img, mixR)
+
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(img, statusR)
 
@@ -330,6 +331,8 @@ func InitWde(redraw chan image.Rectangle) *sync.WaitGroup {
 	G.plumb.selection.Sub(&G.quantize, selxn)
 	G.plumb.score.Sub(&G.quantize, beats)
 	go quantizer(selxn, beats, G.quantize.apply, G.quantize.calc, redraw)
+
+	G.mixer.waveBias = NewSlider(0.5, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)

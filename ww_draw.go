@@ -14,7 +14,7 @@ import (
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
 	ww.renderstate.changed = 0
-	if !r.Eq(ww.rect.r) {
+	if !r.Eq(ww.r) {
 		/* our widget size has chaged, redraw everything */
 		change |= EVERYTHING
 		ww.renderstate.waveRulers = nil
@@ -22,7 +22,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	if change != 0 {
 		axish := 20
 		infow := 100
-		ww.rect.r = r
+		ww.r = r
 		ww.rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
 		ww.rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 		if change & SCALE != 0 && ww.score != nil && len(ww.score.staves) > 0 {
@@ -36,7 +36,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 				ww.rect.staves[ww.score.staves[i]] = image.Rect(ww.rect.wave.Min.X, ww.rect.wave.Min.Y + i * scoreh, ww.rect.wave.Max.X, ww.rect.wave.Min.Y + (i + 1) * scoreh + 1)
 			}
 		}
-		ww.renderstate.img = image.NewRGBA(ww.rect.r)
+		ww.renderstate.img = image.NewRGBA(ww.r)
 		if ww.renderstate.waveRulers == nil {
 			ww.renderstate.waveRulers = image.NewRGBA(ww.rect.waveRulers)
 			change |= WAV | BEATS | VIEWPOS
