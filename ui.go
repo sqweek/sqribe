@@ -127,39 +127,35 @@ func (w *WidgetCore) publish(ev interface{}) {
 
 type SliderWidget struct {
 	WidgetCore
-	α float64
+	val *float64
+	min, max float64
 }
 
 type SliderMoved struct {
 	Slider *SliderWidget
 }
 
-func NewSlider(α float64, refresh chan Widget) *SliderWidget {
-	return &SliderWidget{WidgetCore{refresh: refresh}, α}
+func NewSlider(val *float64, min, max float64, refresh chan Widget) *SliderWidget {
+	return &SliderWidget{WidgetCore{refresh: refresh}, val, min, max}
 }
 
-// α is on range [0,1]
-func (s *SliderWidget) SetSlider(α float64) {
-	δ := α - s.α
+func (s *SliderWidget) SetSlider(v float64) {
+	v = clip(v, s.min, s.max)
+	δ := v - *s.val
 	if δ != 0 {
-		s.α = α
+		*s.val = v
 		s.publish(SliderMoved{s})
 	}
 }
 
 func (s *SliderWidget) Value() float64 {
-	return s.α
+	return *s.val
 }
 
-func (s *SliderWidget) Shunt(delta float64) {
-	α := s.α + delta
-	if α < 0 {
-		α = 0
-	}
-	if α > 1 {
-		α = 1
-	}
-	s.SetSlider(α)
+
+func (s *SliderWidget) Shunt(perc float64) {
+	v := *s.val + (s.max - s.min) * clip(perc, -1, 1)
+	s.SetSlider(v)
 }
 
 func (s *SliderWidget) LeftClick(mouse image.Point) {
@@ -177,6 +173,7 @@ func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
 	mid := r.Min.Y + r.Dy() / 2
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
-	x := int(float64(r.Min.X) + s.α * float64(r.Dx()) + 0.5)
+	α := (*s.val - s.min) / (s.max - s.min)
+	x := int(float64(r.Min.X) + α * float64(r.Dx()) + 0.5)
 	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }

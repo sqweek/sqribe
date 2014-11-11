@@ -5,6 +5,12 @@ import (
 	"math/big"
 	"time"
 	"fmt"
+
+	"sqweek.net/sqribe/midi"
+	"sqweek.net/sqribe/score"
+	"sqweek.net/sqribe/wave"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 type changeMask int
@@ -26,7 +32,7 @@ const yspacing = 10 // pixels between staff lines
 type noteProspect struct {
 	delta int
 	beatf float64
-	staff *Staff
+	staff *score.Staff
 }
 
 type mouseState struct {
@@ -40,37 +46,13 @@ type TimeRange interface {
 	MaxFrame() FrameN
 }
 
-type FrameRange struct {
-	Min, Max FrameN
-}
-
-func (r FrameRange) MinFrame() FrameN {
-	return r.Min
-}
-
-func (r FrameRange) MaxFrame() FrameN {
-	return r.Max
-}
-
-type BeatRange struct {
-	First, Last *BeatRef
-}
-
-func (r BeatRange) MinFrame() FrameN {
-	return r.First.frame
-}
-
-func (r BeatRange) MaxFrame() FrameN {
-	return r.Last.frame
-}
-
 type WaveWidget struct {
 	WidgetCore
 
 	/* data related state */
-	wav *Waveform
-	score *Score
-	iolisten <-chan *Chunk
+	wav *wave.Waveform
+	score *score.Score
+	iolisten <-chan *wave.Chunk
 
 	/* view related state */
 	first_frame FrameN
@@ -79,7 +61,7 @@ type WaveWidget struct {
 	rect struct {
 		wave image.Rectangle	// rect of the waveform display
 		waveRulers image.Rectangle	// waveform + rulers
-		staves map[*Staff] image.Rectangle
+		staves map[*score.Staff] image.Rectangle
 	}
 
 	/* renderer related state */
@@ -99,8 +81,8 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	var ww WaveWidget
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
-	ww.rect.staves = make(map[*Staff]image.Rectangle)
-	ww.selection = &FrameRange{0, 0}
+	ww.rect.staves = make(map[*score.Staff]image.Rectangle)
+	ww.selection = &wave.FrameRange{0, 0}
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -116,11 +98,11 @@ func (ww *WaveWidget) SelectAudio(sel TimeRange) {
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
-	score := ww.score
-	if score == nil {
-		ww.SelectAudio(FrameRange{start, end})
+	sc := ww.score
+	if sc == nil {
+		ww.SelectAudio(wave.FrameRange{start, end})
 	} else {
-		beats := BeatRange{score.NearestBeat(start), score.NearestBeat(end)}
+		beats := score.BeatRange{sc.NearestBeat(start), sc.NearestBeat(end)}
 		ww.SelectAudio(beats)
 	}
 }
@@ -129,13 +111,13 @@ func (ww *WaveWidget) GetSelectedTimeRange() TimeRange {
 	return ww.selection
 }
 
-func (ww *WaveWidget) SetWaveform(wav *Waveform) {
+func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
 	if ww.wav != nil {
-		ww.wav.cache.ignore(ww.iolisten)
+		ww.wav.CacheIgnore(ww.iolisten)
 	}
 	ww.wav = wav
 	if ww.wav != nil {
-		iolisten := ww.wav.cache.listen()
+		iolisten := ww.wav.CacheListen()
 		ww.iolisten = iolisten
 		go func() {
 			for {
@@ -156,17 +138,17 @@ func (ww *WaveWidget) SetWaveform(wav *Waveform) {
 	ww.publish(wav)
 }
 
-func (ww *WaveWidget) SetScore(score *Score) {
+func (ww *WaveWidget) SetScore(sc *score.Score) {
 	if ww.score != nil {
-		ww.score.events.Unsub(ww)
+		ww.score.Unsub(ww)
 	}
-	ww.score = score
-	if score != nil {
+	ww.score = sc
+	if sc != nil {
 		events := make(chan interface{})
-		ww.score.events.Sub(ww, events)
+		ww.score.Sub(ww, events)
 		go func() {
 			for ev := range events {
-				if _, ok := ev.(BeatChanged); ok {
+				if _, ok := ev.(score.BeatChanged); ok {
 					ww.renderstate.changed |= BEATS
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
@@ -174,9 +156,12 @@ func (ww *WaveWidget) SetScore(score *Score) {
 				ww.publish(ev)
 			}
 		}()
+		selxn := make(chan interface{})
+		G.plumb.selection.Sub(&sc, selxn)
+		sc.InitQuantizer(selxn)
 	}
 	ww.renderstate.changed |= SCALE
-	ww.publish(score)
+	ww.publish(sc)
 }
 
 func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
@@ -213,20 +198,13 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return ww.rect.wave.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-func (ww *WaveWidget) dragBeat(min, max FrameN, beat *BeatRef) DragFn {
+func (ww *WaveWidget) dragBeat(min, max FrameN, beat *score.BeatRef) DragFn {
 	return func(pos image.Point, finished bool) bool {
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max {
 			return false
 		}
-		orig := beat.frame
-		if f != orig {
-			beat.frame = f
-			ev := BeatChanged{}
-			ww.score.events.C <- ev
-			ww.renderstate.changed |= SCALE | BEATS
-			ww.publish(ev)
-		}
+		ww.score.MvBeat(beat, f)
 		return true
 	}
 }
@@ -241,7 +219,7 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 		if snap {
 			ww.SelectAudioSnapToBeats(min, max)
 		} else {
-			ww.SelectAudio(FrameRange{min, max})
+			ww.SelectAudio(wave.FrameRange{min, max})
 		}
 		return true
 	}
@@ -256,7 +234,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			continue
 		}
 		mid := rect.Min.Y + rect.Dy() / 2
-		for _, note := range(staff.notes) {
+		for _, note := range(staff.Notes()) {
 			frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
 			if frame < f0 || frame > fN {
 				continue
@@ -286,30 +264,30 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	}
 
 	// TODO ignore beat grabs when sufficiently zoomed out
-	beats := []*BeatRef{}
+	beats := []*score.BeatRef{}
 	if ww.score != nil {
-		beats = ww.score.beats
+		beats = ww.score.Beats()
 	}
 	for i, beat := range(beats) {
 		min, max := FrameN(0), nframes
-		if beat.frame < f0 {
+		if beat.Frame() < f0 {
 			min = 0
 			continue
-		} else if beat.frame > fN {
+		} else if beat.Frame() > fN {
 			break
 		}
-		x := ww.PixelAtFrame(beat.frame)
+		x := ww.PixelAtFrame(beat.Frame())
 		y0 := ww.rect.wave.Min.Y
 		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 		if mouse.In(padRect(r, 2, 0)) {
-			if i + 1 < len(ww.score.beats) {
-				max = ww.score.beats[i + 1].frame
+			if i + 1 < len(beats) {
+				max = beats[i + 1].Frame()
 			}
 			return ww.dragBeat(min, max, beat), ResizeHCursor
 		}
 	}
 
-	snap := ww.score != nil && len(ww.score.beats) > 0 && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
+	snap := ww.score != nil && len(ww.score.Beats()) > 0 && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
 	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), 2, 0)) {
 		return ww.selectDrag(ww.selection.MaxFrame(), snap), ResizeLCursor
 	}
@@ -324,7 +302,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 	return nil, NormalCursor
 }
 
-func (ww *WaveWidget) staffContaining(pos image.Point) *Staff {
+func (ww *WaveWidget) staffContaining(pos image.Point) *score.Staff {
 	for staff, rect := range ww.rect.staves {
 		if pos.In(rect) {
 			return staff
@@ -333,7 +311,7 @@ func (ww *WaveWidget) staffContaining(pos image.Point) *Staff {
 	return nil
 }
 
-func (ww *WaveWidget) noteAtPixel(staff *Staff, pos image.Point) *noteProspect {
+func (ww *WaveWidget) noteAtPixel(staff *score.Staff, pos image.Point) *noteProspect {
 	rect := ww.rect.staves[staff]
 	mid := rect.Min.Y + rect.Dy() / 2
 	noteY := snapto(pos.Y, mid, yspacing / 2)
@@ -398,9 +376,9 @@ func (ww *WaveWidget) MouseMoved(mousePos image.Point) {
 	}
 }
 
-func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *Note {
+func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 	beat, offset := ww.score.Quantize(prospect.beatf)
-	return &Note{prospect.staff.PitchForLine(prospect.delta), dur, beat, offset}
+	return &score.Note{prospect.staff.PitchForLine(prospect.delta), dur, beat, offset}
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
@@ -409,7 +387,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 		if mouse.In(leftRect(rect, indent)) {
 			staff.Muted = !staff.Muted
 			ww.renderstate.changed |= SCALE
-			ww.publish(StaffChanged{staff})
+			ww.publish(score.StaffChanged{staff})
 		}
 	}
 }
@@ -490,17 +468,16 @@ func (ww *WaveWidget) Status() string {
 	delta2 := 0
 	beati := 0
 	offset := big.NewRat(1, 1)
-	nsharps := 0
+	nsharps := -99
 	if s.note != nil {
 		beatf := s.note.beatf
 		delta = s.note.delta
 		beat, o := ww.score.Quantize(beatf)
-		beati = beat.index
+		beati = ww.score.BeatIndex(beat)
 		offset = o
 		pitch = s.note.staff.PitchForLine(delta)
 		delta2, _ = s.note.staff.LineForPitch(pitch)
-		nsharps = s.note.staff.nsharps
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v #%d", delta, delta2, pitch, PitchName(pitch), beati, offset, nsharps)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v #%d", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps)
 }

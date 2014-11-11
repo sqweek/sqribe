@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"math/big"
 	"strings"
 	"fmt"
 	"os"
+
+	"sqweek.net/sqribe/audio"
+	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/score"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 type state interface {
@@ -15,25 +20,10 @@ type state interface {
 	Restore() // restores this objects state to the memory model
 }
 
-type SavedNote struct {
-	Pitch uint8
-	Duration *big.Rat
-	Offset *big.Rat
-}
-
-type SavedStaff struct {
-	Name string
-	Voice int
-	Origin uint8
-	Nsharps int
-	Muted bool `json:",omitempty"`
-	Notes []SavedNote
-}
-
 type stateV1 struct {
 	Filename string
 	Beats []FrameN
-	Staves []SavedStaff
+	Staves []score.SavedStaff
 	MixWeight float64
 	MetronomeOff bool `json:",omitempty"`
 	WaveOff bool `json:",omitempty"`
@@ -46,8 +36,8 @@ func (s *stateV1) Capture() {
 	s.Staves = G.score.SavedStaves()
 	s.MixWeight = G.mixer.waveBias.Value()
 	s.MetronomeOff = !G.mixer.metronome
-	s.WaveOff = !G.mixer.audio
-	s.MidiOff = !G.mixer.midi
+	s.WaveOff = audio.Mixer.MuteAudio
+	s.MidiOff = audio.Mixer.MuteMidi
 }
 
 func (s *stateV1) Restore() {
@@ -59,8 +49,8 @@ func (s *stateV1) Restore() {
 		G.mixer.waveBias.SetSlider(s.MixWeight)
 	}
 	G.mixer.metronome = !s.MetronomeOff
-	G.mixer.audio = !s.WaveOff
-	G.mixer.midi = !s.MidiOff
+	audio.Mixer.MuteAudio = s.WaveOff
+	audio.Mixer.MuteMidi = s.MidiOff
 }
 
 type VersionHeader struct {
@@ -89,7 +79,7 @@ func key(filename string) string {
 }
 
 func LoadState(filename string) error {
-	stateFile := SaveDir() + "/" + key(filename)
+	stateFile := fs.SaveDir() + "/" + key(filename)
 	if _, err := os.Stat(stateFile); err == nil {
 		f, err := os.Open(stateFile)
 		if err != nil {
@@ -114,7 +104,7 @@ func LoadState(filename string) error {
 
 func SaveState(filename string) error {
 	k := key(filename)
-	tmpfile, err := ioutil.TempFile(SaveDir(), k)
+	tmpfile, err := ioutil.TempFile(fs.SaveDir(), k)
 	if err != nil {
 		return err
 	}
@@ -122,7 +112,7 @@ func SaveState(filename string) error {
 	if err != nil {
 		return err
 	}
-	err = ReplaceFile(tmpfile.Name(), SaveDir() + "/" + k)
+	err = fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k)
 	if err != nil {
 		return err
 	}

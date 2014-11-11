@@ -1,4 +1,4 @@
-package main
+package wave
 
 import (
 	"encoding/binary"
@@ -6,6 +6,8 @@ import (
 	"sync"
 	."fmt"
 	"os"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 type cache struct {

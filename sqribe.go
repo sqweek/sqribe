@@ -2,7 +2,7 @@ package main
 
 import (
 //	"github.com/neagix/Go-SDL/sdl"
-	"github.com/neagix/Go-SDL/sdl/audio"
+	SDL_audio "github.com/neagix/Go-SDL/sdl/audio"
 	"github.com/neagix/Go-SDL/sound"
 	"github.com/sqweek/fluidsynth"
 	"sort"
@@ -11,24 +11,28 @@ import (
 	"log"
 	"fmt"
 	"os"
+
+	"sqweek.net/sqribe/audio"
+	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/midi"
+	"sqweek.net/sqribe/plumb"
+	"sqweek.net/sqribe/score"
+	"sqweek.net/sqribe/wave"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 var G struct {
 	/* global state */
 	audiofile string
-	score Score
-	wav *Waveform
+	score score.Score
+	wav *wave.Waveform
 	synth *fluidsynth.Synth
-
-	quantize struct {
-		apply chan chan bool
-		calc chan chan QuantizeBeats
-	}
 
 	/* plumbing */
 	plumb struct {
-		selection *PlumbPort
-		score *PlumbPort
+		selection *plumb.Port
+		score *plumb.Port
 	}
 
 	/* ui stuff */
@@ -36,8 +40,6 @@ var G struct {
 	noteMenu MenuWidget
 	mixer struct {
 		metronome bool
-		audio bool
-		midi bool
 		waveBias *SliderWidget
 	}
 	font struct {
@@ -61,32 +63,6 @@ func addEv(midi map[FrameN]*MidiEv, frame FrameN, ev MidiEv) {
 	}
 }
 
-func orderNotes(score *Score, notes chan<- *Note) {
-	defer close(notes)
-	n := len(score.staves)
-	idx := make([]int, n)
-	for j, staff := range score.staves {
-		if staff.Muted {
-			idx[j] = len(staff.notes)
-		}
-	}
-	for {
-		best := -1
-		for j, staff := range(score.staves) {
-			if idx[j] < len(staff.notes) {
-				if best == -1 || staff.notes[idx[j]].Cmp(score.staves[best].notes[idx[best]]) < 0 {
-					best = j
-				}
-			}
-		}
-		if best == -1 {
-			break
-		}
-		notes <- score.staves[best].notes[idx[best]]
-		idx[best]++
-	}
-}
-
 type FrameSlice []FrameN
 
 func (f FrameSlice) Len() int {
@@ -102,9 +78,9 @@ func (f FrameSlice) Swap(i, j int) {
 }
 
 func playToggle() {
-	if IsPlaying() {
+	if audio.IsPlaying() {
 		fmt.Println("stopping playback")
-		StopPlayback()
+		audio.Stop()
 		return
 	}
 
@@ -136,9 +112,9 @@ func playToggle() {
 		}
 	}
 
-	midi := make(map[FrameN]*MidiEv)
-	notes := make(chan *Note, 5)
-	go orderNotes(&G.score, notes)
+	mid := make(map[FrameN]*MidiEv)
+	notes := make(chan *score.Note, 5)
+	go score.OrderNotes(&G.score, notes)
 	for note := range(notes) {
 		start, _ := G.score.ToFrame(G.score.Beatf(note))
 		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
@@ -151,14 +127,14 @@ func playToggle() {
 		if end > fN {
 			end = fN
 		}
-		addEv(midi, start, MidiEv{note.Pitch, true, nil})
-		addEv(midi, end, MidiEv{note.Pitch, false, nil})
+		addEv(mid, start, MidiEv{note.Pitch, true, nil})
+		addEv(mid, end, MidiEv{note.Pitch, false, nil})
 	}
-	mframes := make([]FrameN, len(midi))
+	mframes := make([]FrameN, len(mid))
 	i := 0
-	for f, _ := range(midi) {
+	for f, _ := range(mid) {
 		mframes[i] = f
-		for ev, _ := midi[f]; ev != nil; ev = ev.Next {
+		for ev, _ := mid[f]; ev != nil; ev = ev.Next {
 			fmt.Println(f, ev)
 		}
 		i++
@@ -186,20 +162,20 @@ func playToggle() {
 			nf := G.wav.ToFrame(SampleN(len(buf)))
 			/* metronome */
 			if on {
-				G.synth.NoteOff(15, pitchF6)
+				G.synth.NoteOff(15, midi.PitchF6)
 				on = false
 			} else if G.mixer.metronome {
 				b0, _ := G.score.ToBeat(f0 + i - 1)
 				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
-					G.synth.NoteOn(15, pitchF6, 120)
+					G.synth.NoteOn(15, midi.PitchF6, 120)
 					on = true
 				}
 			}
 			/* user placed notes */
 			for mi < len(mframes) && mframes[mi] <= f0 + i + nf {
 				//fmt.Println(f0 + i, f0 + i + nf, mframes[mi])
-				for ev, _ := midi[mframes[mi]]; ev != nil; ev = ev.Next {
+				for ev, _ := mid[mframes[mi]]; ev != nil; ev = ev.Next {
 					if ev.On {
 						G.synth.NoteOn(0, int(ev.Pitch), 100)
 					} else {
@@ -209,7 +185,7 @@ func playToggle() {
 				mi++
 			}
 			mbuf := G.synth.WriteFrames_int16(int(nf))
-			if AppendAudio(buf, mbuf) == -1 {
+			if audio.Append(buf, mbuf) == -1 {
 				break
 			}
 			i += nf
@@ -220,11 +196,11 @@ func playToggle() {
 		}
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
-	StartPlayback(G.wav.ToSample(f0), G.wav.ToSample(padN))
+	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
 	/* gui feedback thread */
 	go func() {
 		for {
-			s, playing := CurrentSample()
+			s, playing := audio.PlayingSample()
 			if !playing {
 				break
 			}
@@ -239,7 +215,7 @@ func open(filename string, fmt sound.AudioInfo) error {
 	if G.wav != nil {
 		SaveState(G.audiofile)
 	}
-	G.wav, err = NewWaveform(filename, fmt)
+	G.wav, err = wave.NewWaveform(filename, fmt)
 	if err != nil {
 		return err
 	}
@@ -265,24 +241,19 @@ func main() {
 
 	flag.Parse()
 
-	channels, sampleRate, err := AudioInit()
+	channels, sampleRate, err := audio.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	G.mixer.metronome = true
-	G.mixer.audio = true
-	G.mixer.midi = true
 
-	G.quantize.apply = make(chan chan bool)
-	G.quantize.calc = make(chan chan QuantizeBeats)
-
-	G.plumb.selection = MkPort()
-	G.plumb.score = MkPort()
+	G.plumb.selection = plumb.MkPort()
+	G.plumb.score = plumb.MkPort()
 
 	G.score.Init(G.plumb.score)
 
-	actualFmt := sound.AudioInfo{audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
+	actualFmt := sound.AudioInfo{SDL_audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
 	fmt.Println(actualFmt)
 
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
@@ -293,7 +264,7 @@ func main() {
 		log.Fatal(err)
 	}
 	G.synth = synth
-	synth.ProgramChange(15, instWoodblock)
+	synth.ProgramChange(15, midi.InstWoodblock)
 
 	redraw := make(chan Widget, 10)
 
@@ -316,11 +287,11 @@ func main() {
 
 	wg.Wait()
 
-	AudioShutdown()
+	audio.Shutdown()
 	//XXX should avoid closing GUI if SaveState fails
 	err = SaveState(G.audiofile)
 	if err != nil {
 		log.Println(err)
 	}
-	os.Remove(CacheFile())
+	os.Remove(fs.CacheFile())
 }

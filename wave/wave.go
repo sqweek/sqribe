@@ -1,13 +1,24 @@
-package main
+package wave
 
 import (
 	"github.com/neagix/Go-SDL/sound"
-	."fmt"
+	"fmt"
 	"time"
+	"sqweek.net/sqribe/fs"
+	. "sqweek.net/sqribe/core/types"
 )
 
-type FrameN int64 // frame index or frame count
-type SampleN uint64 // sample index or sample count
+type FrameRange struct {
+	Min, Max FrameN
+}
+
+func (r FrameRange) MinFrame() FrameN {
+	return r.Min
+}
+
+func (r FrameRange) MaxFrame() FrameN {
+	return r.Max
+}
 
 type Waveform struct {
 	NSamples SampleN
@@ -20,7 +31,7 @@ type Waveform struct {
 
 func NewWaveform(file string, fmt sound.AudioInfo) (*Waveform, error) {
 	wave := &Waveform{rate: uint(fmt.Rate), Channels: int(fmt.Channels), NSamples: 0}
-	wave.cache = mkcache(1024*1024, 2, CacheFile())
+	wave.cache = mkcache(1024*1024, 2, fs.CacheFile())
 	wave.Max = make([]int16, wave.Channels)
 	sample, err := sound.NewSampleFromFile(file, &fmt, 1024*1024)
 	if err != nil {
@@ -36,16 +47,16 @@ func (wav *Waveform) decodefn(sample *sound.Sample) func() []int16 {
 	return func() []int16 {
 		n := sample.Decode()
 		if sample.Flags() & (1 << 30) != 0 {
-			Println("decode error:", sound.GetError())
+			fmt.Println("decode error:", sound.GetError())
 		}
 		if n > 0 {
 			samps := sample.Buffer_int16()
-			Printf("decoded %d bytes (%d samples)\n", n, len(samps))
+			fmt.Printf("decoded %d bytes (%d samples)\n", n, len(samps))
 			wav.updateMax(samps[0:n/2])
 			wav.NSamples += SampleN(n/2)
 			return samps[0:n/2]
 		}
-		Printf("decoding finished\n")
+		fmt.Printf("decoding finished\n")
 		return []int16{}
 	}
 }
@@ -94,7 +105,6 @@ func (chunk *Chunk) copy(samples []int16, i0 SampleN) {
 	} else if nc > ns {
 		cN = c0 + ns
 	}
-//	Println("Chunk.copy", chunk.I0, i0, len(samples), c0, cN, s0, sN)
 	copy(samples[s0:sN], chunk.Data[c0:cN])
 }
 
@@ -102,11 +112,9 @@ func (chunk *Chunk) copy(samples []int16, i0 SampleN) {
 func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
 	s0, sN := wav.SampleRange(f0, fN)
 	chunk0, chunkN := wav.cache.Bounds(s0, sN)
-	//Println("Frames", f0, fN, s0, sN, chunk0, chunkN)
 	if chunk0 == chunkN {
 		/* not across a chunk boundary, no need to copy */
 		chunk := wav.cache.Wait(chunk0)
-		//Println("Frames: chunk", chunk.id, chunk.I0, len(chunk.Data))
 		return chunk.Data[s0 - chunk.I0:sN - chunk.I0 + 1]
 	}
 	samples := make([]int16, sN - s0 + 1)
@@ -192,8 +200,16 @@ func (wav *Waveform) ToSample(frame FrameN) SampleN {
 	return SampleN(frame * FrameN(wav.Channels))
 }
 
-func (wav *Waveform) SampleRange(f0, fN FrameN) (SampleN, SampleN) {
-	s0 := SampleN(f0 * FrameN(wav.Channels))
-	sN := SampleN((fN + 1) * FrameN(wav.Channels) - 1)
+func (wav *Waveform) SampleRange(f0, fN FrameN) (s0, sN SampleN) {
+	s0 = SampleN(f0 * FrameN(wav.Channels))
+	sN = SampleN((fN + 1) * FrameN(wav.Channels) - 1)
 	return s0, sN
+}
+
+func (wav *Waveform) CacheListen() <-chan *Chunk {
+	return wav.cache.listen()
+}
+
+func (wav *Waveform) CacheIgnore(listener <-chan *Chunk) {
+	wav.cache.ignore(listener)
 }

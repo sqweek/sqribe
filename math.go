@@ -1,6 +1,8 @@
 package main
 
-import "math"
+import (
+	"math"
+)
 
 func mod(n, d int) int {
 	r := n % d
@@ -57,9 +59,11 @@ func snapto(x, origin, step int) int {
 	return x + sgn * (step - rem)
 }
 
-func Δf(f1, f2 FrameN) FrameN {
-	if f1 > f2 {
-		return f1 - f2
+func clip(x, min, max float64) float64 {
+	if x < min {
+		return min
+	} else if x > max {
+		return max
 	}
-	return f2 - f1
+	return x
 }

@@ -1,19 +1,19 @@
-package main
+package plumb
 
 type subReq struct {
 	key interface{}
 	c chan interface{}
 }
 
-type PlumbPort struct {
+type Port struct {
 	C chan<- interface{}
 	c chan interface{}
 	sub chan subReq
 	unsub chan interface{}
 }
 
-func MkPort() *PlumbPort {
-	plumb := PlumbPort{c: make(chan interface{})}
+func MkPort() *Port {
+	plumb := Port{c: make(chan interface{})}
 	plumb.C = plumb.c
 	plumb.sub = make(chan subReq)
 	plumb.unsub = make(chan interface{})
@@ -21,15 +21,15 @@ func MkPort() *PlumbPort {
 	return &plumb
 }
 
-func (plumb *PlumbPort) Sub(origin interface{}, subchan chan interface{}) {
+func (plumb *Port) Sub(origin interface{}, subchan chan interface{}) {
 	plumb.sub <- subReq{origin, subchan}
 }
 
-func (plumb *PlumbPort) Unsub(origin interface{}) {
+func (plumb *Port) Unsub(origin interface{}) {
 	plumb.unsub <- origin
 }
 
-func (plumb *PlumbPort) broadcast() {
+func (plumb *Port) broadcast() {
 	subs := make(map[interface{}]chan interface{})
 	for {
 		select {

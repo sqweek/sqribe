@@ -1,17 +1,17 @@
-package main
+package midi
 
 import (
 	"fmt"
 )
 
 const (
-	pitchD4 = 50
-	pitchB5 = 71
-	pitchF6 = 77
+	PitchD4 = 50
+	PitchB5 = 71
+	PitchF6 = 77
 )
 const (
-	instPiano = 0
-	instWoodblock = 115
+	InstPiano = 0
+	InstWoodblock = 115
 )
 
 var degreeNames []string = []string{"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"}

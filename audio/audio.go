@@ -1,10 +1,12 @@
-package main
+package audio
 
 import (
 	"code.google.com/p/portaudio-go/portaudio"
 	"log"
 	"runtime"
 	"sync"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 type RingBuffer struct {
@@ -26,6 +28,11 @@ var (
 	currentTime portaudio.StreamCallbackTimeInfo
 )
 
+var Mixer struct {
+	Bias float64
+	MuteAudio, MuteMidi bool
+};
+
 func HostApi() *portaudio.HostApiInfo {
 	/* TODO allow user to override host api */
 	for _, api := range PlatformHostApis() {
@@ -38,7 +45,7 @@ func HostApi() *portaudio.HostApiInfo {
 	return nil
 }
 
-func AudioInit() (uint8, uint32, error) {
+func Init() (uint8, uint32, error) {
 	err := portaudio.Initialize()
 	if err != nil {
 		return 0, 0, err
@@ -63,11 +70,11 @@ func AudioInit() (uint8, uint32, error) {
 	return uint8(params.Output.Channels), uint32(params.SampleRate), nil
 }
 
-func AudioShutdown() {
+func Shutdown() {
 	portaudio.Terminate()
 }
 
-func AppendAudio(wav, midi []int16) int {
+func Append(wav, midi []int16) int {
 	return buf.Append(wav, midi)
 }
 
@@ -154,14 +161,23 @@ func (ring *RingBuffer) Size() int {
 	return s
 }
 
+func clip(x, min, max float64) float64 {
+	if x < min {
+		return min
+	} else if x > max {
+		return max
+	}
+	return x
+}
+
 func mixVolumes() (audio, midi float64) {
 	audio, midi = 0, 0
-	bias := G.mixer.waveBias.Value()
-	if G.mixer.audio {
-		audio = bias
+	b := clip(0.5 + Mixer.Bias, 0, 1)
+	if !Mixer.MuteAudio {
+		audio = b
 	}
-	if G.mixer.midi {
-		midi = 1 - bias
+	if !Mixer.MuteMidi {
+		midi = 1 - b
 	}
 	return audio, midi
 }
@@ -177,7 +193,7 @@ func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 	currentTime = time
 }
 
-func StartPlayback(s0, period SampleN) {
+func Play(s0, period SampleN) {
 	if period == 0 {
 		return
 	}
@@ -188,7 +204,7 @@ func StartPlayback(s0, period SampleN) {
 	stream.Start()
 }
 
-func StopPlayback() {
+func Stop() {
 	go func() {
 		currentIndex = 0
 		currentLen = 0
@@ -202,7 +218,7 @@ func IsPlaying() bool {
 	return currentLen != 0
 }
 
-func CurrentSample() (SampleN, bool) {
+func PlayingSample() (SampleN, bool) {
 	if currentLen == 0 {
 		return 0, false
 	}
