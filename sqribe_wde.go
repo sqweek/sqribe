@@ -49,7 +49,9 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			}
 		case wde.MouseUpEvent:
 			if dragged {
-				drag(e.Where, true)
+				if drag != nil {
+					drag(e.Where, true)
+				}
 				continue
 			}
 			switch (e.Which) {
