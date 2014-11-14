@@ -58,12 +58,3 @@ func snapto(x, origin, step int) int {
 	}
 	return x + sgn * (step - rem)
 }
-
-func clip(x, min, max float64) float64 {
-	if x < min {
-		return min
-	} else if x > max {
-		return max
-	}
-	return x
-}

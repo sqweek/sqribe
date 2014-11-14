@@ -38,9 +38,9 @@ var G struct {
 	/* ui stuff */
 	ww *WaveWidget
 	noteMenu MenuWidget
+	waveBias *SliderWidget
 	mixer struct {
 		metronome bool
-		waveBias *SliderWidget
 	}
 	font struct {
 		luxi *Font

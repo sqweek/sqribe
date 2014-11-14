@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"image"
 	"time"
+
+	. "sqweek.net/sqribe/core/data"
 )
 
 type DragFn func(image.Point, bool) bool
@@ -105,10 +107,8 @@ func (bw *BpmWidget) SetBpm(bpm float64) {
 	bw.bpm = bpm
 }
 
-
 type WidgetCore struct {
 	r image.Rectangle
-	event chan<- interface{}
 	refresh chan Widget
 }
 
@@ -120,50 +120,35 @@ func (w *WidgetCore) publish(ev interface{}) {
 	if w.refresh != nil {
 		w.refresh <- w
 	}
-	if w.event != nil {
-		w.event <- ev
-	}
 }
 
 type SliderWidget struct {
 	WidgetCore
-	val *float64
-	min, max float64
+	data *BoundFloat
 }
 
 type SliderMoved struct {
 	Slider *SliderWidget
 }
 
-func NewSlider(val *float64, min, max float64, refresh chan Widget) *SliderWidget {
-	return &SliderWidget{WidgetCore{refresh: refresh}, val, min, max}
-}
-
-func (s *SliderWidget) SetSlider(v float64) {
-	v = clip(v, s.min, s.max)
-	δ := v - *s.val
-	if δ != 0 {
-		*s.val = v
-		s.publish(SliderMoved{s})
-	}
-}
-
-func (s *SliderWidget) Value() float64 {
-	return *s.val
-}
-
-
-func (s *SliderWidget) Shunt(perc float64) {
-	v := *s.val + (s.max - s.min) * clip(perc, -1, 1)
-	s.SetSlider(v)
+func NewSlider(data *BoundFloat, refresh chan Widget) *SliderWidget {
+	changes := make(chan interface{})
+	slider := SliderWidget{WidgetCore{refresh: refresh}, data}
+	data.Port().Sub(&slider, changes)
+	go func() {
+		for _ = range changes {
+			refresh <- &slider
+		}
+	}()
+	return &slider
 }
 
 func (s *SliderWidget) LeftClick(mouse image.Point) {
-	s.Shunt(-0.05)
+	s.data.Shunt(-0.05)
 }
 
 func (s *SliderWidget) RightClick(mouse image.Point) {
-	s.Shunt(0.05)
+	s.data.Shunt(0.05)
 }
 
 func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
@@ -173,7 +158,6 @@ func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
 	mid := r.Min.Y + r.Dy() / 2
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
-	α := (*s.val - s.min) / (s.max - s.min)
-	x := int(float64(r.Min.X) + α * float64(r.Dx()) + 0.5)
+	x := int(float64(r.Min.X) + s.data.Posn() * float64(r.Dx()) + 0.5)
 	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }

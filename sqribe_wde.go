@@ -56,14 +56,14 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			case wde.LeftButton:
 				if e.Where.In(G.ww.Rect()) {
 					G.ww.LeftClick(e.Where)
-				} else if e.Where.In(G.mixer.waveBias.Rect()) {
-					G.mixer.waveBias.LeftClick(e.Where)
+				} else if e.Where.In(G.waveBias.Rect()) {
+					G.waveBias.LeftClick(e.Where)
 				}
 			case wde.RightButton:
 				if !G.noteMenu.Rect().Empty() {
 					G.noteMenu.RightButtonUp(e.Where)
-				} else if e.Where.In(G.mixer.waveBias.Rect()) {
-					G.mixer.waveBias.RightClick(e.Where)
+				} else if e.Where.In(G.waveBias.Rect()) {
+					G.waveBias.RightClick(e.Where)
 				}
 			}
 		case wde.MouseDraggedEvent:
@@ -106,9 +106,9 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			case wde.KeyF3:
 				G.score.KeyChange(1)
 			case wde.KeyPrior:
-				G.mixer.waveBias.Shunt(0.1)
+				audio.Mixer.Bias.Shunt(0.1)
 			case wde.KeyNext:
-				G.mixer.waveBias.Shunt(-0.1)
+				audio.Mixer.Bias.Shunt(-0.1)
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
@@ -209,7 +209,7 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				G.ww.Draw(img, wvR)
 
 				mixR := image.Rect(width - 50, wvR.Min.Y - 15, width, wvR.Min.Y)
-				G.mixer.waveBias.Draw(img, mixR)
+				G.waveBias.Draw(img, mixR)
 
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(img, statusR)
@@ -244,7 +244,7 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
 
-	G.mixer.waveBias = NewSlider(&audio.Mixer.Bias, -0.5, 0.5, redraw)
+	G.waveBias = NewSlider(audio.Mixer.Bias, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)

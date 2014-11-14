@@ -94,7 +94,7 @@ func (ww *WaveWidget) SelectAudio(sel TimeRange) {
 	G.plumb.selection.C <- sel
 	// XXX could avoid redrawing waveform if selection rendered differently
 	ww.renderstate.changed |= WAV
-	ww.publish(sel)
+	ww.refresh <- ww
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
@@ -385,6 +385,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	indent := ww.rect.wave.Min.X - ww.r.Min.X
 	for staff, rect := range ww.rect.staves {
 		if mouse.In(leftRect(rect, indent)) {
+			/* TODO move to staff.ToggleMute() -OR- seperate mute from model */
 			staff.Muted = !staff.Muted
 			ww.renderstate.changed |= SCALE
 			ww.publish(score.StaffChanged{staff})

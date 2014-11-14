@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	. "sqweek.net/sqribe/core/types"
+	. "sqweek.net/sqribe/core/data"
 )
 
 type RingBuffer struct {
@@ -29,9 +30,13 @@ var (
 )
 
 var Mixer struct {
-	Bias float64
+	Bias *BoundFloat
 	MuteAudio, MuteMidi bool
 };
+
+func init() {
+	Mixer.Bias = MkBoundFloat(0, -0.5, 0.5, nil)
+}
 
 func HostApi() *portaudio.HostApiInfo {
 	/* TODO allow user to override host api */
@@ -172,7 +177,7 @@ func clip(x, min, max float64) float64 {
 
 func mixVolumes() (audio, midi float64) {
 	audio, midi = 0, 0
-	b := clip(0.5 + Mixer.Bias, 0, 1)
+	b := clip(0.5 + Mixer.Bias.Value(), 0, 1)
 	if !Mixer.MuteAudio {
 		audio = b
 	}
