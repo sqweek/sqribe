@@ -135,7 +135,10 @@ func (ring *RingBuffer) Mix(dest []int16, volw, volm float64) int {
 		ring.mix(dest, ring.head, newHead, volw, volm)
 	}
 	ring.head = newHead
-	// XXX we are in the audio callback; is Signal guaranteed not to block?
+	/* cond.Signal() can technically block, as it acquires the Lock. However it
+	  only does so if there is a something waiting on the condition, and since
+	  we only ever have a single thread that might be waiting we should be
+	  able to acquire the lock uncontested */
 	ring.write.Signal() // there might be a thread waiting for space in Append
 	return n
 }
