@@ -85,8 +85,8 @@ func Append(wav, midi []int16) int {
 
 func NewRingBuffer(bufSize int) *RingBuffer {
 	var ring RingBuffer
-	ring.wbuf = make([]int16, bufSize)
-	ring.mbuf = make([]int16, bufSize)
+	ring.wbuf = make([]int16, bufSize + 1)
+	ring.mbuf = make([]int16, bufSize + 1)
 	ring.write = sync.NewCond(&sync.Mutex{})
 	return &ring
 }
@@ -95,7 +95,7 @@ func NewRingBuffer(bufSize int) *RingBuffer {
 func (ring *RingBuffer) Append(wav, midi []int16) int {
 	ring.write.L.Lock()
 	defer ring.write.L.Unlock()
-	for len(wav) > len(ring.wbuf) - ring.Size() {
+	for len(wav) >= len(ring.wbuf) - ring.Size() {
 		ring.write.Wait()
 		if currentLen == 0 {
 			return -1
