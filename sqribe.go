@@ -20,7 +20,13 @@ import (
 	"sqweek.net/sqribe/wave"
 
 	. "sqweek.net/sqribe/core/types"
+	. "sqweek.net/sqribe/core/data"
 )
+
+var Mixer struct {
+	Bias *BoundFloat
+	MuteWave, MuteMidi, MuteMetronome bool
+}
 
 var G struct {
 	/* global state */
@@ -40,7 +46,6 @@ var G struct {
 	noteMenu MenuWidget
 	waveBias *SliderWidget
 	mixer struct {
-		metronome bool
 	}
 	font struct {
 		luxi *Font
@@ -77,13 +82,27 @@ func (f FrameSlice) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
 
+const (
+	STOPPED = iota
+	PLAYING
+	STOPPING
+)
+
+/* globally mutable state... that's not thinking with channels :S */
+var playState int = STOPPED
+
 func playToggle() {
-	if audio.IsPlaying() {
+	switch playState {
+	case PLAYING:
 		fmt.Println("stopping playback")
-		audio.Stop()
+		playState = STOPPING
 		return
+	case STOPPING:
+		return /* in transition; do nothing */
 	}
 
+	playState = PLAYING
+	audio.Clear()
 	rng := G.ww.GetSelectedTimeRange()
 	f0, fN := rng.MinFrame(), rng.MaxFrame()
 
@@ -135,36 +154,63 @@ func playToggle() {
 	for f, _ := range(mid) {
 		mframes[i] = f
 		for ev, _ := mid[f]; ev != nil; ev = ev.Next {
-			fmt.Println(f, ev)
+			//fmt.Println(f, ev)
 		}
 		i++
 	}
 	sort.Sort(FrameSlice(mframes))
 
-	padN := N + FrameN(len(loopPad))/nchan
-	bufsiz := FrameN(64) // number of frames per buffer
-	/* sample feeding i/o thread */
+	padN := N + G.wav.ToFrame(SampleN(len(loopPad)))
+	/* wave sample prefetch thread */
+	sampch := make(chan []int16, 10)
 	go func() {
-		on := false
+		bufsiz := FrameN(2048)
 		var buf []int16
-		mi := 0
 		i := FrameN(0)
-		for {
-			if i < N {
-				if i + bufsiz > N {
-					buf = G.wav.Frames(f0 + i, fN)
-				} else {
-					buf = G.wav.Frames(f0 + i, f0 + i + bufsiz - 1)
-				}
-			} else if i < padN {
-				buf = loopPad
+		for playState == PLAYING {
+			if i + bufsiz > N {
+				wave := G.wav.Frames(f0 + i, fN)
+				buf = make([]int16, len(wave) + len(loopPad))
+				copy(buf, wave)
+				copy(buf[len(wave):], loopPad)
+			} else {
+				buf = G.wav.Frames(f0 + i, f0 + i + bufsiz - 1)
 			}
 			nf := G.wav.ToFrame(SampleN(len(buf)))
+			sampch <- buf
+			i += nf
+			if i >= padN {
+				i = 0
+			}
+		}
+		close(sampch)
+	}()
+	/* sample feeding thread */
+	go func() {
+		on := false
+		nf := FrameN(64)
+		bufsiz := int(G.wav.ToSample(nf))
+		mbuf := make([]int16, bufsiz)
+		inbuf := []int16{}
+		mi := 0
+		i := FrameN(0)
+		for playState == PLAYING {
+			if len(inbuf) == 0 {
+				inbuf = <-sampch
+				if len(inbuf) < bufsiz || len(inbuf) % bufsiz != 0 {
+					fmt.Println("prefetch samples sent in non-64 frame multiple", len(inbuf))
+					playState = STOPPING
+					break
+				}
+			}
+			buf := inbuf[:bufsiz]
+			inbuf = inbuf[bufsiz:]
+
 			/* metronome */
 			if on {
 				G.synth.NoteOff(15, midi.PitchF6)
 				on = false
-			} else if G.mixer.metronome {
+			} else if !Mixer.MuteMetronome {
 				b0, _ := G.score.ToBeat(f0 + i - 1)
 				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
@@ -184,16 +230,31 @@ func playToggle() {
 				}
 				mi++
 			}
-			mbuf := G.synth.WriteFrames_int16(int(nf))
-			if audio.Append(buf, mbuf) == -1 {
-				break
+			G.synth.WriteFrames_int16(mbuf)
+			α, β := 0.0, 0.0
+			bias := Mixer.Bias.Value()
+			if !Mixer.MuteWave {
+				α = 0.5 + bias
 			}
+			if !Mixer.MuteMidi {
+				β = 0.5 - bias
+			}
+			for j := 0; j < bufsiz; j++ {
+				mbuf[j] = int16(α * float64(buf[j]) + β * float64(mbuf[j]))
+			}
+			audio.Append(mbuf)
 			i += nf
 			if i >= padN {
 				i = 0
 				mi = 0
 			}
 		}
+		for _ = range(sampch) {
+			// drain channel
+		}
+		fmt.Println("playback all stopped")
+		playState = STOPPED
+		audio.Stop()
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
 	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
@@ -202,6 +263,12 @@ func playToggle() {
 		for {
 			s, playing := audio.PlayingSample()
 			if !playing {
+				if playState == PLAYING && s != 0 {
+					/* we think we're playing, but the audio callback hasn't
+					 * run for awhile. just stop. */
+					fmt.Println("lost audio callback, stopping")
+					playState = STOPPING
+				}
 				break
 			}
 			G.ww.SetCursorByFrame(G.wav.ToFrame(s))
@@ -241,25 +308,25 @@ func main() {
 
 	flag.Parse()
 
-	channels, sampleRate, err := audio.Init()
+	err := audio.Open()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	G.mixer.metronome = true
+	Mixer.Bias = MkBoundFloat(0, -0.5, 0.5, nil)
 
 	G.plumb.selection = plumb.MkPort()
 	G.plumb.score = plumb.MkPort()
 
 	G.score.Init(G.plumb.score)
 
-	actualFmt := sound.AudioInfo{SDL_audio.AUDIO_S16SYS, channels, uint32(sampleRate)}
+	actualFmt := sound.AudioInfo{SDL_audio.AUDIO_S16SYS, audio.Channels, audio.SampleRate}
 	fmt.Println(actualFmt)
 
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
-	synth, err := SynthInit(int(sampleRate), "/d/synth/FluidR3_GM.sf2")
+	synth, err := SynthInit(int(audio.SampleRate), "/d/synth/FluidR3_GM.sf2")
 	if err != nil {
 		log.Fatal(err)
 	}

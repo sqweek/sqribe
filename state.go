@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 
-	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/score"
 
@@ -34,19 +33,19 @@ func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.BeatFrames()
 	s.Staves = G.score.SavedStaves()
-	s.MixWeight = audio.Mixer.Bias.Value()
-	s.MetronomeOff = !G.mixer.metronome
-	s.WaveOff = audio.Mixer.MuteAudio
-	s.MidiOff = audio.Mixer.MuteMidi
+	s.MixWeight = Mixer.Bias.Value()
+	s.MetronomeOff = Mixer.MuteMetronome
+	s.WaveOff = Mixer.MuteWave
+	s.MidiOff = Mixer.MuteMidi
 }
 
 func (s *stateV1) Restore() {
 	G.score.LoadBeats(s.Beats)
 	G.score.LoadStaves(s.Staves)
-	audio.Mixer.Bias.Set(s.MixWeight)
-	G.mixer.metronome = !s.MetronomeOff
-	audio.Mixer.MuteAudio = s.WaveOff
-	audio.Mixer.MuteMidi = s.MidiOff
+	Mixer.Bias.Set(s.MixWeight)
+	Mixer.MuteMetronome = s.MetronomeOff
+	Mixer.MuteWave = s.WaveOff
+	Mixer.MuteMidi = s.MidiOff
 }
 
 type VersionHeader struct {

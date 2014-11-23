@@ -156,6 +156,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
 	_, lastFrame := ww.VisibleFrameRange()
 	minX, maxX := -1, -1
+	/* XXX doesn't need whole beats array, see drawBeatAxis() */
 	for i, beat := range(ww.score.Beats()) {
 		if beat.Frame() < ww.first_frame {
 			minX = r.Min.X

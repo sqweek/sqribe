@@ -108,9 +108,9 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			case wde.KeyF3:
 				G.score.KeyChange(1)
 			case wde.KeyPrior:
-				audio.Mixer.Bias.Shunt(0.1)
+				Mixer.Bias.Shunt(0.1)
 			case wde.KeyNext:
-				audio.Mixer.Bias.Shunt(-0.1)
+				Mixer.Bias.Shunt(-0.1)
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
@@ -132,11 +132,11 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 				case "s", "S":
 					SaveState(G.audiofile)
 				case "t", "T":
-					toggle(&G.mixer.metronome)
+					toggle(&Mixer.MuteMetronome)
 				case "a", "A":
-					toggle(&audio.Mixer.MuteAudio)
+					toggle(&Mixer.MuteWave)
 				case "m", "M":
-					toggle(&audio.Mixer.MuteMidi)
+					toggle(&Mixer.MuteMidi)
 				case "q", "Q":
 					go G.score.QuantizeBeats()
 				}
@@ -246,7 +246,7 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
 
-	G.waveBias = NewSlider(audio.Mixer.Bias, redraw)
+	G.waveBias = NewSlider(Mixer.Bias, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)
