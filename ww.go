@@ -6,6 +6,7 @@ import (
 	"time"
 	"fmt"
 
+	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 	"sqweek.net/sqribe/wave"
@@ -199,9 +200,9 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 }
 
 func (ww *WaveWidget) dragBeat(min, max FrameN, beat *score.BeatRef) DragFn {
-	return func(pos image.Point, finished bool) bool {
+	return func(pos image.Point, finished bool, moved bool) bool {
 		f := ww.FrameAtPixel(pos.X)
-		if f <= min || f >= max {
+		if f <= min || f >= max || !moved {
 			return false
 		}
 		ww.score.MvBeat(beat, f)
@@ -210,7 +211,10 @@ func (ww *WaveWidget) dragBeat(min, max FrameN, beat *score.BeatRef) DragFn {
 }
 
 func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
-	return func(pos image.Point, finished bool)bool {
+	return func(pos image.Point, finished bool, moved bool)bool {
+		if !moved {
+			return false
+		}
 		min := ww.FrameAtPixel(pos.X)
 		max := anchor
 		if max < min {
@@ -244,14 +248,16 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			y := mid - (yspacing / 2) * (delta)
 			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
 			if mouse.In(r) {
-				return func(pos image.Point, finished bool)bool {
+				return func(pos image.Point, finished bool, moved bool)bool {
 					prospect := ww.noteAtPixel(staff, pos)
 					if prospect == nil {
 						return false
 					}
 					if finished {
-						staff.RemoveNote(note)
-						staff.AddNote(ww.mkNote(prospect, note.Duration))
+						if moved {
+							staff.RemoveNote(note)
+							staff.AddNote(ww.mkNote(prospect, note.Duration))
+						}
 					} else {
 						ww.getMouseState(pos).note = prospect
 						ww.renderstate.changed |= SCALE
@@ -356,12 +362,13 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	return state
 }
 
-func (ww *WaveWidget) CursorIconAtPixel(mouse image.Point) (DragFn, Cursor) {
-	s := ww.getMouseState(mouse)
-	return s.dragFn, s.cursor
+func (ww *WaveWidget) LeftButtonDown(mousePos image.Point) DragFn {
+	s := ww.getMouseState(mousePos)
+	return s.dragFn
 }
 
-func (ww *WaveWidget) MouseMoved(mousePos image.Point) {
+func (ww *WaveWidget) MouseMoved(mousePos image.Point) Cursor {
+	s := ww.getMouseState(mousePos)
 	if !mousePos.Eq(ww.mouse.pos) {
 		ww.mouse.pos = mousePos
 		ww.mouse.state = nil
@@ -369,11 +376,12 @@ func (ww *WaveWidget) MouseMoved(mousePos image.Point) {
 		ww.renderstate.changed |= CURSOR
 		ww.publish(mousePos)
 	}
-	if ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
+	if !audio.IsPlaying() && ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
 		ww.cursorX = mousePos.X
 		ww.renderstate.changed |= CURSOR
 		ww.publish(ww.cursorX)
 	}
+	return s.cursor
 }
 
 func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
@@ -393,10 +401,10 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	}
 }
 
-func (ww *WaveWidget) RightButtonDown(mouse image.Point) {
+func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 	s := ww.getMouseState(mouse)
 	if s.note == nil || ww.score == nil {
-		return
+		return nil
 	}
 	note := s.note
 	reply := G.noteMenu.Popup(ww.r, ww.refresh, mouse)
@@ -411,6 +419,7 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) {
 			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)
 		}
 	}()
+	return G.noteMenu.Drag
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {

@@ -36,11 +36,11 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			switch (e.Which) {
 			case wde.LeftButton:
 				if e.Where.In(G.ww.Rect()) {
-					drag, _ = G.ww.CursorIconAtPixel(e.Where)
+					drag = G.ww.LeftButtonDown(e.Where)
 				}
 			case wde.RightButton:
 				if e.Where.In(G.ww.Rect()) {
-					G.ww.RightButtonDown(e.Where)
+					drag = G.ww.RightButtonDown(e.Where)
 				}
 			case wde.WheelUpButton:
 				G.ww.Zoom(0.75)
@@ -48,10 +48,11 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 				G.ww.Zoom(1.50)
 			}
 		case wde.MouseUpEvent:
+			if drag != nil {
+				drag(e.Where, true, !dragged)
+				continue
+			}
 			if dragged {
-				if drag != nil {
-					drag(e.Where, true)
-				}
 				continue
 			}
 			switch (e.Which) {
@@ -62,36 +63,21 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 					G.waveBias.LeftClick(e.Where)
 				}
 			case wde.RightButton:
-				if !G.noteMenu.Rect().Empty() {
-					G.noteMenu.RightButtonUp(e.Where)
-				} else if e.Where.In(G.waveBias.Rect()) {
+				if e.Where.In(G.waveBias.Rect()) {
 					G.waveBias.RightClick(e.Where)
 				}
 			}
 		case wde.MouseDraggedEvent:
 			dragged = true
-			switch (e.Which) {
-			case wde.LeftButton:
-				if drag != nil {
-					drag(e.Where, false)
-				}
-			case wde.RightButton:
-				if !G.noteMenu.Rect().Empty() {
-					G.noteMenu.MouseMoved(e.Where)
-				}
+			if drag != nil {
+				drag(e.Where, false, true)
 			}
 		case wde.MouseMovedEvent:
-			if e.Where.In(G.noteMenu.Rect()) {
-				G.noteMenu.MouseMoved(e.Where)
-			} else if e.Where.In(G.ww.Rect()) {
-				if !audio.IsPlaying() {
-					G.ww.MouseMoved(e.Where)
-				}
-				_, cur := G.ww.CursorIconAtPixel(e.Where)
-				cursorCtl.Set(cur)
-			} else {
-				cursorCtl.Set(NormalCursor)
+			var cur Cursor = NormalCursor
+			if e.Where.In(G.ww.Rect()) {
+				cur = G.ww.MouseMoved(e.Where)
 			}
+			cursorCtl.Set(cur)
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {

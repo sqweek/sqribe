@@ -92,24 +92,27 @@ func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse
 	return menu.reply
 }
 
-func (menu *MenuWidget) MouseMoved(mouse image.Point) {
-	menu.hover = mouse
-	menu.refresh <- menu
-}
+func (menu *MenuWidget) Drag(mouse image.Point, finished bool, moved bool) bool {
+	contained := mouse.In(menu.r)
+	if !finished {
+		menu.hover = mouse
+		menu.refresh <- menu
+		return contained
+	}
 
-func (menu *MenuWidget) RightButtonUp(mouse image.Point) {
 	defer func() {
 		menu.r = image.Rect(0, 0, 0, 0)
 		menu.refresh <- menu
 		close(menu.reply)
 	}()
-	if !mouse.In(menu.r) {
+	if !contained {
 		menu.reply <- nil
-		return
+		return false
 	}
 	i := mod(menu.origin + (mouse.Y - menu.r.Min.Y) / menu.height, len(menu.options))
 	menu.reply <- menu.options[i]
 	menu.lastSelected = i
+	return contained
 }
 
 func (menu *MenuWidget) Draw(dst draw.Image, r image.Rectangle) {

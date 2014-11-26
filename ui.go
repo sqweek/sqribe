@@ -10,14 +10,22 @@ import (
 	. "sqweek.net/sqribe/core/data"
 )
 
-type DragFn func(image.Point, bool) bool
+type DragFn func(pos image.Point, finished, moved bool) bool
 
 type Widget interface {
 	Rect() image.Rectangle
 }
 
 type Hoverable interface {
-	MouseMoved(image.Point)
+	MouseMoved(image.Point) Cursor
+}
+
+type LeftDraggable interface {
+	LeftButtonDown(image.Point) DragFn
+}
+
+type RightDraggable interface {
+	RightButtonDown(image.Point) DragFn
 }
 
 type LeftClickable interface {
@@ -26,10 +34,6 @@ type LeftClickable interface {
 
 type RightClickable interface {
 	RightClick(image.Point)
-}
-
-type MouseDraggable interface {
-	MouseDragged(image.Point)
 }
 
 type Drawable interface {
