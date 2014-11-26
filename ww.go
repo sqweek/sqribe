@@ -406,7 +406,9 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) {
 		if item != nil && ok {
 			var dur *big.Rat = new(big.Rat)
 			dur.SetString(string(str))
-			s.note.staff.AddNote(ww.mkNote(note, dur))
+			newNote := ww.mkNote(note, dur)
+			note.staff.AddNote(newNote)
+			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)
 		}
 	}()
 }

@@ -4,7 +4,6 @@ import (
 //	"github.com/neagix/Go-SDL/sdl"
 	SDL_audio "github.com/neagix/Go-SDL/sdl/audio"
 	"github.com/neagix/Go-SDL/sound"
-	"github.com/sqweek/fluidsynth"
 	"sort"
 	"time"
 	"flag"
@@ -33,7 +32,6 @@ var G struct {
 	audiofile string
 	score score.Score
 	wav *wave.Waveform
-	synth *fluidsynth.Synth
 
 	/* plumbing */
 	plumb struct {
@@ -185,8 +183,10 @@ func playToggle() {
 		}
 		close(sampch)
 	}()
-	/* sample feeding thread */
+	/* synth & sample feeding thread */
 	go func() {
+		woodblock := Synth.Inst(midi.InstWoodblock)
+		piano := Synth.Inst(midi.InstPiano)
 		on := false
 		nf := FrameN(64)
 		bufsiz := int(G.wav.ToSample(nf))
@@ -208,13 +208,13 @@ func playToggle() {
 
 			/* metronome */
 			if on {
-				G.synth.NoteOff(15, midi.PitchF6)
+				Synth.NoteOff(woodblock, midi.PitchF6)
 				on = false
 			} else if !Mixer.MuteMetronome {
 				b0, _ := G.score.ToBeat(f0 + i - 1)
 				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
 				if int(b0) != int(bN) {
-					G.synth.NoteOn(15, midi.PitchF6, 120)
+					Synth.NoteOn(woodblock, midi.PitchF6, 120)
 					on = true
 				}
 			}
@@ -222,15 +222,16 @@ func playToggle() {
 			for mi < len(mframes) && mframes[mi] <= f0 + i + nf {
 				//fmt.Println(f0 + i, f0 + i + nf, mframes[mi])
 				for ev, _ := mid[mframes[mi]]; ev != nil; ev = ev.Next {
+					// TODO get channel for voice associated with staff
 					if ev.On {
-						G.synth.NoteOn(0, int(ev.Pitch), 100)
+						Synth.NoteOn(piano, ev.Pitch, 100)
 					} else {
-						G.synth.NoteOff(0, int(ev.Pitch))
+						Synth.NoteOff(piano, ev.Pitch)
 					}
 				}
 				mi++
 			}
-			G.synth.WriteFrames_int16(mbuf)
+			Synth.WriteFrames(mbuf)
 			α, β := 0.0, 0.0
 			bias := Mixer.Bias.Value()
 			if !Mixer.MuteWave {
@@ -326,12 +327,10 @@ func main() {
 	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
-	synth, err := SynthInit(int(audio.SampleRate), "/d/synth/FluidR3_GM.sf2")
+	Synth, err = SynthInit(int(audio.SampleRate), "/d/synth/FluidR3_GM.sf2")
 	if err != nil {
 		log.Fatal(err)
 	}
-	G.synth = synth
-	synth.ProgramChange(15, midi.InstWoodblock)
 
 	redraw := make(chan Widget, 10)
 
