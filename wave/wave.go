@@ -1,9 +1,11 @@
 package wave
 
 import (
-	"github.com/neagix/Go-SDL/sound"
 	"fmt"
 	"time"
+	"github.com/sqweek/ffmpeg-au"
+
+	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
 	. "sqweek.net/sqribe/core/types"
 )
@@ -29,49 +31,57 @@ type Waveform struct {
 	cache *cache
 }
 
-func NewWaveform(file string, fmt sound.AudioInfo) (*Waveform, error) {
-	wave := &Waveform{rate: uint(fmt.Rate), Channels: int(fmt.Channels), NSamples: 0}
+func NewWaveform(file string) (*Waveform, error) {
+	wave := &Waveform{rate: uint(audio.SampleRate), Channels: int(audio.Channels), NSamples: 0}
 	wave.cache = mkcache(1024*1024, 2, fs.CacheFile())
 	wave.Max = make([]int16, wave.Channels)
-	sample, err := sound.NewSampleFromFile(file, &fmt, 1024*1024)
+	ctx, err := aucodec.OpenFile(file)
 	if err != nil {
 		return nil, err
 	}
-	go wave.cache.Write(wave.decodefn(sample))
+	raw, err := ctx.OpenAudioStream()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("raw audiostream format", raw.Format())
+	desired := aucodec.AudioFormat{int(audio.SampleRate), aucodec.PackedS16s, aucodec.DefaultLayout(int(audio.Channels))}
+	converted, err := aucodec.Resample(raw, desired)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("converted audiostream format", converted.Format())
+	reader, err := aucodec.NewPackedS16Stream(converted)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		defer converted.Close()
+		defer ctx.Close()
+		decode := func() ([]int16, error) {
+			samps, err := reader.Read()
+			if err != nil {
+				return samps, err
+			}
+			if len(samps) > 0 {
+				for i := 0; i < len(samps); i++ {
+					c := int((wave.NSamples + SampleN(i)) % SampleN(wave.Channels))
+					if samps[i] > wave.Max[c] {
+						wave.Max[c] = samps[i]
+					} else if -samps[i] > wave.Max[c] {
+						wave.Max[c] = -samps[i]
+					}
+				}
+				wave.NSamples += SampleN(len(samps))
+			}
+			return samps, nil
+		}
+		err := wave.cache.Write(decode)
+		if err != nil {
+			fmt.Println("error decoding", file, "-", err)
+		}
+	}()
 
 	return wave, nil
-}
-
-func (wav *Waveform) decodefn(sample *sound.Sample) func() []int16 {
-	/* returns zero-length slice at EOF */
-	return func() []int16 {
-		n := sample.Decode()
-		if sample.Flags() & (1 << 30) != 0 {
-			fmt.Println("decode error:", sound.GetError())
-		}
-		if n > 0 {
-			samps := sample.Buffer_int16()
-			fmt.Printf("decoded %d bytes (%d samples)\n", n, len(samps))
-			wav.updateMax(samps[0:n/2])
-			wav.NSamples += SampleN(n/2)
-			return samps[0:n/2]
-		}
-		fmt.Printf("decoding finished\n")
-		return []int16{}
-	}
-}
-
-/* samples must not contain partial frames */
-func (wav *Waveform) updateMax(samples []int16) {
-	for i := 0; i < len(samples); i += wav.Channels {
-		for j := 0; j < wav.Channels; j++ {
-			if samples[i + j] > wav.Max[j] {
-				wav.Max[j] = samples[i + j]
-			} else if -samples[i + j] > wav.Max[j] {
-				wav.Max[j] = -samples[i + j]
-			}
-		}
-	}
 }
 
 func (wav *Waveform) ChannelExtents(samples []int16) []int16 {

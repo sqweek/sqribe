@@ -5,6 +5,7 @@ import (
 	"time"
 	"sync"
 	."fmt"
+	"io"
 	"os"
 
 	. "sqweek.net/sqribe/core/types"
@@ -38,22 +39,25 @@ func mkcache(blocksz, sampsz uint, file string) *cache {
 	return &cache
 }
 
-func (c *cache) Write(readfn func() []int16) error {
+func (c *cache) Write(readfn func() ([]int16, error)) error {
 	f, err := os.Create(c.file)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	buf := readfn()
-	lastRead := len(buf)
-	for len(buf) > 0 {
+	for {
+		buf, err := readfn()
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if len(buf) == 0 {
+			break
+		}
 		binary.Write(f, binary.LittleEndian, buf)
 		c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
-		lastRead = len(buf)
-		buf = readfn()
 	}
 	c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
-	c.lastChunkSize = uint(lastRead) * c.sampsz
+	c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
 	c.bytesWritten = -1
 	Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
 	return nil
@@ -109,7 +113,7 @@ func (c *cache) fetcher() *Chunk {
 		if offset == -1 {
 			/* block not written yet - back on the queue */
 			Printf("fetcher: requeing block %d\n", id)
-			go func() { time.Sleep(1000 * time.Millisecond); c.iochan <- id }()
+			go func() { time.Sleep(500 * time.Millisecond); c.iochan <- id }()
 			continue
 		}
 		if c.bytesWritten == -1 && id > c.lastChunkId {

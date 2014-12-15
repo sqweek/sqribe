@@ -42,7 +42,7 @@ func HostApi() *portaudio.HostApiInfo {
 
 var (
 	Channels uint8
-	SampleRate uint32
+	SampleRate uint32 // aka Frame rate
 )
 
 func Open() error {

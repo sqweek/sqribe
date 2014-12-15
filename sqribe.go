@@ -1,9 +1,6 @@
 package main
 
 import (
-//	"github.com/neagix/Go-SDL/sdl"
-	SDL_audio "github.com/neagix/Go-SDL/sdl/audio"
-	"github.com/neagix/Go-SDL/sound"
 	"sort"
 	"time"
 	"flag"
@@ -278,12 +275,12 @@ func playToggle() {
 	}()
 }
 
-func open(filename string, fmt sound.AudioInfo) error {
+func open(filename string) error {
 	var err error
 	if G.wav != nil {
 		SaveState(G.audiofile)
 	}
-	G.wav, err = wave.NewWaveform(filename, fmt)
+	G.wav, err = wave.NewWaveform(filename)
 	if err != nil {
 		return err
 	}
@@ -304,9 +301,6 @@ func mustMkFont(filename string, size int) *Font {
 }
 
 func main() {
-	//sdl.Init(sdl.INIT_EVERYTHING)
-	sound.Init()
-
 	flag.Parse()
 
 	err := audio.Open()
@@ -321,10 +315,9 @@ func main() {
 
 	G.score.Init(G.plumb.score)
 
-	actualFmt := sound.AudioInfo{SDL_audio.AUDIO_S16SYS, audio.Channels, audio.SampleRate}
-	fmt.Println(actualFmt)
+	fmt.Printf("audio opened with %d channels @ %d Hz\n", audio.Channels, audio.SampleRate)
 
-	G.font.luxi = mustMkFont("/usr/lib/go/site/src/code.google.com/p/freetype-go/luxi-fonts/luxisr.ttf", 10)
+	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
 	Synth, err = SynthInit(int(audio.SampleRate), "/d/synth/FluidR3_GM.sf2")
@@ -340,7 +333,7 @@ func main() {
 
 	audioFile := flag.Arg(0)
 	if len(audioFile) > 0 {
-		err = open(audioFile, actualFmt)
+		err = open(audioFile)
 		if err != nil {
 			log.Fatal(err)
 		}
