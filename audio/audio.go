@@ -41,8 +41,8 @@ func HostApi() *portaudio.HostApiInfo {
 }
 
 var (
-	Channels uint8
-	SampleRate uint32 // aka Frame rate
+	Channels int
+	SampleRate int // aka Frame rate
 )
 
 func Open() error {
@@ -68,8 +68,8 @@ func Open() error {
 	buf = NewRingBuffer(2048 * 3)
 	stream = s
 	samplesPerSecond = float64(s16PerSecond)
-	Channels = uint8(params.Output.Channels)
-	SampleRate = uint32(params.SampleRate)
+	Channels = params.Output.Channels
+	SampleRate = int(params.SampleRate)
 	return nil
 }
 

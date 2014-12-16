@@ -25,14 +25,14 @@ func (r FrameRange) MaxFrame() FrameN {
 type Waveform struct {
 	NSamples SampleN
 	Channels int
-	rate uint
+	rate int
 	Max []int16 // maximum amplitudes for each channel
 
 	cache *cache
 }
 
 func NewWaveform(file string) (*Waveform, error) {
-	wave := &Waveform{rate: uint(audio.SampleRate), Channels: int(audio.Channels), NSamples: 0}
+	wave := &Waveform{rate: audio.SampleRate, Channels: audio.Channels, NSamples: 0}
 	wave.cache = mkcache(1024*1024, 2, fs.CacheFile())
 	wave.Max = make([]int16, wave.Channels)
 	ctx, err := aucodec.OpenFile(file)
@@ -44,7 +44,7 @@ func NewWaveform(file string) (*Waveform, error) {
 		return nil, err
 	}
 	fmt.Println("raw audiostream format", raw.Format())
-	desired := aucodec.AudioFormat{int(audio.SampleRate), aucodec.PackedS16s, aucodec.DefaultLayout(int(audio.Channels))}
+	desired := aucodec.AudioFormat{wave.rate, aucodec.PackedS16s, aucodec.DefaultLayout(wave.Channels)}
 	converted, err := aucodec.Resample(raw, desired)
 	if err != nil {
 		return nil, err

@@ -320,7 +320,7 @@ func main() {
 	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 
-	Synth, err = SynthInit(int(audio.SampleRate), "/d/synth/FluidR3_GM.sf2")
+	Synth, err = SynthInit(audio.SampleRate, "/d/synth/FluidR3_GM.sf2")
 	if err != nil {
 		log.Fatal(err)
 	}
