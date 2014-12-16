@@ -198,9 +198,15 @@ type ChunkList struct {
 
 func (lru *ChunkList) add(chunk *Chunk) *Chunk {
 	node := &ChunkNode{chunk: chunk, next: lru.head}
+	if lru.head == nil {
+		lru.tail = node
+	} else {
+		lru.head.prev = node
+	}
 	lru.head = node
 	if lru.size >= lru.max {
 		gone := lru.tail
+		gone.prev.next = nil
 		lru.tail = gone.prev
 		return gone.chunk
 	}
@@ -208,19 +214,27 @@ func (lru *ChunkList) add(chunk *Chunk) *Chunk {
 	return nil
 }
 
+func (lru *ChunkList) promote(node *ChunkNode) {
+	if node == lru.head {
+		return
+	}
+	node.prev.next = node.next
+	if node.next != nil {
+		node.next.prev = node.prev
+	} else { /* node must be tail */
+		lru.tail = node.prev
+	}
+	node.prev = nil
+	node.next = lru.head
+	node.next.prev = node
+	lru.head = node
+}
+
 func (lru *ChunkList) touch(chunk *Chunk) {
-	for node := lru.head; node.next != nil; node = node.next {
+	/* having to walk the list is daft... */
+	for node := lru.head; node != nil; node = node.next {
 		if node.chunk == chunk {
-			if node.prev == nil {
-				return /* already top of lru */
-			}
-			node.prev.next = node.next
-			if node.next != nil {
-				node.next.prev = node.prev
-			}
-			node.prev = nil
-			node.next = lru.head
-			lru.head = node.next
+			lru.promote(node)
 			return
 		}
 	}
