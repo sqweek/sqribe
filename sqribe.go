@@ -250,9 +250,10 @@ func playToggle() {
 		for _ = range(sampch) {
 			// drain channel
 		}
-		fmt.Println("playback all stopped")
-		playState = STOPPED
+		fmt.Println("notifying portaudio")
 		audio.Stop()
+		playState = STOPPED
+		fmt.Println("playback all stopped")
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
 	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))

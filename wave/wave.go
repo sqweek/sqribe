@@ -55,8 +55,6 @@ func NewWaveform(file string) (*Waveform, error) {
 		return nil, err
 	}
 	go func() {
-		defer converted.Close()
-		defer ctx.Close()
 		decode := func() ([]int16, error) {
 			samps, err := reader.Read()
 			if err != nil {
@@ -79,6 +77,10 @@ func NewWaveform(file string) (*Waveform, error) {
 		if err != nil {
 			fmt.Println("error decoding", file, "-", err)
 		}
+		fmt.Println("closing AVCodec handles")
+		converted.Close()
+		ctx.Close()
+		fmt.Println("AVCodec closed")
 	}()
 
 	return wave, nil

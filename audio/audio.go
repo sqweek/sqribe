@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log"
 	"runtime"
-	"sync"
+	"time"
 
 	. "sqweek.net/sqribe/core/types"
 )
@@ -14,7 +14,6 @@ type RingBuffer struct {
 	buf []int16
 	head int
 	tail int
-	write *sync.Cond
 }
 
 var buf *RingBuffer
@@ -88,16 +87,13 @@ func Clear() {
 func NewRingBuffer(bufSize int) *RingBuffer {
 	var ring RingBuffer
 	ring.buf = make([]int16, bufSize + 1)
-	ring.write = sync.NewCond(&sync.Mutex{})
 	return &ring
 }
 
 /* appends int16s. if the ring buffer is full, Append blocks until the samples can fit */
 func (ring *RingBuffer) Append(wav []int16) int {
-	ring.write.L.Lock()
-	defer ring.write.L.Unlock()
 	for len(wav) >= len(ring.buf) - ring.Size() {
-		ring.write.Wait()
+		time.Sleep(50 * time.Millisecond)
 	}
 	newTail := ring.tail + len(wav)
 	if newTail > len(ring.buf) {
@@ -129,18 +125,12 @@ func (ring *RingBuffer) Extract(dest []int16) int {
 		copy(dest, ring.buf[ring.head:newHead])
 	}
 	ring.head = newHead
-	/* cond.Signal() can technically block, as it acquires the Lock. However it
-	  only does so if there is a something waiting on the condition, and since
-	  we only ever have a single thread that might be waiting we should be
-	  able to acquire the lock uncontested */
-	ring.write.Signal() // there might be a thread waiting for space in Append
 	return n
 }
 
 func (ring *RingBuffer) Clear() {
 	ring.head = 0
 	ring.tail = 0
-	ring.write.Signal()
 }
 
 func (ring *RingBuffer) Size() int {
@@ -177,11 +167,9 @@ func Play(s0, period SampleN) {
 }
 
 func Stop() {
-	go func() {
-		currentIndex = 0
-		currentLen = 0
-		stream.Abort()
-	}()
+	currentIndex = 0
+	currentLen = 0
+	stream.Abort()
 }
 
 func IsPlaying() bool {
