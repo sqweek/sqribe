@@ -9,11 +9,12 @@ import (
 
 type blockingOps struct {
 	buf []int16
+	pos int
 	playbackStart time.Duration
 }
 
 func blockOps(channels int) *blockingOps {
-	return &blockingOps{buf: make([]int16, 64 * channels)}
+	return &blockingOps{buf: make([]int16, 1024 * channels)}
 }
 
 func (block *blockingOps) Open(params portaudio.StreamParameters) (*portaudio.Stream, error) {
@@ -21,11 +22,16 @@ func (block *blockingOps) Open(params portaudio.StreamParameters) (*portaudio.St
 }
 
 func (block *blockingOps) Append(wav []int16) int {
-	if len(wav) != len(block.buf) {
-		panic(len(wav))
+	src := wav
+	for len(src) > 0 {
+		n := copy(block.buf[block.pos:], src)
+		src = src[n:]
+		block.pos += n
+		if block.pos == len(block.buf) {
+			stream.Write()
+			block.pos = 0
+		}
 	}
-	copy(block.buf, wav)
-	stream.Write()
 	return len(wav)
 }
 
