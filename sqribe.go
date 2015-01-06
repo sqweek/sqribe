@@ -97,7 +97,6 @@ func playToggle() {
 	}
 
 	playState = PLAYING
-	audio.Clear()
 	rng := G.ww.GetSelectedTimeRange()
 	f0, fN := rng.MinFrame(), rng.MaxFrame()
 
@@ -180,6 +179,7 @@ func playToggle() {
 		}
 		close(sampch)
 	}()
+	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
 	/* synth & sample feeding thread */
 	go func() {
 		woodblock := Synth.Inst(midi.InstWoodblock)
@@ -256,7 +256,6 @@ func playToggle() {
 		fmt.Println("playback all stopped")
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
-	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
 	/* gui feedback thread */
 	go func() {
 		for {
@@ -315,8 +314,6 @@ func main() {
 	G.plumb.score = plumb.MkPort()
 
 	G.score.Init(G.plumb.score)
-
-	fmt.Printf("audio opened with %d channels @ %d Hz\n", audio.Channels, audio.SampleRate)
 
 	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
 	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")

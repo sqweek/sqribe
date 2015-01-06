@@ -3,28 +3,29 @@ package audio
 import (
 	"code.google.com/p/portaudio-go/portaudio"
 	"errors"
+	"flag"
 	"log"
 	"runtime"
-	"time"
 
 	. "sqweek.net/sqribe/core/types"
 )
 
-type RingBuffer struct {
-	buf []int16
-	head int
-	tail int
+type audioOps interface {
+	Open(params portaudio.StreamParameters) (*portaudio.Stream, error)
+	Append(samples []int16) int
+	Start()
+	Index() (idx SampleN, ok bool)
 }
 
-var buf *RingBuffer
+var useCallback = flag.Bool("cb", false, "use callback")
+
+var ops audioOps
 var stream *portaudio.Stream
 var samplesPerSecond float64
 
 var (
 	currentS0 SampleN
 	currentLen SampleN = 0
-	currentIndex SampleN
-	currentTime portaudio.StreamCallbackTimeInfo
 )
 
 func HostApi() *portaudio.HostApiInfo {
@@ -58,17 +59,28 @@ func Open() error {
 	}
 	dev := host.DefaultOutputDevice
 	params := portaudio.LowLatencyParameters(nil, dev)
-	s, err := portaudio.OpenStream(params, paCallback)
+	params.SampleRate = 44100
+	if *useCallback {
+		ops = cbOps()
+	} else {
+		ops = blockOps(params.Output.Channels)
+	}
+	s, err := ops.Open(params)
 	if err != nil {
 		return err
 	}
 	s16PerSecond := int(params.SampleRate) * params.Output.Channels
-	/* TODO should be based on the actual buffer size */
-	buf = NewRingBuffer(2048 * 3)
 	stream = s
 	samplesPerSecond = float64(s16PerSecond)
 	Channels = params.Output.Channels
 	SampleRate = int(params.SampleRate)
+
+	impl := "blocking"
+	if (*useCallback) {
+		impl = "callback"
+	}
+	log.Printf("audio %s stream %s:'%s' (%d channels @ %d Hz)\n", impl, host.Name, dev.Name, Channels, SampleRate)
+
 	return nil
 }
 
@@ -77,97 +89,20 @@ func Shutdown() {
 }
 
 func Append(wav []int16) int {
-	return buf.Append(wav)
-}
-
-func Clear() {
-	buf.Clear()
-}
-
-func NewRingBuffer(bufSize int) *RingBuffer {
-	var ring RingBuffer
-	ring.buf = make([]int16, bufSize + 1)
-	return &ring
-}
-
-/* appends int16s. if the ring buffer is full, Append blocks until the samples can fit */
-func (ring *RingBuffer) Append(wav []int16) int {
-	for len(wav) >= len(ring.buf) - ring.Size() {
-		time.Sleep(50 * time.Millisecond)
-	}
-	newTail := ring.tail + len(wav)
-	if newTail > len(ring.buf) {
-		newTail %= len(ring.buf)
-		nw := copy(ring.buf[ring.tail:], wav)
-		copy(ring.buf[:newTail], wav[nw:])
-	} else {
-		copy(ring.buf[ring.tail:newTail], wav)
-	}
-	ring.tail = newTail
-	return len(wav)
-}
-
-/* tries to fill the dest buffer. if the ring buffer contains insufficient
- * samples, the remaining items in the output buffer are left untouched. */
-func (ring *RingBuffer) Extract(dest []int16) int {
-	n := ring.Size()
-	if n == 0 {
-		return 0
-	} else if n > len(dest) {
-		n = len(dest)
-	}
-	newHead := ring.head + n
-	if newHead > len(ring.buf) {
-		newHead %= len(ring.buf)
-		n1 := copy(dest, ring.buf[ring.head:])
-		copy(dest[n1:], ring.buf[:newHead])
-	} else {
-		copy(dest, ring.buf[ring.head:newHead])
-	}
-	ring.head = newHead
-	return n
-}
-
-func (ring *RingBuffer) Clear() {
-	ring.head = 0
-	ring.tail = 0
-}
-
-func (ring *RingBuffer) Size() int {
-	h := ring.head
-	t := ring.tail
-	var s int
-	if t < h {
-		s = len(ring.buf) + t - h
-	} else {
-		s = t - h
-	}
-	return s
-}
-
-func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
-	if currentLen == 0 {
-		return
-	}
-	n := buf.Extract(out)
-	currentIndex += SampleN(n)
-	currentIndex %= currentLen
-	currentTime = time
+	return ops.Append(wav)
 }
 
 func Play(s0, period SampleN) {
 	if period == 0 {
 		return
 	}
-	currentIndex = 0
 	currentLen = period
-	currentTime.OutputBufferDacTime = stream.Time()
 	currentS0 = s0
+	ops.Start()
 	stream.Start()
 }
 
 func Stop() {
-	currentIndex = 0
 	currentLen = 0
 	stream.Abort()
 }
@@ -180,12 +115,6 @@ func PlayingSample() (SampleN, bool) {
 	if currentLen == 0 {
 		return 0, false
 	}
-	dt := stream.Time() - currentTime.OutputBufferDacTime
-	index := currentIndex + SampleN(samplesPerSecond * dt.Seconds())
-	/* if audio callback hasn't run for half a second we're in trouble */
-	ok := dt.Seconds() < 0.5
-	if index < 0 {
-		return currentS0, ok
-	}
+	index, ok := ops.Index()
 	return currentS0 + (index % currentLen), ok
 }
