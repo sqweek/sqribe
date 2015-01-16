@@ -3,7 +3,7 @@ package wave
 import (
 	"fmt"
 	"time"
-	"github.com/sqweek/ffmpeg-au"
+	"github.com/sqweek/ffau"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
@@ -35,7 +35,7 @@ func NewWaveform(file string) (*Waveform, error) {
 	wave := &Waveform{rate: audio.SampleRate, Channels: audio.Channels, NSamples: 0}
 	wave.cache = mkcache(1024*1024, 2, fs.CacheFile())
 	wave.Max = make([]int16, wave.Channels)
-	ctx, err := aucodec.OpenFile(file)
+	ctx, err := ffau.OpenFile(file)
 	if err != nil {
 		return nil, err
 	}
@@ -44,13 +44,13 @@ func NewWaveform(file string) (*Waveform, error) {
 		return nil, err
 	}
 	fmt.Println("raw audiostream format", raw.Format())
-	desired := aucodec.AudioFormat{wave.rate, aucodec.PackedS16s, aucodec.DefaultLayout(wave.Channels)}
-	converted, err := aucodec.Resample(raw, desired)
+	desired := ffau.AudioFormat{wave.rate, ffau.PackedS16s, ffau.DefaultLayout(wave.Channels)}
+	converted, err := ffau.Resample(raw, desired)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Println("converted audiostream format", converted.Format())
-	reader, err := aucodec.NewPackedS16Stream(converted)
+	reader, err := ffau.NewPackedS16Stream(converted)
 	if err != nil {
 		return nil, err
 	}
