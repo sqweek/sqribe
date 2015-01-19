@@ -44,6 +44,13 @@ type StaffChanged struct {
 	Staff *Staff
 }
 
+func (score *Score) Key() int {
+	if len(score.staves) == 0 {
+		return 0
+	}
+	return score.staves[0].nsharps
+}
+
 func (score *Score) KeyChange(dsharps int) {
 	for _, staff := range score.staves {
 		staff.nsharps += dsharps

@@ -489,6 +489,7 @@ func (ww *WaveWidget) Status() string {
 		offset = o
 		pitch = s.note.staff.PitchForLine(delta)
 		delta2, _ = s.note.staff.LineForPitch(pitch)
+		nsharps = ww.score.Key()
 	}
 
 	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v #%d", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps)

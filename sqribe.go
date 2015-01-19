@@ -77,6 +77,23 @@ func (f FrameSlice) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
 
+// linear interpolation between 'from' -> zero -> 'to'
+func crossfade(from, to []int16, steps FrameN) []int16 {
+	nchan := FrameN(len(from))
+	out := make([]int16, nchan*steps)
+	for i := FrameN(0); i < steps; i++ {
+		α := 1.0 - float64(i + 1)/float64(steps + 1)
+		for j := FrameN(0); j < nchan; j++ {
+			if α > 0.5 {
+				out[nchan*i + j] = int16(float64(from[j]) * 2 * (α - 0.5))
+			} else {
+				out[nchan*i + j] = int16(float64(to[j]) * 2 * (0.5 - α))
+			}
+		}
+	}
+	return out
+}
+
 const (
 	STOPPED = iota
 	PLAYING
@@ -107,23 +124,9 @@ func playToggle() {
 	fmt.Println("starting playback", f0, fN)
 
 	/* short crossfade to loop smoothly */
-	nchan := FrameN(G.wav.Channels)
-	frame0 := G.wav.Frames(f0, f0)
-	frameN := G.wav.Frames(fN, fN)
 	N := fN - f0 + 1
 	// pad to nearest 64th frame, minimum 20 frames
 	nfPad := 19 + (64 - (N + 19) % 64)
-	loopPad := make([]int16, nchan*nfPad)
-	for i := FrameN(0); i < nfPad; i++ {
-		α := 1.0 - float64(i)/float64(nfPad)
-		for j := FrameN(0); j < nchan; j++ {
-			if α <= 0.5 {
-				loopPad[nchan*i + j] = int16(float64(frame0[j]) * 2 * (0.5 - α))
-			} else {
-				loopPad[nchan*i + j] = int16(float64(frameN[j]) * 2 * (α - 0.5))
-			}
-		}
-	}
 
 	mid := make(map[FrameN]*MidiEv)
 	notes := make(chan *score.Note, 5)
@@ -154,19 +157,20 @@ func playToggle() {
 	}
 	sort.Sort(FrameSlice(mframes))
 
-	padN := N + G.wav.ToFrame(SampleN(len(loopPad)))
+	padN := N + nfPad
 	/* wave sample prefetch thread */
 	sampch := make(chan []int16, 10)
 	go func() {
 		bufsiz := FrameN(2048)
 		var buf []int16
 		i := FrameN(0)
+		frame0 := G.wav.Frames(f0, f0)
 		for playState == PLAYING {
 			if i + bufsiz > N {
 				wave := G.wav.Frames(f0 + i, fN)
-				buf = make([]int16, len(wave) + len(loopPad))
+				buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
 				copy(buf, wave)
-				copy(buf[len(wave):], loopPad)
+				copy(buf[len(wave):], crossfade(wave[len(wave) - len(frame0):], frame0, nfPad))
 			} else {
 				buf = G.wav.Frames(f0 + i, f0 + i + bufsiz - 1)
 			}
