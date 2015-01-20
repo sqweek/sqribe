@@ -46,6 +46,11 @@ var G struct {
 	}
 }
 
+type BeatEv struct {
+	Frame FrameN
+	Next *BeatEv
+}
+
 type MidiEv struct {
 	Pitch uint8
 	Start, End FrameN
@@ -53,16 +58,17 @@ type MidiEv struct {
 }
 
 func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
-	evcur := (*MidiEv)(nil)
-	evhead := (*MidiEv)(nil)
+	var evcur, evhead *MidiEv
 	evtail := &evhead
 	notes := make(chan *score.Note, 5)
 	go score.OrderNotes(&G.score, notes)
 	for note := range(notes) {
 		start, _ := G.score.ToFrame(G.score.Beatf(note))
 		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
-		if end <= f0 || start >= fN {
+		if end <= f0 {
 			continue
+		} else if start >= fN {
+			break
 		}
 		if start < f0 {
 			start = f0
@@ -78,6 +84,24 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 		evtail = &((*evtail).Next)
 	}
 	return evhead, evcur
+}
+
+func beatlst(f0, fN, fcur FrameN) (*BeatEv, *BeatEv) {
+	var bcur, bhead *BeatEv
+	btail := &bhead
+	for _, frame := range G.score.BeatFrames() {
+		if frame < f0 {
+			continue
+		} else if frame > fN {
+			break
+		}
+		*btail = &BeatEv{frame, nil}
+		if frame > fcur && bcur == nil {
+			bcur = *btail
+		}
+		btail = &((*btail).Next)
+	}
+	return bhead, bcur
 }
 
 // linear interpolation between 'from' -> zero -> 'to'
@@ -133,6 +157,43 @@ func coalesce(in, out chan interface{}) {
 }
 
 const (
+	NOTHING = iota
+	BEAT
+	NOTE
+)
+
+func oneChange(change interface{}) int {
+	switch change.(type) {
+	case score.BeatChanged:
+		return BEAT
+	case score.StaffChanged:
+		return NOTE
+	}
+	return NOTHING
+}
+
+func whatChanged(change interface{}) int {
+	if change == nil {
+		return NOTHING
+	}
+	switch c := change.(type) {
+	case []interface{}:
+		r := NOTHING
+		for item, _ := range c {
+			switch oneChange(item) {
+			case BEAT:
+				return BEAT
+			case NOTE:
+				r = NOTE
+			}
+		}
+		return r
+	default:
+		return oneChange(c)
+	}
+}
+
+const (
 	STOPPED = iota
 	PLAYING
 	STOPPING
@@ -167,6 +228,7 @@ func playToggle() {
 	nfPad := 19 + (64 - (N + 19) % 64)
 
 	evhead, _ := midilst(f0, fN, f0)
+	bhead, _ := beatlst(f0, fN, f0)
 
 	padN := N + nfPad
 	/* wave sample prefetch thread */
@@ -202,7 +264,8 @@ func playToggle() {
 	go func() {
 		woodblock := Synth.Inst(midi.InstWoodblock)
 		piano := Synth.Inst(midi.InstPiano)
-		on := false
+		bev := bhead
+		bon := false
 		nf := FrameN(64)
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
@@ -212,10 +275,17 @@ func playToggle() {
 		i := FrameN(0)
 		for playState == PLAYING {
 			if len(inbuf) == 0 {
+				var change interface{}
 				select {
-				case <-scorechan:
-					evhead, mev = midilst(f0, fN, f0 + i)
+				case change = <-scorechan:
 				default:
+				}
+				switch whatChanged(change) {
+				case BEAT:
+					bhead, bev = beatlst(f0, fN, f0 + i)
+					fallthrough
+				case NOTE:
+					evhead, mev = midilst(f0, fN, f0 + i)
 				}
 				inbuf = <-sampch
 				if len(inbuf) < bufsiz || len(inbuf) % bufsiz != 0 {
@@ -227,18 +297,15 @@ func playToggle() {
 			buf := inbuf[:bufsiz]
 			inbuf = inbuf[bufsiz:]
 
-			/* XXX metronome, user notes and off events all deal with transitions
-			** across frame boundaries; probably abstracts nicely */
 			/* metronome */
-			if on {
+			if bon {
 				Synth.NoteOff(woodblock, midi.PitchF6)
-				on = false
+				bon = false
 			} else if !Mixer.MuteMetronome {
-				b0, _ := G.score.ToBeat(f0 + i - 1)
-				bN, _ := G.score.ToBeat(f0 + i + nf - 1)
-				if int(b0) != int(bN) {
+				for bev != nil && bev.Frame < f0 + i + nf {
 					Synth.NoteOn(woodblock, midi.PitchF6, 120)
-					on = true
+					bon = true
+					bev = bev.Next
 				}
 			}
 			/* user placed notes */
@@ -277,6 +344,7 @@ func playToggle() {
 			if i >= padN {
 				i = 0
 				mev = evhead
+				bev = bhead
 			}
 		}
 		for _ = range(sampch) {
