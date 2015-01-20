@@ -183,11 +183,9 @@ func (score *Score) NearestBeat(frame FrameN) *BeatRef {
 	i, exact := score.index(frame)
 	if exact || i == 0 {
 		return score.beats[i]
-	}
-	if i == len(score.beats) {
+	} else if i == len(score.beats) {
 		return score.beats[len(score.beats) - 1]
-	}
-	if frame - score.beats[i-1].frame < score.beats[i].frame - frame {
+	} else if frame - score.beats[i-1].frame < score.beats[i].frame - frame {
 		return score.beats[i - 1]
 	} else {
 		return score.beats[i]

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sort"
 	"time"
 	"flag"
 	"log"
@@ -49,32 +48,36 @@ var G struct {
 
 type MidiEv struct {
 	Pitch uint8
-	On bool
+	Start, End FrameN
 	Next *MidiEv
 }
 
-func addEv(midi map[FrameN]*MidiEv, frame FrameN, ev MidiEv) {
-	prev, ok := midi[frame]
-	if ok {
-		for ; prev.Next != nil; prev = prev.Next {}
-		prev.Next = &ev
-	} else {
-		midi[frame] = &ev
+func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
+	evcur := (*MidiEv)(nil)
+	evhead := (*MidiEv)(nil)
+	evtail := &evhead
+	notes := make(chan *score.Note, 5)
+	go score.OrderNotes(&G.score, notes)
+	for note := range(notes) {
+		start, _ := G.score.ToFrame(G.score.Beatf(note))
+		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
+		if end <= f0 || start >= fN {
+			continue
+		}
+		if start < f0 {
+			start = f0
+		}
+		if end > fN {
+			end = fN
+		}
+
+		*evtail = &MidiEv{note.Pitch, start, end, nil}
+		if start >= fcur && evcur == nil {
+			evcur = *evtail
+		}
+		evtail = &((*evtail).Next)
 	}
-}
-
-type FrameSlice []FrameN
-
-func (f FrameSlice) Len() int {
-	return len(f)
-}
-
-func (f FrameSlice) Less(i, j int) bool {
-	return f[i] < f[j]
-}
-
-func (f FrameSlice) Swap(i, j int) {
-	f[i], f[j] = f[j], f[i]
+	return evhead, evcur
 }
 
 // linear interpolation between 'from' -> zero -> 'to'
@@ -92,6 +95,41 @@ func crossfade(from, to []int16, steps FrameN) []int16 {
 		}
 	}
 	return out
+}
+
+func coalesced(out chan interface{}) chan interface{} {
+	in := make(chan interface{})
+	go coalesce(in, out)
+	return in
+}
+
+func coalesce(in, out chan interface{}) {
+	defer close(out)
+	for in != nil {
+		ev, open := <-in
+		if !open {
+			return
+		}
+
+		for ev != nil {
+			select {
+			case ev2, open := <-in:
+				if open {
+					lst, ok := ev.([]interface{})
+					if ok {
+						ev = append(lst, ev2)
+					} else {
+						// lst is empty slice
+						ev = append(lst, ev, ev2)
+					}
+				} else {
+					in = nil
+				}
+			case out <- ev:
+				ev = nil
+			}
+		}
+	}
 }
 
 const (
@@ -128,34 +166,7 @@ func playToggle() {
 	// pad to nearest 64th frame, minimum 20 frames
 	nfPad := 19 + (64 - (N + 19) % 64)
 
-	mid := make(map[FrameN]*MidiEv)
-	notes := make(chan *score.Note, 5)
-	go score.OrderNotes(&G.score, notes)
-	for note := range(notes) {
-		start, _ := G.score.ToFrame(G.score.Beatf(note))
-		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
-		if end <= f0 || start >= fN {
-			continue
-		}
-		if start < f0 {
-			start = f0
-		}
-		if end > fN {
-			end = fN
-		}
-		addEv(mid, start, MidiEv{note.Pitch, true, nil})
-		addEv(mid, end, MidiEv{note.Pitch, false, nil})
-	}
-	mframes := make([]FrameN, len(mid))
-	i := 0
-	for f, _ := range(mid) {
-		mframes[i] = f
-		for ev, _ := mid[f]; ev != nil; ev = ev.Next {
-			//fmt.Println(f, ev)
-		}
-		i++
-	}
-	sort.Sort(FrameSlice(mframes))
+	evhead, _ := midilst(f0, fN, f0)
 
 	padN := N + nfPad
 	/* wave sample prefetch thread */
@@ -183,6 +194,9 @@ func playToggle() {
 		}
 		close(sampch)
 	}()
+	scorechan := make(chan interface{})
+	G.plumb.score.Sub(&playState, coalesced(scorechan))
+
 	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
 	/* synth & sample feeding thread */
 	go func() {
@@ -193,10 +207,16 @@ func playToggle() {
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
 		inbuf := []int16{}
-		mi := 0
+		mev := evhead
+		offlist := make([]MidiEv, 0, 32)
 		i := FrameN(0)
 		for playState == PLAYING {
 			if len(inbuf) == 0 {
+				select {
+				case <-scorechan:
+					evhead, mev = midilst(f0, fN, f0 + i)
+				default:
+				}
 				inbuf = <-sampch
 				if len(inbuf) < bufsiz || len(inbuf) % bufsiz != 0 {
 					fmt.Println("prefetch samples sent in non-64 frame multiple", len(inbuf))
@@ -207,6 +227,8 @@ func playToggle() {
 			buf := inbuf[:bufsiz]
 			inbuf = inbuf[bufsiz:]
 
+			/* XXX metronome, user notes and off events all deal with transitions
+			** across frame boundaries; probably abstracts nicely */
 			/* metronome */
 			if on {
 				Synth.NoteOff(woodblock, midi.PitchF6)
@@ -220,18 +242,24 @@ func playToggle() {
 				}
 			}
 			/* user placed notes */
-			for mi < len(mframes) && mframes[mi] <= f0 + i + nf {
-				//fmt.Println(f0 + i, f0 + i + nf, mframes[mi])
-				for ev, _ := mid[mframes[mi]]; ev != nil; ev = ev.Next {
-					// TODO get channel for voice associated with staff
-					if ev.On {
-						Synth.NoteOn(piano, ev.Pitch, 100)
+			for mev != nil && mev.Start < f0 + i + nf {
+				// TODO get channel for voice associated with staff
+				Synth.NoteOn(piano, mev.Pitch, 100)
+				offlist = append(offlist, *mev)
+				mev = mev.Next
+			}
+			for j := len(offlist) - 1; j >= 0; j-- {
+				// XXX sorted list might be simpler?
+				if offlist[j].End >= f0 + i && offlist[j].End < f0 + i + nf {
+					Synth.NoteOff(piano, offlist[j].Pitch)
+					if j == len(offlist) - 1 {
+						offlist = offlist[:j]
 					} else {
-						Synth.NoteOff(piano, ev.Pitch)
+						copy(offlist[j:], offlist[j+1:])
 					}
 				}
-				mi++
 			}
+
 			Synth.WriteFrames(mbuf)
 			α, β := 0.0, 0.0
 			bias := Mixer.Bias.Value()
@@ -248,12 +276,13 @@ func playToggle() {
 			i += nf
 			if i >= padN {
 				i = 0
-				mi = 0
+				mev = evhead
 			}
 		}
 		for _ = range(sampch) {
 			// drain channel
 		}
+		G.plumb.score.Unsub(&playState)
 		fmt.Println("notifying portaudio")
 		audio.Stop()
 		playState = STOPPED
