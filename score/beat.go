@@ -31,6 +31,14 @@ func (beat *BeatRef) Frame() FrameN {
 	return beat.frame
 }
 
+func (score *Score) Shunt(br BeatRange, Δbeat int) BeatRange {
+	score.RLock()
+	defer score.RUnlock()
+	b0 := score.ClipBeat(br.First.index + Δbeat)
+	bN := score.ClipBeat(br.Last.index + Δbeat)
+	return BeatRange{score.beats[b0], score.beats[bN]}
+}
+
 func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
 	orig := beat.frame
 	changed := (newFrame != orig)
@@ -88,13 +96,15 @@ func (score *Score) ToBeat(frame FrameN) (float64, bool) {
 }
 
 func (score *Score) ClipBeat(index int) int {
-	if index == -1 || len(score.beats) == 0 {
+	if len(score.beats) == 0 {
 		return -1
 	}
 	score.RLock()
 	defer score.RUnlock()
 	if index > len(score.beats) {
 		return len(score.beats) - 1
+	} else if index < 0 {
+		return 0
 	}
 	return index
 }

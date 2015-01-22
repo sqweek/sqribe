@@ -83,9 +83,17 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
 			case wde.KeyLeftArrow:
-				G.ww.Scroll(-0.25)
+				if e.Chord == "shift+arrow" {
+					G.ww.ShuntSel(-1)
+				} else {
+					G.ww.Scroll(-0.25)
+				}
 			case wde.KeyRightArrow:
-				G.ww.Scroll(0.25)
+				if e.Chord == "shift+arrow" {
+					G.ww.ShuntSel(1)
+				} else {
+					G.ww.Scroll(0.25)
+				}
 			case wde.KeyUpArrow:
 				G.ww.Zoom(0.5)
 			case wde.KeyDownArrow:

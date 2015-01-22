@@ -108,6 +108,14 @@ func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	}
 }
 
+func (ww *WaveWidget) ShuntSel(Δbeat int) {
+	sc := ww.score
+	br, ok := ww.selection.(score.BeatRange)
+	if ok && sc != nil {
+		ww.SelectAudio(sc.Shunt(br, Δbeat))
+	}
+}
+
 func (ww *WaveWidget) GetSelectedTimeRange() TimeRange {
 	return ww.selection
 }
