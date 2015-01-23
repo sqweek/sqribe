@@ -297,6 +297,19 @@ func playToggle() {
 			buf := inbuf[:bufsiz]
 			inbuf = inbuf[bufsiz:]
 
+			/* turn notes off first so notes at the same pitch directly following
+			** one another don't get truncated */
+			for j := len(offlist) - 1; j >= 0; j-- {
+				// XXX sorted list might be simpler?
+				if offlist[j].End < f0 + i + nf {
+					Synth.NoteOff(piano, offlist[j].Pitch)
+					if j == len(offlist) - 1 {
+						offlist = offlist[:j]
+					} else {
+						copy(offlist[j:], offlist[j+1:])
+					}
+				}
+			}
 			/* metronome */
 			if bon {
 				Synth.NoteOff(woodblock, midi.PitchF6)
@@ -314,17 +327,6 @@ func playToggle() {
 				Synth.NoteOn(piano, mev.Pitch, 100)
 				offlist = append(offlist, *mev)
 				mev = mev.Next
-			}
-			for j := len(offlist) - 1; j >= 0; j-- {
-				// XXX sorted list might be simpler?
-				if offlist[j].End >= f0 + i && offlist[j].End < f0 + i + nf {
-					Synth.NoteOff(piano, offlist[j].Pitch)
-					if j == len(offlist) - 1 {
-						offlist = offlist[:j]
-					} else {
-						copy(offlist[j:], offlist[j+1:])
-					}
-				}
 			}
 
 			Synth.WriteFrames(mbuf)
