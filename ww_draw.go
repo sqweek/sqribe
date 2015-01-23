@@ -56,6 +56,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 			ww.drawTimeAxis(ww.renderstate.waveRulers, belowRect(ww.rect.wave, axish))
 		}
 		draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
+		ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
 		ww.drawScale(ww.renderstate.img, ww.rect.wave, infow)
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
@@ -106,7 +107,6 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	cl := color.RGBA{0x99, 0x99, 0xcc, 255}
 	ci := color.RGBA{0xbb, 0x99, 0xbb, 255}
 	cr := color.RGBA{0xbb, 0x99, 0x99, 255}
-	csel := color.RGBA{0xdd, 0xdd, 0xdd, 255}
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
 	if ww.wav == nil {
 		return
@@ -122,12 +122,8 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	if dx0 >= size.X {
 		return
 	}
-	rng := ww.GetSelectedTimeRange()
-	sel0, selN := rng.MinFrame(), rng.MaxFrame()
-	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
 	yorigin := (r.Min.Y + r.Max.Y) / 2
 	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))
-	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Src)
 	chunks := ww.wav.GetFrames(f0_get, f0 + FrameN(size.X) * fpp)
 	for dx := dx0; dx < size.X; dx++ {
 		pixS0, pixSN := ww.wav.SampleRange(f0 + fpp * FrameN(dx), f0 + fpp * FrameN(dx+1))
@@ -146,6 +142,14 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 			draw.Draw(dst, ri, &image.Uniform{ci}, image.ZP, draw.Src)
 		}
 	}
+}
+
+func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
+	csel := color.NRGBA{0xbb, 0xbb, 0xee, 128}
+	rng := ww.GetSelectedTimeRange()
+	sel0, selN := rng.MinFrame(), rng.MaxFrame()
+	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
+	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
 }
 
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {

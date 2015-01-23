@@ -18,6 +18,7 @@ type changeMask int
 
 const (
 	WAV changeMask = 1 << iota
+	SELXN
 	SCALE
 	CURSOR
 	BEATS
@@ -93,8 +94,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 func (ww *WaveWidget) SelectAudio(sel TimeRange) {
 	ww.selection = sel
 	G.plumb.selection.C <- sel
-	// XXX could avoid redrawing waveform if selection rendered differently
-	ww.renderstate.changed |= WAV
+	ww.renderstate.changed |= SELXN
 	ww.refresh <- ww
 }
 
@@ -375,12 +375,15 @@ func (ww *WaveWidget) LeftButtonDown(mousePos image.Point) DragFn {
 	return s.dragFn
 }
 
+func (n *noteProspect) Eq(n2 *noteProspect) bool {
+	return n.staff == n2.staff && n.delta == n2.delta && n.beatf == n2.beatf
+}
+
 func (ww *WaveWidget) MouseMoved(mousePos image.Point) Cursor {
 	orig := ww.mouse.state
 	s := ww.getMouseState(mousePos)
-	if orig != ww.mouse.state {
-		// XXX this could be less severe than CURSOR
-		ww.renderstate.changed |= CURSOR
+	if s.note != nil && (orig == nil || orig.note == nil || !s.note.Eq(orig.note)) {
+		ww.renderstate.changed |= SCALE
 		ww.publish(mousePos)
 	}
 	if !audio.IsPlaying() && ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
