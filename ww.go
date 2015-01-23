@@ -376,10 +376,9 @@ func (ww *WaveWidget) LeftButtonDown(mousePos image.Point) DragFn {
 }
 
 func (ww *WaveWidget) MouseMoved(mousePos image.Point) Cursor {
+	orig := ww.mouse.state
 	s := ww.getMouseState(mousePos)
-	if !mousePos.Eq(ww.mouse.pos) {
-		ww.mouse.pos = mousePos
-		ww.mouse.state = nil
+	if orig != ww.mouse.state {
 		// XXX this could be less severe than CURSOR
 		ww.renderstate.changed |= CURSOR
 		ww.publish(mousePos)

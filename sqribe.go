@@ -179,7 +179,7 @@ func whatChanged(change interface{}) int {
 	switch c := change.(type) {
 	case []interface{}:
 		r := NOTHING
-		for item, _ := range c {
+		for _, item := range c {
 			switch oneChange(item) {
 			case BEAT:
 				return BEAT
