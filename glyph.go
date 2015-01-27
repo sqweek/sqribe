@@ -48,11 +48,12 @@ func newHollowNote(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
 
 type NoteTail struct {
 	CenteredGlyph
+	downBeam bool
 }
 
 func (t *NoteTail) At(x, y int) color.Color {
 	dx, dy := x - t.p.X, y - t.p.Y
-	if dx > 0 && dx - dy == 0 {
+	if dx > 0 && ((t.downBeam && dx + dy == 0) || (!t.downBeam && dx - dy == 0)) {
 		return t.col
 	}
 	return color.RGBA{0, 0, 0, 0}

@@ -267,15 +267,28 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note 
 	}
 	draw.Draw(dst, r, head, r.Min, draw.Over)
 	if note.Durf() <= 3 {
-		beamTop := image.Pt(x + yspacing/2 - 1, y - yspacing * 2.5 - 1)
-		beam := image.Rectangle{beamTop, image.Pt(x + yspacing/2, y)}
+		downBeam := (delta > 2)
+		var beamEnd image.Point
+		var beam image.Rectangle
+		if downBeam {
+			beamEnd = image.Pt(x - yspacing/2, y + yspacing * 2.5)
+			beam = image.Rectangle{image.Pt(x - yspacing/2, y), beamEnd.Add(image.Pt(1,1))}
+		} else {
+			beamEnd = image.Pt(x + yspacing/2 - 1, y - yspacing * 2.5 - 1)
+			beam = image.Rectangle{beamEnd, image.Pt(x + yspacing/2, y)}
+		}
 		draw.Draw(dst, beam, &image.Uniform{col}, r.Min, draw.Over)
 		i := 0
 		/* TODO dotted durations, triplets */
 		for d := 0.5; d >= note.Durf(); d /= 2 {
-			c := image.Pt(beamTop.X, beamTop.Y + i * 3)
+			var c image.Point
+			if downBeam {
+				c = image.Pt(beamEnd.X, beamEnd.Y - i * 3)
+			} else {
+				c = image.Pt(beamEnd.X, beamEnd.Y + i * 3)
+			}
 			i++
-			draw.Draw(dst, r, &NoteTail{CenteredGlyph{col, c, 4*yspacing/(2*5)}}, r.Min, draw.Over)
+			draw.Draw(dst, r, &NoteTail{CenteredGlyph{col, c, 4*yspacing/(2*5)}, downBeam}, r.Min, draw.Over)
 		}
 	}
 	if accidental != nil {
