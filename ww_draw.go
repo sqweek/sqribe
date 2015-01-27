@@ -199,9 +199,9 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 			draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
 		}
 
-		ww.drawNotes(dst, rect, staff, mid)
+		ww.drawNotes(dst, r, staff, mid)
 
-		ww.drawProspectiveNote(dst, rect, staff, mid)
+		ww.drawProspectiveNote(dst, r, staff, mid)
 	}
 }
 
