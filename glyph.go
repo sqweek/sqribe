@@ -64,13 +64,18 @@ type FlatGlyph struct {
 }
 
 func (f *FlatGlyph) At(x, y int) color.Color {
-	dx, dy := x - f.p.X, y - f.p.Y
+	dx, dy := x - f.p.X, y - f.p.Y + 3
 	if dx == -2 ||
 	    (dy <= 5 && dy >= 3 && dy + dx == 4) ||
 	    (dy < 3 && dy >= 1 && dy - dx == 2) {
 		return f.col
 	}
 	return color.RGBA{0, 0, 0, 0}
+}
+
+// HACK the flat glyph is not aligned with the actual centre point 'p'
+func (f *FlatGlyph) Bounds() image.Rectangle {
+	return f.CenteredGlyph.Bounds().Sub(image.Point{0, 3})
 }
 
 type SharpGlyph struct {
