@@ -159,9 +159,14 @@ func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	fg := color.RGBA{0x00, 0x00, 0x00, 255}
 	s.r = r
+	posn := s.data.Posn()
+	drawSlider(dst, r, bg, fg, posn)
+}
+
+func drawSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
 	mid := r.Min.Y + r.Dy() / 2
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
-	x := int(float64(r.Min.X) + s.data.Posn() * float64(r.Dx()) + 0.5)
+	x := int(float64(r.Min.X) + posn * float64(r.Dx()) + 0.5)
 	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }

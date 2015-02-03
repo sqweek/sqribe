@@ -57,6 +57,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 		}
 		draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
 		ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
+		ww.drawMixer(ww.renderstate.img, infow)
 		ww.drawScale(ww.renderstate.img, ww.rect.wave, infow)
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
@@ -152,6 +153,13 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
 }
 
+func (ww *WaveWidget) drawMixer(dst draw.Image, infow int) {
+	for _, staff := range ww.score.Staves() {
+		rect := ww.rect.staves[staff]
+		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)
+	}
+}
+
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	if ww.score == nil {
 		return
@@ -185,23 +193,25 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		draw.Draw(dst, image.Rect(x-1, r.Min.Y+2, x+2, r.Min.Y+3), &image.Uniform{black}, r.Min, draw.Over)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
+	if minX >= maxX {
+		return
+	}
 	for _, staff := range ww.score.Staves() {
 		rect := ww.rect.staves[staff]
-		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)
-		if minX >= maxX {
-			continue
-		}
-
 		mid := rect.Min.Y + rect.Dy() / 2
-		minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
-		for y := minY; y <= maxY; y += yspacing {
-			line := image.Rect(minX, y, maxX, y+1)
-			draw.Draw(dst, line, &image.Uniform{black4}, image.ZP, draw.Over)
-		}
+		drawStaffLines(dst, black4, minX, maxX, mid)
 
 		ww.drawNotes(dst, r, staff, mid)
 
 		ww.drawProspectiveNote(dst, r, staff, mid)
+	}
+}
+
+func drawStaffLines(dst draw.Image, col color.Color, minX, maxX, mid int) {
+	minY, maxY := mid - 2 * yspacing, mid + 2 * yspacing
+	for y := minY; y <= maxY; y += yspacing {
+		line := image.Rect(minX, y, maxX, y+1)
+		draw.Draw(dst, line, &image.Uniform{col}, image.ZP, draw.Over)
 	}
 }
 
@@ -220,13 +230,36 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
 	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
 	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
+	drawBorders(dst, r, border, bg)
+
+	mid := r.Min.Y + r.Dy() / 2
+	sigW := 8*(yspacing/2)
+	sigR := rightRect(r, sigW).Sub(image.Point{sigW + 2, 0})
+	drawStaffLines(dst, fg, sigR.Min.X, sigR.Max.X, mid)
+	keysig, lines := staff.KeyAccidentalLines()
+	for i, delta := range lines {
+		cg := CenteredGlyph{
+			col: fg,
+			p: image.Point{sigR.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2},
+			r: yspacing/2,
+		}
+		var glyph image.Image
+		if keysig.IsSharps() {
+			glyph = &SharpGlyph{cg}
+		} else {
+			glyph = &FlatGlyph{cg}
+		}
+		draw.Draw(dst, r, glyph, r.Min, draw.Over)
+	}
+
 	var fill color.RGBA
 	if staff.Muted {
 		fill = bg
 	} else {
 		fill = fg
 	}
-	drawBorders(dst, r, border, fill)
+	muteR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
+	drawBorders(dst, muteR, border, fill)
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, prospective bool) {

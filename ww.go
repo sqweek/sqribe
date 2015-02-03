@@ -19,6 +19,7 @@ type changeMask int
 const (
 	WAV changeMask = 1 << iota
 	SELXN
+	MIXER
 	SCALE
 	CURSOR
 	BEATS
@@ -405,7 +406,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 		if mouse.In(leftRect(rect, indent)) {
 			/* TODO move to staff.ToggleMute() -OR- seperate mute from model */
 			staff.Muted = !staff.Muted
-			ww.renderstate.changed |= SCALE
+			ww.renderstate.changed |= MIXER
 			ww.publish(score.StaffChanged{staff})
 		}
 	}
@@ -490,7 +491,7 @@ func (ww *WaveWidget) Status() string {
 	delta2 := 0
 	beati := 0
 	offset := big.NewRat(1, 1)
-	nsharps := -99
+	nsharps := score.KeySig(-99)
 	if s.note != nil {
 		beatf := s.note.beatf
 		delta = s.note.delta
@@ -502,5 +503,5 @@ func (ww *WaveWidget) Status() string {
 		nsharps = ww.score.Key()
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v #%d", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v %v", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps)
 }

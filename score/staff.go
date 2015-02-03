@@ -4,15 +4,14 @@ import (
 	"math/big"
 	"sort"
 
-	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/plumb"
 )
 
 type Staff struct {
 	name string
 	voice int
-	origin uint8	// unaltered pitch of center note (ie. clef)
-	nsharps int	// key signature (-ve for flats)
+	clef *Clef
+	nsharps KeySig	// key signature (-ve for flats)
 	Muted bool
 	notes []*Note
 	plumb *plumb.Port
@@ -44,7 +43,7 @@ type StaffChanged struct {
 	Staff *Staff
 }
 
-func (score *Score) Key() int {
+func (score *Score) Key() KeySig {
 	if len(score.staves) == 0 {
 		return 0
 	}
@@ -53,7 +52,12 @@ func (score *Score) Key() int {
 
 func (score *Score) KeyChange(dsharps int) {
 	for _, staff := range score.staves {
-		staff.nsharps += dsharps
+		staff.nsharps += KeySig(dsharps)
+		if staff.nsharps > 7 {
+			staff.nsharps -= 12
+		} else if staff.nsharps < -7 {
+			staff.nsharps += 12
+		}
 		staff.plumb.C <- StaffChanged{staff}
 	}
 }
@@ -62,12 +66,8 @@ func (score *Score) Staves() []*Staff {
 	return score.staves
 }
 
-func (score *Score) NewTrebleStaff() *Staff {
-	return &Staff{name: "Treble", origin: midi.PitchB5, plumb: score.plumb}
-}
-
-func (score *Score) NewBassStaff() *Staff {
-	return &Staff{name: "Bass", origin: midi.PitchD4, plumb: score.plumb}
+func (score *Score) NewStaff(clef *Clef) *Staff {
+	return &Staff{clef: clef, plumb: score.plumb}
 }
 
 func (score *Score) SavedStaves() []SavedStaff {
@@ -75,7 +75,7 @@ func (score *Score) SavedStaves() []SavedStaff {
 	defer score.RUnlock()
 	saved := make([]SavedStaff, 0, len(score.staves))
 	for _, staff := range score.staves {
-		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.origin, staff.nsharps, staff.Muted, staff.SavedNotes()})
+		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes()})
 	}
 	return saved
 }
@@ -95,7 +95,11 @@ func (score *Score) LoadStaves(in []SavedStaff) {
 		score.staves = score.staves[0:0]
 	}
 	for _, saved := range in {
-		staff := &Staff{saved.Name, saved.Voice, saved.Origin, saved.Nsharps, saved.Muted, nil, score.plumb}
+		clef := FindClef(saved.Origin)
+		if clef == nil {
+			clef = &TrebleClef
+		}
+		staff := &Staff{saved.Name, saved.Voice, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb}
 		staff.LoadNotes(score, saved.Notes)
 		score.staves = append(score.staves, staff)
 	}
@@ -239,8 +243,16 @@ func (staff *Staff) perNote(rng BeatRange, f func(note *Note)) {
 	}
 }
 
+func (staff *Staff) Name() string {
+	return staff.name
+}
+
 func (staff *Staff) Notes() []*Note {
 	return staff.notes
+}
+
+func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
+	return staff.nsharps, staff.clef.accidentalLines(staff.nsharps)
 }
 
 func OrderNotes(score *Score, notes chan<- *Note) {

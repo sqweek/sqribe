@@ -6,6 +6,8 @@ import (
 
 const (
 	PitchD4 = 50
+	PitchA4 = 57
+	PitchC5 = 60
 	PitchB5 = 71
 	PitchF6 = 77
 )
