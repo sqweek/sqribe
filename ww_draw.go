@@ -154,6 +154,9 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 }
 
 func (ww *WaveWidget) drawMixer(dst draw.Image, infow int) {
+	if ww.score == nil {
+		return
+	}
 	for _, staff := range ww.score.Staves() {
 		rect := ww.rect.staves[staff]
 		ww.drawStaffCtl(dst, leftRect(rect, infow), staff)

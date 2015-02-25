@@ -50,11 +50,13 @@ func (c *cache) Write(readfn func() ([]int16, error)) error {
 		if err != nil && err != io.EOF {
 			return err
 		}
-		if len(buf) == 0 {
+		if err == io.EOF {
 			break
 		}
-		binary.Write(f, binary.LittleEndian, buf)
-		c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
+		if len(buf) > 0 {
+			binary.Write(f, binary.LittleEndian, buf)
+			c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
+		}
 	}
 	c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
 	c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
