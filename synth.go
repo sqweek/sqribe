@@ -26,6 +26,7 @@ func SynthInit(srate int, sfont string) (*Synthesizer, error) {
 	}
 	/* TODO load sound font in background */
 	synth.fluid.SFLoad(sfont, true)
+	go synth.scheduler()
 	return synth, nil
 }
 
