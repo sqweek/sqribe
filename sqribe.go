@@ -54,6 +54,8 @@ type BeatEv struct {
 
 type MidiEv struct {
 	Pitch uint8
+	Chan uint8
+	Velocity uint8
 	Start, End FrameN
 	Next *MidiEv
 }
@@ -61,11 +63,11 @@ type MidiEv struct {
 func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 	var evcur, evhead *MidiEv
 	evtail := &evhead
-	notes := make(chan *score.Note, 5)
+	notes := make(chan score.StaffNote, 5)
 	go score.OrderNotes(&G.score, notes)
-	for note := range(notes) {
-		start, _ := G.score.ToFrame(G.score.Beatf(note))
-		end, _ := G.score.ToFrame(G.score.Beatf(note) + note.Durf())
+	for sn := range(notes) {
+		start, _ := G.score.ToFrame(G.score.Beatf(sn.Note))
+		end, _ := G.score.ToFrame(G.score.Beatf(sn.Note) + sn.Note.Durf())
 		if end <= f0 {
 			continue
 		} else if start >= fN {
@@ -78,7 +80,10 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 			end = fN
 		}
 
-		*evtail = &MidiEv{note.Pitch, start, end, nil}
+		vId, _ := sn.Staff.Voice()
+		midichan := Synth.Inst(uint8(vId))
+		/* TODO get velocity from staff */
+		*evtail = &MidiEv{sn.Note.Pitch, midichan, 100, start, end, nil}
 		if start >= fcur && evcur == nil {
 			evcur = *evtail
 		}
@@ -264,7 +269,6 @@ func playToggle() {
 	/* synth & sample feeding thread */
 	go func() {
 		woodblock := Synth.Inst(midi.InstWoodblock)
-		piano := Synth.Inst(midi.InstPiano)
 		bev := bhead
 		bon := false
 		nf := FrameN(64)
@@ -303,7 +307,7 @@ func playToggle() {
 			for j := len(offlist) - 1; j >= 0; j-- {
 				// XXX sorted list might be simpler?
 				if offlist[j].End < f0 + i + nf {
-					Synth.NoteOff(piano, offlist[j].Pitch)
+					Synth.NoteOff(offlist[j].Chan, offlist[j].Pitch)
 					if j == len(offlist) - 1 {
 						offlist = offlist[:j]
 					} else {
@@ -324,8 +328,7 @@ func playToggle() {
 			}
 			/* user placed notes */
 			for mev != nil && mev.Start < f0 + i + nf {
-				// TODO get channel for voice associated with staff
-				Synth.NoteOn(piano, mev.Pitch, 100)
+				Synth.NoteOn(mev.Chan, mev.Pitch, mev.Velocity)
 				offlist = append(offlist, *mev)
 				mev = mev.Next
 			}

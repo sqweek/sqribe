@@ -44,6 +44,11 @@ type StaffChanged struct {
 	Staff *Staff
 }
 
+type StaffNote struct {
+	Staff *Staff
+	Note *Note
+}
+
 func (score *Score) Key() KeySig {
 	if len(score.staves) == 0 {
 		return 0
@@ -266,7 +271,7 @@ func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
 	return staff.nsharps, staff.clef.accidentalLines(staff.nsharps)
 }
 
-func OrderNotes(score *Score, notes chan<- *Note) {
+func OrderNotes(score *Score, notes chan<- StaffNote) {
 	defer close(notes)
 	n := len(score.staves)
 	idx := make([]int, n)
@@ -287,7 +292,7 @@ func OrderNotes(score *Score, notes chan<- *Note) {
 		if best == -1 {
 			break
 		}
-		notes <- score.staves[best].notes[idx[best]]
+		notes <- StaffNote{score.staves[best], score.staves[best].notes[idx[best]]}
 		idx[best]++
 	}
 }
