@@ -1,67 +1,74 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 )
 
-type MenuItem interface {
-	Bounds() image.Rectangle
-	Draw(dst draw.Image, r image.Rectangle)
+type MenuOps interface {
+	Bounds(item interface{}) image.Rectangle
+	Draw(item interface{}, dst draw.Image, r image.Rectangle)
 }
 
 type MenuWidget struct {
 	WidgetCore
 
 	// general settings
-	options []MenuItem
+	ops MenuOps
+	options []interface{}
 	lastSelected int
 	maxWidth int
 	height int // per option
 
 	// details of current instance
 	origin int
-	reply chan MenuItem
+	reply chan interface{}
 	hover image.Point
 }
 
-type MenuString string
-
-func (str MenuString) Bounds() image.Rectangle {
-	font := G.font.luxi
-	return image.Rect(0, 0, font.PixelWidth(string(str)), font.PixelHeight())
+type StringMenuOps struct {
+	toStr func(interface{}) string
 }
 
-func (str MenuString) Draw(dst draw.Image, r image.Rectangle) {
+func (ops StringMenuOps) str(item interface{}) string {
+	if ops.toStr == nil {
+		str, ok := item.(string)
+		if ok {
+			return str
+		}
+		return item.(fmt.Stringer).String()
+	}
+	return ops.toStr(item)
+}
+
+func (ops StringMenuOps) Bounds(item interface{}) image.Rectangle {
+	font := G.font.luxi
+	return image.Rect(0, 0, font.PixelWidth(ops.str(item)), font.PixelHeight())
+}
+
+func (ops StringMenuOps) Draw(item interface{}, dst draw.Image, r image.Rectangle) {
 	centre := image.Pt((r.Min.X + r.Max.X) / 2, (r.Min.Y + r.Max.Y) / 2)
 	font := G.font.luxi
-	font.DrawC(dst, color.RGBA{0, 0, 0, 255}, r, string(str), centre)
+	font.DrawC(dst, color.RGBA{0, 0, 0, 255}, r, ops.str(item), centre)
 }
 
-func mkStringMenu(defaultIndex int, strings... string) MenuWidget {
-	options := make([]MenuItem, len(strings))
-	for i, str := range strings {
-		options[i] = MenuString(str)
-	}
-	return mkMenu(defaultIndex, options...)
-}
-
-func mkMenu(defaultIndex int, options... MenuItem) MenuWidget {
-	menu := MenuWidget{lastSelected: defaultIndex, options: options}
+func mkMenu(ops MenuOps, defaultIndex int, options... interface{}) MenuWidget {
+	menu := MenuWidget{lastSelected: defaultIndex, ops: ops, options: options}
 	for _, item := range options {
-		w, h := item.Bounds().Dx(), item.Bounds().Dy()
-		if w > menu.maxWidth {
-			menu.maxWidth = w
+		r := ops.Bounds(item)
+		if r.Dx() > menu.maxWidth {
+			menu.maxWidth = r.Dx()
 		}
-		if h > menu.height {
-			menu.height = h
+		if r.Dy() > menu.height {
+			menu.height = r.Dy()
 		}
 	}
 	return menu
 }
 
-func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse image.Point) chan MenuItem {
+func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse image.Point) chan interface{} {
 	menu.refresh = refresh
 	w := menu.maxWidth
 	ih := menu.height
@@ -87,7 +94,7 @@ func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse
 	menu.r = r.Add(image.Pt(dx, dy))
 
 	menu.hover = mouse
-	menu.reply = make(chan MenuItem)
+	menu.reply = make(chan interface{})
 	menu.refresh <- menu
 	return menu.reply
 }
@@ -128,6 +135,6 @@ func (menu *MenuWidget) Draw(dst draw.Image, r image.Rectangle) {
 		if i == hover_i {
 			draw.Draw(dst, item_r, &image.Uniform{bg_sel}, image.ZP, draw.Over)
 		}
-		menu.options[i].Draw(dst, item_r)
+		menu.ops.Draw(menu.options[i], dst, item_r)
 	}
 }

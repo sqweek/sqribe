@@ -371,8 +371,28 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	return state
 }
 
-func (ww *WaveWidget) LeftButtonDown(mousePos image.Point) DragFn {
-	s := ww.getMouseState(mousePos)
+func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
+	indent := ww.rect.wave.Min.X - ww.r.Min.X
+	for staff, rect := range ww.rect.staves {
+		r := leftRect(rect, indent)
+		if mouse.In(r) {
+			layout := MixerLayout{}
+			layout.calc(yspacing, r)
+			if mouse.In(layout.instC) {
+				// TODO set instMenu default to current instrument
+				reply := G.instMenu.Popup(ww.r, ww.refresh, mouse)
+				go func() {
+					item := <-reply
+					id, ok := item.(int)
+					if item != nil && ok {
+						staff.SetVoice(id)
+					}
+				}()
+				return G.instMenu.Drag
+			}
+		}
+	}
+	s := ww.getMouseState(mouse)
 	return s.dragFn
 }
 
@@ -403,11 +423,16 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	indent := ww.rect.wave.Min.X - ww.r.Min.X
 	for staff, rect := range ww.rect.staves {
-		if mouse.In(leftRect(rect, indent)) {
-			/* TODO move to staff.ToggleMute() -OR- seperate mute from model */
-			staff.Muted = !staff.Muted
-			ww.renderstate.changed |= MIXER
-			ww.publish(score.StaffChanged{staff})
+		r := leftRect(rect, indent)
+		if mouse.In(r) {
+			layout := MixerLayout{}
+			layout.calc(yspacing, r)
+			if mouse.In(layout.muteB) {
+				/* TODO move to staff.ToggleMute() -OR- seperate mute from model */
+				staff.Muted = !staff.Muted
+				ww.renderstate.changed |= MIXER
+				ww.publish(score.StaffChanged{staff})
+			}
 		}
 	}
 }
@@ -421,10 +446,10 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 	reply := G.noteMenu.Popup(ww.r, ww.refresh, mouse)
 	go func() {
 		item := <-reply
-		str, ok := item.(MenuString)
+		str, ok := item.(string)
 		if item != nil && ok {
 			var dur *big.Rat = new(big.Rat)
-			dur.SetString(string(str))
+			dur.SetString(str)
 			newNote := ww.mkNote(note, dur)
 			note.staff.AddNote(newNote)
 			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)

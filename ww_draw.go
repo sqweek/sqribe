@@ -229,21 +229,38 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill colo
 	}
 }
 
+type MixerLayout struct {
+	sig, minmaxB, muteB, instC image.Rectangle
+}
+
+func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) {
+	sigW := 8*(yspacing/2)
+	layout.sig = rightRect(r, sigW).Sub(image.Point{sigW + 2, 0})
+	layout.sig.Min.Y += 35
+	layout.sig.Max.Y -= 35
+
+	layout.minmaxB = image.Rectangle{r.Min.Add(image.Pt(0, 1)), r.Min.Add(image.Pt(15, 16))}.Inset(2)
+	layout.muteB = rightRect(layout.minmaxB, 10)
+	layout.instC = image.Rectangle{r.Min.Add(image.Pt(0, 15)), image.Pt(r.Max.X, r.Min.Y + 35)}.Inset(2)
+}
+
 func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *score.Staff) {
+	layout := MixerLayout{}
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
 	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
 	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
+	white := color.RGBA{0xff, 0xff, 0xff, 0xff}
+	black := color.RGBA{0, 0, 0, 0xff}
 	drawBorders(dst, r, border, bg)
 
+	layout.calc(yspacing, r)
 	mid := r.Min.Y + r.Dy() / 2
-	sigW := 8*(yspacing/2)
-	sigR := rightRect(r, sigW).Sub(image.Point{sigW + 2, 0})
-	drawStaffLines(dst, fg, sigR.Min.X, sigR.Max.X, mid)
+	drawStaffLines(dst, fg, layout.sig.Min.X, layout.sig.Max.X, mid)
 	keysig, lines := staff.KeyAccidentalLines()
 	for i, delta := range lines {
 		cg := CenteredGlyph{
 			col: fg,
-			p: image.Point{sigR.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2},
+			p: image.Point{layout.sig.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2},
 			r: yspacing/2,
 		}
 		var glyph image.Image
@@ -255,14 +272,21 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 		draw.Draw(dst, r, glyph, r.Min, draw.Over)
 	}
 
+//	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
+//	drawBorders(dst, restR, border, bg)
+	drawBorders(dst, layout.minmaxB, fg, bg)
+	drawBorders(dst, layout.instC, border, white)
+	instMid := layout.instC.Min.Add(layout.instC.Max).Div(2)
+	_, instName := staff.Voice()
+	G.font.luxi.DrawC(dst, black, layout.instC, instName, instMid)
+
 	var fill color.RGBA
 	if staff.Muted {
 		fill = bg
 	} else {
 		fill = fg
 	}
-	muteR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
-	drawBorders(dst, muteR, border, fill)
+	drawBorders(dst, layout.muteB, border, fill)
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, prospective bool) {
@@ -344,9 +368,9 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	if s.note == nil || s.note.staff != staff {
 		return
 	}
-	item, _ := G.noteMenu.options[G.noteMenu.lastSelected].(MenuString)
+	str, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 	var dur big.Rat
-	dur.SetString(string(item))
+	dur.SetString(str)
 	n := ww.mkNote(s.note, &dur)
 	ww.drawNote(dst, r, mid, n, s.note.delta, nil, true)
 }

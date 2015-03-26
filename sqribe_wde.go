@@ -215,6 +215,9 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				if !G.noteMenu.Rect().Empty() {
 					G.noteMenu.Draw(img, G.noteMenu.Rect())
 				}
+				if !G.instMenu.Rect().Empty() {
+					G.instMenu.Draw(img, G.instMenu.Rect())
+				}
 				w.Screen().CopyRGBA(img, r)
 				w.FlushImage()
 				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)

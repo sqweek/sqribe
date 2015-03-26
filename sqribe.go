@@ -37,6 +37,7 @@ var G struct {
 
 	/* ui stuff */
 	ww *WaveWidget
+	instMenu MenuWidget
 	noteMenu MenuWidget
 	waveBias *SliderWidget
 	mixer struct {
@@ -419,7 +420,9 @@ func main() {
 	G.score.Init(G.plumb.score)
 
 	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
-	G.noteMenu = mkStringMenu(4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
+	// TODO change noteMenu items to big.Rat instead of strings
+	G.noteMenu = mkMenu(StringMenuOps{}, 4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
+	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, 0, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstVoice)
 
 	Synth, err = SynthInit(audio.SampleRate, "/d/synth/FluidR3_GM.sf2")
 	if err != nil {

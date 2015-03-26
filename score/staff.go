@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"sqweek.net/sqribe/plumb"
+	"sqweek.net/sqribe/midi"
 )
 
 type Staff struct {
@@ -247,8 +248,18 @@ func (staff *Staff) Name() string {
 	return staff.name
 }
 
+/* returns midi number & instrument name tuple */
+func (staff *Staff) Voice() (int, string) {
+	return staff.voice, midi.InstName(staff.voice)
+}
+
 func (staff *Staff) Notes() []*Note {
 	return staff.notes
+}
+
+func (staff *Staff) SetVoice(voice int) {
+	staff.voice = voice
+	staff.plumb.C <- StaffChanged{staff}
 }
 
 func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
