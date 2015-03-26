@@ -5,12 +5,12 @@ import (
 	"sort"
 
 	"sqweek.net/sqribe/plumb"
-	"sqweek.net/sqribe/midi"
 )
 
 type Staff struct {
 	name string
 	voice int
+	velocity int
 	clef *Clef
 	nsharps KeySig	// key signature (-ve for flats)
 	Muted bool
@@ -28,6 +28,7 @@ type Note struct {
 type SavedStaff struct {
 	Name string
 	Voice int
+	Velocity int
 	Origin uint8
 	Nsharps int
 	Muted bool `json:",omitempty"`
@@ -81,7 +82,7 @@ func (score *Score) SavedStaves() []SavedStaff {
 	defer score.RUnlock()
 	saved := make([]SavedStaff, 0, len(score.staves))
 	for _, staff := range score.staves {
-		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes()})
+		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.velocity - 100, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes()})
 	}
 	return saved
 }
@@ -105,7 +106,7 @@ func (score *Score) LoadStaves(in []SavedStaff) {
 		if clef == nil {
 			clef = &TrebleClef
 		}
-		staff := &Staff{saved.Name, saved.Voice, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb}
+		staff := &Staff{saved.Name, saved.Voice, saved.Velocity + 100, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb}
 		staff.LoadNotes(score, saved.Notes)
 		score.staves = append(score.staves, staff)
 	}
@@ -253,9 +254,12 @@ func (staff *Staff) Name() string {
 	return staff.name
 }
 
-/* returns midi number & instrument name tuple */
-func (staff *Staff) Voice() (int, string) {
-	return staff.voice, midi.InstName(staff.voice)
+func (staff *Staff) Voice() int {
+	return staff.voice
+}
+
+func (staff *Staff) Velocity() int {
+	return staff.velocity
 }
 
 func (staff *Staff) Notes() []*Note {
@@ -264,6 +268,16 @@ func (staff *Staff) Notes() []*Note {
 
 func (staff *Staff) SetVoice(voice int) {
 	staff.voice = voice
+	staff.plumb.C <- StaffChanged{staff}
+}
+
+func (staff *Staff) SetVelocity(velocity int) {
+	staff.velocity = velocity
+	staff.plumb.C <- StaffChanged{staff}
+}
+
+func (staff *Staff) ToggleMute() {
+	staff.Muted = !staff.Muted
 	staff.plumb.C <- StaffChanged{staff}
 }
 

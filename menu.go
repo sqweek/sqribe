@@ -54,8 +54,8 @@ func (ops StringMenuOps) Draw(item interface{}, dst draw.Image, r image.Rectangl
 	font.DrawC(dst, color.RGBA{0, 0, 0, 255}, r, ops.str(item), centre)
 }
 
-func mkMenu(ops MenuOps, defaultIndex int, options... interface{}) MenuWidget {
-	menu := MenuWidget{lastSelected: defaultIndex, ops: ops, options: options}
+func mkMenu(ops MenuOps, options... interface{}) MenuWidget {
+	menu := MenuWidget{ops: ops, options: options}
 	for _, item := range options {
 		r := ops.Bounds(item)
 		if r.Dx() > menu.maxWidth {
@@ -66,6 +66,16 @@ func mkMenu(ops MenuOps, defaultIndex int, options... interface{}) MenuWidget {
 		}
 	}
 	return menu
+}
+
+func (menu *MenuWidget) SetDefault(item interface{}) bool {
+	for i, opt := range menu.options {
+		if item == opt {
+			menu.lastSelected = i
+			return true
+		}
+	}
+	return false
 }
 
 func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse image.Point) chan interface{} {

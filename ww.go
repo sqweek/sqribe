@@ -379,7 +379,7 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 			layout := MixerLayout{}
 			layout.calc(yspacing, r)
 			if mouse.In(layout.instC) {
-				// TODO set instMenu default to current instrument
+				G.instMenu.SetDefault(staff.Voice())
 				reply := G.instMenu.Popup(ww.r, ww.refresh, mouse)
 				go func() {
 					item := <-reply
@@ -428,10 +428,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 			layout := MixerLayout{}
 			layout.calc(yspacing, r)
 			if mouse.In(layout.muteB) {
-				/* TODO move to staff.ToggleMute() -OR- seperate mute from model */
-				staff.Muted = !staff.Muted
-				ww.renderstate.changed |= MIXER
-				ww.publish(score.StaffChanged{staff})
+				staff.ToggleMute()
 			}
 		}
 	}

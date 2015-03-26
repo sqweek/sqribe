@@ -80,10 +80,8 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 			end = fN
 		}
 
-		vId, _ := sn.Staff.Voice()
-		midichan := Synth.Inst(uint8(vId))
-		/* TODO get velocity from staff */
-		*evtail = &MidiEv{sn.Note.Pitch, midichan, 100, start, end, nil}
+		midichan := Synth.Inst(uint8(sn.Staff.Voice()))
+		*evtail = &MidiEv{sn.Note.Pitch, midichan, uint8(sn.Staff.Velocity()), start, end, nil}
 		if start >= fcur && evcur == nil {
 			evcur = *evtail
 		}
@@ -424,8 +422,9 @@ func main() {
 
 	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
 	// TODO change noteMenu items to big.Rat instead of strings
-	G.noteMenu = mkMenu(StringMenuOps{}, 4, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
-	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, 0, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstVoice)
+	G.noteMenu = mkMenu(StringMenuOps{}, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
+	G.noteMenu.SetDefault("1")
+	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstVoice)
 
 	Synth, err = SynthInit(audio.SampleRate, "/d/synth/FluidR3_GM.sf2")
 	if err != nil {

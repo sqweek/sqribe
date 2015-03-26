@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 	"sqweek.net/sqribe/wave"
 
@@ -277,7 +278,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 	drawBorders(dst, layout.minmaxB, fg, bg)
 	drawBorders(dst, layout.instC, border, white)
 	instMid := layout.instC.Min.Add(layout.instC.Max).Div(2)
-	_, instName := staff.Voice()
+	instName := midi.InstName(staff.Voice())
 	G.font.luxi.DrawC(dst, black, layout.instC, instName, instMid)
 
 	var fill color.RGBA
