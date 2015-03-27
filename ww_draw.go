@@ -231,18 +231,23 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill colo
 }
 
 type MixerLayout struct {
-	sig, minmaxB, muteB, instC image.Rectangle
+	sig, minmaxB, muteB, instC, volS image.Rectangle
 }
 
 func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) {
 	sigW := 8*(yspacing/2)
-	layout.sig = rightRect(r, sigW).Sub(image.Point{sigW + 2, 0})
-	layout.sig.Min.Y += 35
-	layout.sig.Max.Y -= 35
 
-	layout.minmaxB = image.Rectangle{r.Min.Add(image.Pt(0, 1)), r.Min.Add(image.Pt(15, 16))}.Inset(2)
-	layout.muteB = rightRect(layout.minmaxB, 10)
-	layout.instC = image.Rectangle{r.Min.Add(image.Pt(0, 15)), image.Pt(r.Max.X, r.Min.Y + 35)}.Inset(2)
+	layout.sig = rightH(centerV(box(sigW, 7*yspacing), r), r)
+
+	button := box(12, 12) // button size
+	layout.instC = topV(box(r.Dx() - 2, 18), r).Add(image.Point{1, 1})
+	layout.minmaxB = leftH(centerV(button, layout.instC), r).Add(image.Point{1, 0})
+	layout.muteB = rightRect(layout.minmaxB, button.Dx())
+	layout.instC.Min.X = layout.muteB.Max.X
+
+	layout.volS = leftH(box(12, r.Dy()), r).Add(image.Point{1, 0})
+	layout.volS.Min.Y = layout.instC.Max.Y
+	layout.volS.Max.Y = r.Max.Y - 2
 }
 
 func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *score.Staff) {
@@ -288,6 +293,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 		fill = fg
 	}
 	drawBorders(dst, layout.muteB, border, fill)
+	drawVertSlider(dst, layout.volS, bg, fg, float64(staff.Velocity()) / 127.0)
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, prospective bool) {

@@ -129,15 +129,16 @@ func (w *WidgetCore) publish(ev interface{}) {
 type SliderWidget struct {
 	WidgetCore
 	data *BoundFloat
+	vertical bool
 }
 
 type SliderMoved struct {
 	Slider *SliderWidget
 }
 
-func NewSlider(data *BoundFloat, refresh chan Widget) *SliderWidget {
+func NewSlider(data *BoundFloat, vert bool, refresh chan Widget) *SliderWidget {
 	changes := make(chan interface{})
-	slider := SliderWidget{WidgetCore{refresh: refresh}, data}
+	slider := SliderWidget{WidgetCore{refresh: refresh}, data, vert}
 	data.Port().Sub(&slider, changes)
 	go func() {
 		for _ = range changes {
@@ -160,13 +161,26 @@ func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
 	fg := color.RGBA{0x00, 0x00, 0x00, 255}
 	s.r = r
 	posn := s.data.Posn()
-	drawSlider(dst, r, bg, fg, posn)
+	if s.vertical {
+		drawVertSlider(dst, r, bg, fg, posn)
+	} else {
+		drawHorzSlider(dst, r, bg, fg, posn)
+	}
 }
 
-func drawSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
+func drawHorzSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
 	mid := r.Min.Y + r.Dy() / 2
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
 	x := int(float64(r.Min.X) + posn * float64(r.Dx()) + 0.5)
 	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
+}
+
+func drawVertSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
+	mid := r.Min.X + r.Dx() / 2
+	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
+	draw.Draw(dst, image.Rect(mid, r.Min.Y, mid + 1, r.Max.Y), &image.Uniform{fg}, image.ZP, draw.Over)
+	y := int(float64(r.Max.Y) - posn * float64(r.Dy()) + 0.5)
+	x := r.Dx() / 2 - 1
+	draw.Draw(dst, image.Rect(mid - x, y - 1, mid + x + 1, y + 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }

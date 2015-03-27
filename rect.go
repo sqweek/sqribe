@@ -4,6 +4,32 @@ import (
 	"image"
 )
 
+func box(width, height int) image.Rectangle {
+	return image.Rectangle{Min: image.Point{0, 0}, Max: image.Point{width, height}}
+}
+
+func topV(src, container image.Rectangle) image.Rectangle {
+	delta := container.Min.Y - src.Min.Y
+	return src.Add(image.Point{0, delta})
+}
+
+func centerV(src, container image.Rectangle) image.Rectangle {
+	mid := (container.Min.Y + container.Max.Y) / 2
+	dy := src.Dy()
+	half := dy / 2
+	return image.Rect(src.Min.X, mid - half, src.Max.X, mid + (dy - half))
+}
+
+func rightH(src, container image.Rectangle) image.Rectangle {
+	delta := container.Max.X - src.Max.X
+	return src.Add(image.Point{delta, 0})
+}
+
+func leftH(src, container image.Rectangle) image.Rectangle {
+	delta := container.Min.X - src.Min.X
+	return src.Sub(image.Point{delta, 0})
+}
+
 func leftRect(src image.Rectangle, width int) image.Rectangle {
 	return image.Rect(src.Min.X - width, src.Min.Y, src.Min.X, src.Max.Y)
 }

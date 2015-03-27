@@ -245,7 +245,7 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
 
-	G.waveBias = NewSlider(Mixer.Bias, redraw)
+	G.waveBias = NewSlider(Mixer.Bias, false, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw.EventChan(), redraw, done, &wg)

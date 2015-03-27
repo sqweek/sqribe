@@ -389,6 +389,16 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 					}
 				}()
 				return G.instMenu.Drag
+			} else if mouse.In(layout.volS) {
+				return func(pos image.Point, finished bool, moved bool)bool {
+					if (moved || finished) && pos.In(layout.volS) {
+						α := float64(pos.Y - layout.volS.Min.Y) / float64(layout.volS.Dy())
+						vel := 127 - int(127.0 * α + 0.5)
+						staff.SetVelocity(vel)
+						return true
+					}
+					return false
+				}
 			}
 		}
 	}
