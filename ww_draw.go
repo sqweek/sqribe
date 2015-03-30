@@ -16,31 +16,81 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
+type WaveLayout struct {
+	wave image.Rectangle	// rect of the waveform display
+	waveRulers image.Rectangle	// waveform + rulers
+
+	beatAxis, timeAxis, mixer image.Rectangle
+	staves map[*score.Staff] image.Rectangle
+	mixers map[*score.Staff] *MixerLayout
+}
+
+type MixerLayout struct {
+	r, sig, minmaxB, muteB, instC, volS image.Rectangle
+}
+
+func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
+	layout.r = r
+
+	sigW := 8*(yspacing/2)
+	layout.sig = rightH(centerV(box(sigW, 7*yspacing), r), r)
+
+	button := box(12, 12) // button size
+	layout.instC = topV(box(r.Dx() - 2, 18), r).Add(image.Point{1, 1})
+	layout.minmaxB = leftH(centerV(button, layout.instC), r).Add(image.Point{1, 0})
+	layout.muteB = rightRect(layout.minmaxB, button.Dx())
+	layout.instC.Min.X = layout.muteB.Max.X
+
+	layout.volS = leftH(box(12, r.Dy()), r).Add(image.Point{1, 0})
+	layout.volS.Min.Y = layout.instC.Max.Y
+	layout.volS.Max.Y = r.Max.Y - 2
+
+	return layout
+}
+
+func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
+	axish := 20
+	infow := 100
+	rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
+	rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
+	rect.beatAxis = aboveRect(rect.wave, axish)
+	rect.timeAxis = belowRect(rect.wave, axish)
+	rect.mixer = leftRect(rect.waveRulers, infow)
+	if score != nil && len(score.Staves()) > 0 {
+		staves := score.Staves()
+		for staff, _ := range rect.staves {
+			delete(rect.mixers, staff)
+			delete(rect.staves ,staff)
+		}
+		scoreh := rect.wave.Dy() / len(staves)
+		minh := yspacing * 8
+		if scoreh < minh {
+			scoreh = minh
+		}
+		for i := 0; i < len(staves); i++ {
+			srect := image.Rect(rect.wave.Min.X, rect.wave.Min.Y + i * scoreh, rect.wave.Max.X, rect.wave.Min.Y + (i + 1) * scoreh + 1)
+			rect.staves[staves[i]] = srect
+			mixlayout := MixerLayout{}
+			rect.mixers[staves[i]] = mixlayout.calc(yspacing, srect)
+		}
+	}
+}
+
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
 	ww.renderstate.changed = 0
 	if !r.Eq(ww.r) {
-		/* our widget size has chaged, redraw everything */
+		/* our widget size has chaged, relayout & redraw everything */
 		change |= EVERYTHING
 		ww.renderstate.waveRulers = nil
+		ww.rect.layout(r, ww.score)
+		ww.r = r
 	}
 	if change != 0 {
-		axish := 20
-		infow := 100
-		ww.r = r
-		ww.rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
-		ww.rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 		if change & SCALE != 0 && ww.score != nil && len(ww.score.Staves()) > 0 {
-			// TODO clear map
-			scoreh := ww.rect.wave.Dy() / len(ww.score.Staves())
-			minh := yspacing * 8
-			if scoreh < minh {
-				scoreh = minh
-			}
-			for i := 0; i < len(ww.score.Staves()); i++ {
-				ww.rect.staves[ww.score.Staves()[i]] = image.Rect(ww.rect.wave.Min.X, ww.rect.wave.Min.Y + i * scoreh, ww.rect.wave.Max.X, ww.rect.wave.Min.Y + (i + 1) * scoreh + 1)
-			}
+			// XXX extreme measure; layout only needed for staff add/remove/minimise/restore
+			ww.rect.layout(r, ww.score)
 		}
 		ww.renderstate.img = image.NewRGBA(ww.r)
 		if ww.renderstate.waveRulers == nil {
@@ -51,15 +101,15 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 			ww.drawWave(ww.renderstate.waveRulers, ww.rect.wave)
 		}
 		if change & BEATS != 0 || change & VIEWPOS != 0 {
-			ww.drawBeatAxis(ww.renderstate.waveRulers, aboveRect(ww.rect.wave, axish))
+			ww.drawBeatAxis(ww.renderstate.waveRulers, ww.rect.beatAxis)
 		}
 		if change & VIEWPOS != 0 {
-			ww.drawTimeAxis(ww.renderstate.waveRulers, belowRect(ww.rect.wave, axish))
+			ww.drawTimeAxis(ww.renderstate.waveRulers, ww.rect.timeAxis)
 		}
 		draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
 		ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
-		ww.drawMixer(ww.renderstate.img, infow)
-		ww.drawScale(ww.renderstate.img, ww.rect.wave, infow)
+		ww.drawMixer(ww.renderstate.img, ww.rect.mixer.Dx())
+		ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx())
 
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursorX, r.Min.Y, ww.cursorX+1, r.Max.Y), &image.Uniform{curcol}, r.Min, draw.Src)
@@ -228,26 +278,6 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill colo
 	for _, line := range []image.Rectangle{top, left, bot, right} {
 		draw.Draw(dst, line, &image.Uniform{border}, image.ZP, draw.Over)
 	}
-}
-
-type MixerLayout struct {
-	sig, minmaxB, muteB, instC, volS image.Rectangle
-}
-
-func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) {
-	sigW := 8*(yspacing/2)
-
-	layout.sig = rightH(centerV(box(sigW, 7*yspacing), r), r)
-
-	button := box(12, 12) // button size
-	layout.instC = topV(box(r.Dx() - 2, 18), r).Add(image.Point{1, 1})
-	layout.minmaxB = leftH(centerV(button, layout.instC), r).Add(image.Point{1, 0})
-	layout.muteB = rightRect(layout.minmaxB, button.Dx())
-	layout.instC.Min.X = layout.muteB.Max.X
-
-	layout.volS = leftH(box(12, r.Dy()), r).Add(image.Point{1, 0})
-	layout.volS.Min.Y = layout.instC.Max.Y
-	layout.volS.Max.Y = r.Max.Y - 2
 }
 
 func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *score.Staff) {

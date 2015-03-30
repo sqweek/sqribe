@@ -61,11 +61,7 @@ type WaveWidget struct {
 	first_frame FrameN
 	frames_per_pixel int
 	selection TimeRange
-	rect struct {
-		wave image.Rectangle	// rect of the waveform display
-		waveRulers image.Rectangle	// waveform + rulers
-		staves map[*score.Staff] image.Rectangle
-	}
+	rect WaveLayout
 
 	/* renderer related state */
 	renderstate struct {
@@ -85,6 +81,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
 	ww.rect.staves = make(map[*score.Staff]image.Rectangle)
+	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
 	ww.selection = &wave.FrameRange{0, 0}
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
