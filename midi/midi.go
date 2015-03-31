@@ -12,7 +12,7 @@ const (
 	PitchF6 = 77
 )
 const (
-	InstPiano = 0
+	InstPiano = 1
 	InstEPiano = 5
 	InstGuitar = 25
 	InstEGuitar = 27
