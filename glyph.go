@@ -7,13 +7,13 @@ import (
 )
 
 type CenteredGlyph struct {
-	col color.RGBA
+	col color.NRGBA
 	p image.Point //center
 	r int //radius
 }
 
 func (g *CenteredGlyph) ColorModel() color.Model {
-	return color.RGBAModel
+	return color.NRGBAModel
 }
 
 func (g *CenteredGlyph) Bounds() image.Rectangle {
@@ -35,14 +35,14 @@ func (n *NoteHead) At(x, y int) color.Color {
 	if dist2 < rr2 && dist2 >= n.hollowness * rr2 {
 		return n.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
-func newNoteHead(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
+func newNoteHead(col color.NRGBA, p image.Point, r int, α float64) *NoteHead {
 	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.0}
 }
 
-func newHollowNote(col color.RGBA, p image.Point, r int, α float64) *NoteHead {
+func newHollowNote(col color.NRGBA, p image.Point, r int, α float64) *NoteHead {
 	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.6}
 }
 
@@ -56,7 +56,7 @@ func (t *NoteTail) At(x, y int) color.Color {
 	if dx > 0 && ((t.downBeam && dx + dy == 0) || (!t.downBeam && dx - dy == 0)) {
 		return t.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
 type FlatGlyph struct {
@@ -70,7 +70,7 @@ func (f *FlatGlyph) At(x, y int) color.Color {
 	    (dy < 3 && dy >= 1 && dy - dx == 2) {
 		return f.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
 // HACK the flat glyph is not aligned with the actual centre point 'p'
@@ -89,7 +89,7 @@ func (s *SharpGlyph) At(x, y int) color.Color {
 	    (line == 2 || line == -2) {
 		return s.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
 type NaturalGlyph struct {
@@ -104,7 +104,7 @@ func (n *NaturalGlyph) At(x, y int) color.Color {
 	    (dx > -3 && dx < 3 && (line == 1 || line == -1)) {
 		return n.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
 type DefaultGlyph struct {
@@ -120,10 +120,10 @@ func (d *DefaultGlyph) At(x, y int) color.Color {
 	    (y == d.p.Y + 3 && inX) {
 		return d.col
 	}
-	return color.RGBA{0, 0, 0, 0}
+	return color.NRGBA{0, 0, 0, 0}
 }
 
-func newAccidental(col color.RGBA, p image.Point, r int, accidental int) image.Image {
+func newAccidental(col color.NRGBA, p image.Point, r int, accidental int) image.Image {
 	switch accidental {
 	case -1: return &FlatGlyph{CenteredGlyph{col, p, r}}
 	case 0: return &NaturalGlyph{CenteredGlyph{col, p, r}}

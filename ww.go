@@ -30,7 +30,7 @@ const (
 
 const beatIncursion = 5 // pixels
 
-const yspacing = 10 // pixels between staff lines
+const yspacing = 12 // pixels between staff lines
 
 type noteProspect struct {
 	delta int

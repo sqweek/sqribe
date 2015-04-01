@@ -117,30 +117,29 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 	draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
 }
 
-func colourFor(offset *big.Rat) color.RGBA {
-	α := uint8(0xff)
+func colourFor(offset *big.Rat, α uint8) color.NRGBA {
 	switch (offset.RatString()) {
 	case "1": fallthrough
 	case "0": fallthrough
-	case "1/2": return color.RGBA{0xff, 0x00, 0x00, α}
+	case "1/2": return color.NRGBA{0xff, 0x00, 0x00, α}
 
 	case "1/4": fallthrough
-	case "3/4": return color.RGBA{0x00, 0x00, 0xff, α}
+	case "3/4": return color.NRGBA{0x00, 0x00, 0xff, α}
 
 	case "1/8": fallthrough
 	case "3/8": fallthrough
 	case "5/8": fallthrough
-	case "7/8": return color.RGBA{0xff, 0xff, 0x00, α}
+	case "7/8": return color.NRGBA{0xff, 0xff, 0x00, α}
 
 	// this is a bit too close to the blue right next door
 	case "1/6": fallthrough
 	case "3/6": fallthrough
-	case "5/6": return color.RGBA{0x88, 0x00, 0x88, α}
+	case "5/6": return color.NRGBA{0xaa, 0x00, 0x88, α}
 
 	case "1/3": fallthrough
-	case "4/6": return color.RGBA{0xff, 0x00, 0xff, α}
+	case "2/3": return color.NRGBA{0xff, 0x00, 0xff, α}
 	}
-	return color.RGBA{0x00, 0x00, 0x00, α}
+	return color.NRGBA{0x00, 0x00, 0x00, α}
 }
 
 func scale(chMin, chMax int16, yscale float64) (int, int) {
@@ -269,7 +268,7 @@ func drawStaffLines(dst draw.Image, col color.Color, minX, maxX, mid int) {
 	}
 }
 
-func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill color.RGBA) {
+func drawBorders(dst draw.Image, r image.Rectangle, border color.Color, fill color.Color) {
 	top := image.Rect(r.Min.X, r.Min.Y, r.Max.X, r.Min.Y + 1)
 	left := image.Rect(r.Min.X, r.Min.Y, r.Min.X + 1, r.Max.Y)
 	bot := image.Rect(r.Min.X, r.Max.Y - 1, r.Max.X, r.Max.Y)
@@ -283,8 +282,8 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.RGBA, fill colo
 func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *score.Staff) {
 	layout := MixerLayout{}
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
-	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
-	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
+	bg := color.NRGBA{0x55, 0x44, 0x44, 0xff}
+	fg := color.NRGBA{0xcc, 0xcc, 0xbb, 0xff}
 	white := color.RGBA{0xff, 0xff, 0xff, 0xff}
 	black := color.RGBA{0, 0, 0, 0xff}
 	drawBorders(dst, r, border, bg)
@@ -316,7 +315,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 	instName := midi.InstName(staff.Voice())
 	G.font.luxi.DrawC(dst, black, layout.instC, instName, instMid)
 
-	var fill color.RGBA
+	var fill color.NRGBA
 	if staff.Muted {
 		fill = bg
 	} else {
@@ -327,12 +326,12 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, r image.Rectangle, staff *sco
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, prospective bool) {
-	var col, black color.RGBA
+	var col, black color.NRGBA
 	if prospective {
-		black = color.RGBA{0, 0, 0, 0x44}
-		col = colourFor(note.Offset)
+		black = color.NRGBA{0, 0, 0, 0xbb}
+		col = colourFor(note.Offset, 0xbb)
 	} else {
-		black = color.RGBA{0, 0, 0, 0xff}
+		black = color.NRGBA{0, 0, 0, 0xff}
 		col = black
 	}
 	f0, fN := ww.VisibleFrameRange()

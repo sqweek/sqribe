@@ -203,7 +203,7 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				width, height := w.Size()
 				r := image.Rect(0, 0, width, height)
 				img := image.NewRGBA(r)
-				wvR := image.Rect(0, int(0.2*float32(height)), width, int(0.8*float32(height) + 20))
+				wvR := image.Rect(0, 30, width, height - 20)
 				G.ww.Draw(img, wvR)
 
 				mixR := image.Rect(width - 50, wvR.Min.Y - 15, width, wvR.Min.Y)
@@ -231,12 +231,12 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 }
 
 func InitWde(redraw chan Widget) *sync.WaitGroup {
-	dw, err := wde.NewWindow(600, 400)
+	dw, err := wde.NewWindow(800, 400)
 	if err != nil {
 		log.Fatal(err)
 	}
 	dw.SetTitle("Sqribe")
-	dw.SetSize(600, 400)
+	dw.SetSize(800, 400)
 	dw.Show()
 
 	wg := sync.WaitGroup{}
