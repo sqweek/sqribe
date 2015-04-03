@@ -63,11 +63,15 @@ type MidiEv struct {
 func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 	var evcur, evhead *MidiEv
 	evtail := &evhead
-	notes := make(chan score.StaffNote, 5)
-	go score.OrderNotes(&G.score, notes)
-	for sn := range(notes) {
+	next := G.score.Iter(FrameRange{f0, fN})
+	var sn score.StaffNote
+	for next != nil {
+		sn, next = next()
 		start, _ := G.score.ToFrame(G.score.Beatf(sn.Note))
 		end, _ := G.score.ToFrame(G.score.Beatf(sn.Note) + sn.Note.Durf())
+		if sn.Staff.Muted {
+			continue
+		}
 		if end <= f0 {
 			continue
 		} else if start >= fN {

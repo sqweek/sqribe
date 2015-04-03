@@ -10,18 +10,6 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
-type FrameRange struct {
-	Min, Max FrameN
-}
-
-func (r FrameRange) MinFrame() FrameN {
-	return r.Min
-}
-
-func (r FrameRange) MaxFrame() FrameN {
-	return r.Max
-}
-
 type Waveform struct {
 	NSamples SampleN
 	Channels int

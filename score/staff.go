@@ -5,6 +5,8 @@ import (
 	"sort"
 
 	"sqweek.net/sqribe/plumb"
+
+	. "sqweek.net/sqribe/core/types"
 )
 
 type Staff struct {
@@ -240,7 +242,7 @@ func (staff *Staff) perNote(rng BeatRange, f func(note *Note)) {
 	selectedNotes := make([]*Note, 0, 16)
 	for i := sort.Search(len(staff.notes), searchFn); i < len(staff.notes); i++ {
 		note := staff.notes[i]
-		if note.Beat.frame > rng.Last.frame {
+		if note.Beat.frame >= rng.Last.frame {
 			break
 		}
 		selectedNotes = append(selectedNotes, note)
@@ -285,29 +287,41 @@ func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
 	return staff.nsharps, staff.clef.accidentalLines(staff.nsharps)
 }
 
-func OrderNotes(score *Score, notes chan<- StaffNote) {
-	defer close(notes)
+type NoteIter func()(StaffNote, NoteIter)
+
+func (score *Score) Iter(rng TimeRange) NoteIter {
 	n := len(score.staves)
 	idx := make([]int, n)
 	for j, staff := range score.staves {
-		if staff.Muted {
-			idx[j] = len(staff.notes)
-		}
+		searchFn := func(i int)bool { return rng.MinFrame() <= staff.notes[i].Beat.frame }
+		idx[j] = sort.Search(len(staff.notes), searchFn)
 	}
-	for {
+	bestFn := func(idx []int, score *Score)int {
 		best := -1
 		for j, staff := range(score.staves) {
-			if idx[j] < len(staff.notes) {
+			if idx[j] < len(staff.notes) && staff.notes[idx[j]].Beat.frame < rng.MaxFrame() {
 				if best == -1 || staff.notes[idx[j]].Cmp(score.staves[best].notes[idx[best]]) < 0 {
 					best = j
 				}
 			}
 		}
-		if best == -1 {
-			break
-		}
-		notes <- StaffNote{score.staves[best], score.staves[best].notes[idx[best]]}
-		idx[best]++
+		return best
 	}
+	nxt := bestFn(idx, score)
+	if nxt == -1 {
+		return nil
+	}
+	var fn NoteIter
+	fn = func()(StaffNote, NoteIter) {
+		best := nxt
+		inote := idx[best]
+		idx[best]++
+		nxt = bestFn(idx, score)
+		if nxt == -1 {
+			fn = nil
+		}
+		return StaffNote{score.staves[best], score.staves[best].notes[inote]}, fn
+	}
+	return fn
 }
 

@@ -44,11 +44,6 @@ type mouseState struct {
 	note *noteProspect
 }
 
-type TimeRange interface {
-	MinFrame() FrameN
-	MaxFrame() FrameN
-}
-
 type WaveWidget struct {
 	WidgetCore
 
@@ -82,7 +77,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	ww.frames_per_pixel = 512
 	ww.rect.staves = make(map[*score.Staff]image.Rectangle)
 	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
-	ww.selection = &wave.FrameRange{0, 0}
+	ww.selection = &FrameRange{0, 0}
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -99,7 +94,7 @@ func (ww *WaveWidget) SelectAudio(sel TimeRange) {
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
 	sc := ww.score
 	if sc == nil {
-		ww.SelectAudio(wave.FrameRange{start, end})
+		ww.SelectAudio(FrameRange{start, end})
 	} else {
 		beats := score.BeatRange{sc.NearestBeat(start), sc.NearestBeat(end)}
 		ww.SelectAudio(beats)
@@ -229,7 +224,7 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 		if snap {
 			ww.SelectAudioSnapToBeats(min, max)
 		} else {
-			ww.SelectAudio(wave.FrameRange{min, max})
+			ww.SelectAudio(FrameRange{min, max})
 		}
 		return true
 	}
