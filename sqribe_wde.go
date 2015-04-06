@@ -135,6 +135,11 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 					toggle(&Mixer.MuteMidi)
 				case "q", "Q":
 					go G.score.QuantizeBeats()
+				case "x", "X":
+					err := ExportMXML("export.xml")
+					if err != nil {
+						log.Println("MXML export", err)
+					}
 				}
 			}
 		case wde.ResizeEvent:

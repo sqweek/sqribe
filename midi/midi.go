@@ -17,6 +17,7 @@ const (
 	InstGuitar = 25
 	InstEGuitar = 27
 	InstViolin = 41
+	InstHarp = 47
 	InstVoice = 54
 	InstWoodblock = 115
 )
