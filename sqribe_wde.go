@@ -65,7 +65,9 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 					G.waveBias.LeftClick(e.Where)
 				}
 			case wde.RightButton:
-				if e.Where.In(G.waveBias.Rect()) {
+				if e.Where.In(G.ww.Rect()) {
+					G.ww.RightClick(e.Where)
+				} else if e.Where.In(G.waveBias.Rect()) {
 					G.waveBias.RightClick(e.Where)
 				}
 			}

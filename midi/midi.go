@@ -12,13 +12,13 @@ const (
 	PitchF6 = 77
 )
 const (
-	InstPiano = 1
-	InstEPiano = 5
+	InstPiano = 0
+	InstEPiano = 4
 	InstGuitar = 25
 	InstEGuitar = 27
-	InstViolin = 41
-	InstHarp = 47
-	InstVoice = 54
+	InstViolin = 40
+	InstHarp = 46
+	InstVoice = 53
 	InstWoodblock = 115
 )
 
@@ -46,6 +46,7 @@ func init() {
 	inst(InstGuitar, "Guitar")
 	inst(InstEGuitar, "E. Guitar")
 	inst(InstViolin, "Violin")
+	inst(InstHarp, "Harp")
 	inst(InstVoice, "Voice")
 	inst(InstWoodblock, "Woodblock")
 }

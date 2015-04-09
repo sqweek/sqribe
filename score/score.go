@@ -60,8 +60,6 @@ func FindClef(origin uint8) *Clef {
 }
 
 func (score *Score) Init(plumb *plumb.Port) {
-	score.staves = append(score.staves, score.NewStaff(&TrebleClef))
-	score.staves = append(score.staves, score.NewStaff(&BassClef))
 	score.beatLen = big.NewRat(1, 4)
 	score.plumb = plumb
 }

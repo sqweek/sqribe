@@ -24,6 +24,7 @@ const (
 	CURSOR
 	BEATS
 	VIEWPOS
+	LAYOUT
 	MAXBIT
 	EVERYTHING changeMask = MAXBIT - 1
 )
@@ -423,14 +424,21 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
-	indent := ww.rect.wave.Min.X - ww.r.Min.X
-	for staff, rect := range ww.rect.staves {
-		r := leftRect(rect, indent)
-		if mouse.In(r) {
-			layout := MixerLayout{}
-			layout.calc(yspacing, r)
+	//indent := ww.rect.wave.Min.X - ww.r.Min.X
+	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+		ww.score.AddStaff(&score.TrebleClef)
+		ww.renderstate.changed |= LAYOUT
+		ww.publish(&score.TrebleClef)
+		return
+	}
+	for staff, layout := range ww.rect.mixers {
+		if mouse.In(layout.r) {
 			if mouse.In(layout.muteB) {
 				staff.ToggleMute()
+			} else if mouse.In(layout.minmaxB) {
+				staff.Minimised = !staff.Minimised
+				ww.renderstate.changed |= LAYOUT
+				ww.publish(&staff.Minimised)
 			}
 		}
 	}
@@ -455,6 +463,31 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 		}
 	}()
 	return G.noteMenu.Drag
+}
+
+func (ww *WaveWidget) RightClick(mouse image.Point) {
+	if mouse.In(ww.rect.mixer) {
+		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+			ww.score.AddStaff(&score.BassClef)
+			ww.renderstate.changed |= LAYOUT
+			ww.publish(&score.BassClef)
+			return
+		}
+		for staff, _ := range ww.rect.staves {
+			layout := ww.rect.mixers[staff]
+			if mouse.In(layout.minmaxB) {
+				staff.Minimised = false
+				for staff2, _ := range ww.rect.staves {
+					if staff2 != staff {
+						staff2.Minimised = true
+					}
+				}
+				ww.renderstate.changed |= LAYOUT
+				ww.publish(&staff.Minimised)
+				return
+			}
+		}
+	}
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {

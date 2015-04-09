@@ -4,12 +4,22 @@ import (
 	"image"
 )
 
+func centerPt(r image.Rectangle) image.Point {
+	// XXX need to add 1 to get text vertically centered; maybe baseline calc is wrong?
+	return r.Min.Add(r.Max).Div(2).Sub(image.Point{0, 1})
+}
+
 func box(width, height int) image.Rectangle {
 	return image.Rectangle{Min: image.Point{0, 0}, Max: image.Point{width, height}}
 }
 
 func topV(src, container image.Rectangle) image.Rectangle {
 	delta := container.Min.Y - src.Min.Y
+	return src.Add(image.Point{0, delta})
+}
+
+func botV(src, container image.Rectangle) image.Rectangle {
+	delta := container.Max.Y - src.Max.Y
 	return src.Add(image.Point{0, delta})
 }
 

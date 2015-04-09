@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"sort"
 
+	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/plumb"
 
 	. "sqweek.net/sqribe/core/types"
@@ -18,6 +19,8 @@ type Staff struct {
 	Muted bool
 	notes []*Note
 	plumb *plumb.Port
+
+	Minimised bool // should probably live elsewhere...
 }
 
 type Note struct {
@@ -75,8 +78,10 @@ func (score *Score) Staves() []*Staff {
 	return score.staves
 }
 
-func (score *Score) NewStaff(clef *Clef) *Staff {
-	return &Staff{clef: clef, plumb: score.plumb}
+func (score *Score) AddStaff(clef *Clef) {
+	staff := &Staff{clef: clef, voice: midi.InstPiano, velocity: 100, plumb: score.plumb}
+	score.staves = append(score.staves, staff)
+	score.plumb.C <- StaffChanged{staff}
 }
 
 func (score *Score) SavedStaves() []SavedStaff {
@@ -108,7 +113,7 @@ func (score *Score) LoadStaves(in []SavedStaff) {
 		if clef == nil {
 			clef = &TrebleClef
 		}
-		staff := &Staff{saved.Name, saved.Voice, saved.Velocity + 100, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb}
+		staff := &Staff{saved.Name, saved.Voice, saved.Velocity + 100, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb, false}
 		staff.LoadNotes(score, saved.Notes)
 		score.staves = append(score.staves, staff)
 	}
