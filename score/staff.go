@@ -79,7 +79,11 @@ func (score *Score) Staves() []*Staff {
 }
 
 func (score *Score) AddStaff(clef *Clef) {
-	staff := &Staff{clef: clef, voice: midi.InstPiano, velocity: 100, plumb: score.plumb}
+	nsharps := KeySig(0)
+	if len(score.staves) > 0 {
+		nsharps = score.staves[0].nsharps
+	}
+	staff := &Staff{clef: clef, voice: midi.InstPiano, velocity: 100, nsharps: nsharps, plumb: score.plumb}
 	score.staves = append(score.staves, staff)
 	score.plumb.C <- StaffChanged{staff}
 }
