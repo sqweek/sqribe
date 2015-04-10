@@ -34,7 +34,7 @@ func (writer *XMLWriter) Fmt(format string, args... interface{}) {
 	_, writer.err = fmt.Fprintf(writer.stream, "%s%s\n", strings.Repeat("  ", writer.level), fmt.Sprintf(format, args...))
 }
 
-func (writer *XMLWriter) Tag(name string, attrs... interface{}) func() {
+func (writer *XMLWriter) Tag(name string, attrs... interface{}) string {
 	tag := name
 	if len(attrs) > 0 {
 		for i :=0; i < len(attrs); i += 2 {
@@ -43,7 +43,7 @@ func (writer *XMLWriter) Tag(name string, attrs... interface{}) func() {
 	}
 	writer.Fmt("<%s>", tag)
 	writer.level++
-	return func() {writer.CloseTag(name)}
+	return name
 }
 
 func (writer *XMLWriter) CloseTag(name string) {
@@ -69,36 +69,38 @@ func ExportMXML(filename string) error {
 		return err
 	}
 	wr := XMLWriter{file, 0, nil}
-	closeTag := wr.Tag("score-partwise")
+	score := wr.Tag("score-partwise")
 	mxmlIdent(&wr)
 	mxmlParts(&wr)
-	closeTag()
+	wr.CloseTag(score)
 	err = wr.Close()
 	return err
 }
 
 func mxmlIdent(wr *XMLWriter) {
-	defer wr.Tag("identification")()
-	defer wr.Tag("encoding")()
+	defer wr.CloseTag(wr.Tag("identification"))
+	defer wr.CloseTag(wr.Tag("encoding"))
 	wr.ContentTag("software", "sqribe")
 	wr.ContentTag("encoding-date", time.Now().Format("2006-01-02"))
 }
 
 func mxmlParts(wr *XMLWriter) {
 	staves := G.score.SavedStaves()
-	closeList := wr.Tag("part-list")
-	for _, staff := range staves {
-		inst := midi.InstName(staff.Voice)
-		closePart := wr.Tag("score-part", "id", staff.Name)
-		wr.ContentTag("part-name", inst)
-		closeInst := wr.Tag("score-instrument", "id", fmt.Sprintf("%s-I1", staff.Name))
-		wr.ContentTag("instrument-name", inst)
-		closeInst()
-		closePart()
+	list := wr.Tag("part-list")
+	for i, staff := range staves {
+		instName := midi.InstName(staff.Voice)
+		id := fmt.Sprintf("%d", i)
+		xpart := wr.Tag("score-part", "id", id)
+		wr.ContentTag("part-name", instName)
+		xinst := wr.Tag("score-instrument", "id", fmt.Sprintf("%s-I1", id))
+		wr.ContentTag("instrument-name", instName)
+		wr.CloseTag(xinst)
+		wr.CloseTag(xpart)
 	}
-	closeList()
-	for _, staff := range staves {
-		mxmlPart(wr, staff)
+	wr.CloseTag(list)
+	for i, staff := range staves {
+		id := fmt.Sprintf("%d", i)
+		mxmlPart(wr, staff, id)
 	}
 }
 
@@ -107,27 +109,27 @@ func flt(rat *big.Rat) float64 {
 	return float
 }
 
-func mxmlPart(wr *XMLWriter, staff score.SavedStaff) {
-	defer wr.Tag("part", "id", staff.Name)()
+func mxmlPart(wr *XMLWriter, staff score.SavedStaff, id string) {
+	defer wr.CloseTag(wr.Tag("part", "id", id))
 	ticks := 384
 	i0 := 0
 	inote := 0
 	m := 1
 	for {
-		closeMeas := wr.Tag("measure", "number", m)
+		meas := wr.Tag("measure", "number", m)
 		if m == 1 {
-			closeAttr := wr.Tag("attributes")
-			closeKey := wr.Tag("key")
+			attr := wr.Tag("attributes")
+			key := wr.Tag("key")
 			wr.ContentTag("fifths", staff.Nsharps)
 			wr.ContentTag("mode", "major")
-			closeKey()
-			closeTime := wr.Tag("time")
+			wr.CloseTag(key)
+			time := wr.Tag("time")
 			wr.ContentTag("beats", 4)
 			wr.ContentTag("beat-type", 4)
-			closeTime()
+			wr.CloseTag(time)
 			wr.ContentTag("divisions", ticks / 4)
 			mxmlClef(wr, staff.Origin)
-			closeAttr()
+			wr.CloseTag(attr)
 		}
 		iN := i0 + 4
 		var prevOffset *big.Rat
@@ -142,7 +144,7 @@ func mxmlPart(wr *XMLWriter, staff score.SavedStaff) {
 			mxmlNote(wr, note, ticks, chord)
 			inote++
 		}
-		closeMeas()
+		wr.CloseTag(meas)
 
 		i0 = iN
 		if inote >= len(staff.Notes) {
@@ -153,7 +155,7 @@ func mxmlPart(wr *XMLWriter, staff score.SavedStaff) {
 }
 
 func mxmlClef(wr *XMLWriter, origin uint8) {
-	defer wr.Tag("clef")()
+	defer wr.CloseTag(wr.Tag("clef"))
 	if origin == midi.PitchB5 {
 		wr.ContentTag("sign", "G")
 		wr.ContentTag("line", 2)
@@ -174,7 +176,7 @@ func mxmlNote(wr *XMLWriter, note score.SavedNote, mticks int, chord bool) {
 		ticks = 1
 	}
 
-	defer wr.Tag("note")()
+	defer wr.CloseTag(wr.Tag("note"))
 	mxmlPitch(wr, note.Pitch)
 	wr.ContentTag("duration", ticks)
 	wr.ContentTag("voice", 1)
@@ -189,7 +191,7 @@ func mxmlNote(wr *XMLWriter, note score.SavedNote, mticks int, chord bool) {
 }
 
 func mxmlPitch(wr *XMLWriter, pitch uint8) {
-	defer wr.Tag("pitch")()
+	defer wr.CloseTag(wr.Tag("pitch"))
 	s := midi.PitchName(pitch)
 	wr.ContentTag("step", s[0:1])
 	octave, _ := strconv.Atoi(s[len(s) - 1:])
