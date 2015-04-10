@@ -104,6 +104,10 @@ func mxmlParts(wr *XMLWriter) {
 	}
 }
 
+func rat(n, d int64) *big.Rat {
+	return big.NewRat(n, d)
+}
+
 func flt(rat *big.Rat) float64 {
 	float, _ := rat.Float64()
 	return float
@@ -112,6 +116,7 @@ func flt(rat *big.Rat) float64 {
 func mxmlPart(wr *XMLWriter, staff score.SavedStaff, id string) {
 	defer wr.CloseTag(wr.Tag("part", "id", id))
 	ticks := 384
+	divisions := ticks/4
 	i0 := 0
 	inote := 0
 	m := 1
@@ -127,22 +132,41 @@ func mxmlPart(wr *XMLWriter, staff score.SavedStaff, id string) {
 			wr.ContentTag("beats", 4)
 			wr.ContentTag("beat-type", 4)
 			wr.CloseTag(time)
-			wr.ContentTag("divisions", ticks / 4)
+			wr.ContentTag("divisions", divisions)
 			mxmlClef(wr, staff.Origin)
 			wr.CloseTag(attr)
 		}
 		iN := i0 + 4
+		curtick := (m - 1) * ticks
 		var prevOffset *big.Rat
 		for inote < len(staff.Notes) && flt(staff.Notes[inote].Offset) < float64(iN) {
-			// TODO insert rests
+			tick0 := dur2ticks(rat(1,4).Mul(rat(1,4), staff.Notes[inote].Offset), ticks)
 			chord := false
 			if prevOffset != nil && staff.Notes[inote].Offset.Cmp(prevOffset) == 0 {
 				chord = true
+			} else {
+				if tick0 < curtick {
+					backup := wr.Tag("backup")
+					wr.ContentTag("duration", curtick - tick0)
+					wr.CloseTag(backup)
+				} else if tick0 > curtick {
+					durticks := tick0 - curtick
+					dur := ticks2dur(durticks, divisions)
+					mxmlNote(wr, nil, dur, durticks, false)
+				}
 			}
 			prevOffset = staff.Notes[inote].Offset
 			note := staff.Notes[inote]
-			mxmlNote(wr, note, ticks, chord)
+			durticks := dur2ticks(note.Duration, divisions)
+			mxmlNote(wr, &note.Pitch, note.Duration, durticks, chord)
+			curtick = tick0 + durticks
 			inote++
+		}
+		if ticks > curtick {
+			/* insert a rest to finish out the measure */
+			durticks := ticks - curtick
+			dur := ticks2dur(durticks, divisions)
+			mxmlNote(wr, nil, dur, durticks, false)
 		}
 		wr.CloseTag(meas)
 
@@ -168,19 +192,37 @@ func mxmlClef(wr *XMLWriter, origin uint8) {
 	}
 }
 
-func mxmlNote(wr *XMLWriter, note score.SavedNote, mticks int, chord bool) {
-	dur := big.NewRat(int64(mticks), 4)
-	dur.Mul(dur, note.Duration)
+func dur2ticks(duration *big.Rat, divisions int) int {
+	dur := big.NewRat(int64(divisions), 1)
+	dur.Mul(dur, duration)
 	ticks := int(flt(dur) + 0.5)
 	if ticks <= 0 {
 		ticks = 1
 	}
+	return ticks
+}
 
+func ticks2dur(ticks, divisions int) *big.Rat {
+	r := []*big.Rat{rat(1,128), rat(3,256), rat(1,64), rat(3,128), rat(1,32), rat(3,64), rat(1,16), rat(3,32), rat(1,8), rat(3,16), rat(1,4), rat(3,8), rat(1,2), rat(3,4), rat(1,1), rat(3,2), rat(2,1), rat(3,1), rat(4,1)}
+	d := float64(ticks) / float64(divisions)
+	for i := 0; i + 1 < len(r); i++ {
+		if d < (flt(r[i]) + flt(r[i + 1])) / 2 {
+			return r[i]
+		}
+	}
+	return r[len(r) - 1]
+}
+
+func mxmlNote(wr *XMLWriter, pitch *uint8, duration *big.Rat, ticks int, chord bool) {
 	defer wr.CloseTag(wr.Tag("note"))
-	mxmlPitch(wr, note.Pitch)
+	if pitch != nil {
+		mxmlPitch(wr, *pitch)
+	} else {
+		wr.EmptyTag("rest")
+	}
 	wr.ContentTag("duration", ticks)
 	wr.ContentTag("voice", 1)
-	ntype, dot := mxmlNoteType(note)
+	ntype, dot := mxmlNoteType(duration)
 	wr.ContentTag("type", ntype)
 	if dot {
 		wr.EmptyTag("dot")
@@ -203,8 +245,8 @@ func mxmlPitch(wr *XMLWriter, pitch uint8) {
 	}
 }
 
-func mxmlNoteType(note score.SavedNote) (string, bool) {
-	switch note.Duration.RatString() {
+func mxmlNoteType(dur *big.Rat) (string, bool) {
+	switch dur.RatString() {
 	case "1/32": return "128th", false
 	case "1/16": return "64th", false
 	case "1/8": return "32nd", false
