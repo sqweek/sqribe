@@ -150,23 +150,21 @@ func mxmlPart(wr *XMLWriter, staff score.SavedStaff, id string) {
 					wr.ContentTag("duration", curtick - tick0)
 					wr.CloseTag(backup)
 				} else if tick0 > curtick {
-					durticks := tick0 - curtick
-					dur := ticks2dur(durticks, divisions)
-					mxmlNote(wr, nil, dur, durticks, false)
+					mxmlRest(wr ,tick0 - curtick, divisions)
 				}
 			}
 			prevOffset = staff.Notes[inote].Offset
 			note := staff.Notes[inote]
 			durticks := dur2ticks(note.Duration, divisions)
+			if durticks <= 0 {
+				durticks = 1
+			}
 			mxmlNote(wr, &note.Pitch, note.Duration, durticks, chord)
 			curtick = tick0 + durticks
 			inote++
 		}
 		if ticks > curtick {
-			/* insert a rest to finish out the measure */
-			durticks := ticks - curtick
-			dur := ticks2dur(durticks, divisions)
-			mxmlNote(wr, nil, dur, durticks, false)
+			mxmlRest(wr, ticks - curtick, divisions) /* insert rest to finish out the measure */
 		}
 		wr.CloseTag(meas)
 
@@ -196,7 +194,7 @@ func dur2ticks(duration *big.Rat, divisions int) int {
 	dur := big.NewRat(int64(divisions), 1)
 	dur.Mul(dur, duration)
 	ticks := int(flt(dur) + 0.5)
-	if ticks <= 0 {
+	if ticks < 0 {
 		ticks = 1
 	}
 	return ticks
@@ -211,6 +209,11 @@ func ticks2dur(ticks, divisions int) *big.Rat {
 		}
 	}
 	return r[len(r) - 1]
+}
+
+func mxmlRest(wr *XMLWriter, ticks, divisions int) {
+	dur := ticks2dur(ticks, divisions)
+	mxmlNote(wr, nil, dur, ticks, false)
 }
 
 func mxmlNote(wr *XMLWriter, pitch *uint8, duration *big.Rat, ticks int, chord bool) {
