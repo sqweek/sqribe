@@ -363,15 +363,8 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	drawVertSlider(dst, layout.volS, bg, fg, float64(staff.Velocity()) / 127.0)
 }
 
-func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, prospective bool) {
-	var col, black color.NRGBA
-	if prospective {
-		black = color.NRGBA{0, 0, 0, 0xbb}
-		col = colourFor(note.Offset, 0xbb)
-	} else {
-		black = color.NRGBA{0, 0, 0, 0xff}
-		col = black
-	}
+func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, col color.NRGBA) {
+	black := color.NRGBA{0, 0, 0, col.A}
 	f0, fN := ww.VisibleFrameRange()
 	frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
 	if frame < f0 || frame > fN {
@@ -433,7 +426,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note 
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	for _, note := range(staff.Notes()) {
 		delta, accidental := staff.LineForPitch(note.Pitch)
-		ww.drawNote(dst, r, mid, note, delta, accidental, false)
+		ww.drawNote(dst, r, mid, note, delta, accidental, color.NRGBA{0, 0, 0, 0xff})
 	}
 }
 
@@ -446,7 +439,13 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	var dur big.Rat
 	dur.SetString(str)
 	n := ww.mkNote(s.note, &dur)
-	ww.drawNote(dst, r, mid, n, s.note.delta, nil, true)
+	var col color.NRGBA
+	if staff.NoteAt(n) == nil {
+		col = colourFor(n.Offset, 0xbb)
+	} else {
+		col = color.NRGBA{0, 0, 0, 0x88}
+	}
+	ww.drawNote(dst, r, mid, n, s.note.delta, nil, col)
 }
 
 func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, aToX func(float64)int, label func(float64)string) {

@@ -201,6 +201,16 @@ func (staff *Staff) addNote(note *Note) {
 	}
 }
 
+/* Ignores Duration field of supplied Note. */
+func (staff *Staff) NoteAt(note *Note) *Note {
+	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
+	i := sort.Search(len(staff.notes), searchFn)
+	if i < len(staff.notes) && note.Cmp(staff.notes[i]) == 0 {
+		return staff.notes[i]
+	}
+	return nil
+}
+
 func (score *Score) RepeatNotes(rng BeatRange) {
 	if rng.First == rng.Last {
 		return
