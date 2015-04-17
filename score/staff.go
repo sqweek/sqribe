@@ -164,17 +164,31 @@ func (note *Note) Cmp(note2 *Note) int {
 	return d
 }
 
-func (staff *Staff) RemoveNote(note *Note) {
+func (note *Note) Set(note2 *Note) {
+	note.Beat = note2.Beat
+	note.Offset.Set(note2.Offset)
+	note.Pitch = note2.Pitch
+	note.Duration.Set(note2.Duration)
+}
+
+func (staff *Staff) RemoveNote(note *Note) bool {
+	removed := staff.removeNote(note)
+	staff.plumb.C <- StaffChanged{staff}
+	return removed
+}
+
+func (staff *Staff) removeNote(note *Note) bool {
 	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
 	i := sort.Search(len(staff.notes), searchFn)
 	if i == len(staff.notes) {
-		return
+		return false
 	}
 	if note.Cmp(staff.notes[i]) == 0 {
 		copy(staff.notes[i:], staff.notes[i+1:])
 		staff.notes = staff.notes[:len(staff.notes) - 1]
+		return true
 	}
-	staff.plumb.C <- StaffChanged{staff}
+	return false
 }
 
 func (staff *Staff) AddNote(note *Note) {
@@ -198,6 +212,27 @@ func (staff *Staff) addNote(note *Note) {
 		staff.notes = append(staff.notes, nil)
 		copy(staff.notes[i+1:], staff.notes[i:])
 		staff.notes[i] = note
+	}
+}
+
+func (score *Score) MvNotes(Δpitch uint8, Δbeat float64, notes... StaffNote) {
+	score.RLock()
+	changed := make(map[*Staff]struct{})
+	for _, sn := range notes {
+		sn.Staff.removeNote(sn.Note)
+	}
+	for _, sn := range notes {
+		sn.Note.Pitch += Δpitch
+		b := score.Beatf(sn.Note) + Δbeat
+		beat, offset := score.Quantize(b)
+		sn.Note.Beat = beat
+		sn.Note.Offset.Set(offset)
+		sn.Staff.addNote(sn.Note)
+		changed[sn.Staff] = struct{}{}
+	}
+	score.RUnlock()
+	for staff, _ := range changed {
+		staff.plumb.C <- StaffChanged{staff}
 	}
 }
 
@@ -308,18 +343,24 @@ func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
 
 type NoteIter func()(StaffNote, NoteIter)
 
-func (score *Score) Iter(rng TimeRange) NoteIter {
-	n := len(score.staves)
-	idx := make([]int, n)
-	for j, staff := range score.staves {
-		searchFn := func(i int)bool { return rng.MinFrame() <= staff.notes[i].Beat.frame }
+func (score *Score) Iter(rng TimeRange, staves... *Staff) NoteIter {
+	if staves == nil {
+		staves = score.staves
+	}
+	idx := make([]int, len(staves))
+	toFrame := func(note *Note)FrameN {
+		f, _ := score.ToFrame(score.Beatf(note))
+		return f
+	}
+	for j, staff := range staves {
+		searchFn := func(i int)bool { return rng.MinFrame() <= toFrame(staff.notes[i]) }
 		idx[j] = sort.Search(len(staff.notes), searchFn)
 	}
 	bestFn := func(idx []int, score *Score)int {
 		best := -1
-		for j, staff := range(score.staves) {
-			if idx[j] < len(staff.notes) && staff.notes[idx[j]].Beat.frame < rng.MaxFrame() {
-				if best == -1 || staff.notes[idx[j]].Cmp(score.staves[best].notes[idx[best]]) < 0 {
+		for j, staff := range(staves) {
+			if idx[j] < len(staff.notes) && toFrame(staff.notes[idx[j]]) < rng.MaxFrame() {
+				if best == -1 || staff.notes[idx[j]].Cmp(staves[best].notes[idx[best]]) < 0 {
 					best = j
 				}
 			}
@@ -339,7 +380,7 @@ func (score *Score) Iter(rng TimeRange) NoteIter {
 		if nxt == -1 {
 			fn = nil
 		}
-		return StaffNote{score.staves[best], score.staves[best].notes[inote]}, fn
+		return StaffNote{staves[best], staves[best].notes[inote]}, fn
 	}
 	return fn
 }

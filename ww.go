@@ -39,10 +39,16 @@ type noteProspect struct {
 	staff *score.Staff
 }
 
+type noteDrag struct {
+	Δpitch uint8
+	Δbeat float64
+}
+
 type mouseState struct {
 	cursor Cursor
 	dragFn DragFn
 	note *noteProspect
+	ndelta *noteDrag
 }
 
 type WaveWidget struct {
@@ -58,6 +64,7 @@ type WaveWidget struct {
 	frames_per_pixel int
 	selection TimeRange
 	rect WaveLayout
+	notesel map[*score.Note]*score.Staff
 
 	/* renderer related state */
 	renderstate struct {
@@ -79,6 +86,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	ww.rect.staves = make(map[*score.Staff]image.Rectangle)
 	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
 	ww.selection = &FrameRange{0, 0}
+	ww.notesel = make(map[*score.Note]*score.Staff)
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -231,65 +239,93 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
-func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
-	nframes := ww.NFrames()
+func (ww *WaveWidget) selectedNotes() []score.StaffNote {
+	notes := make([]score.StaffNote, 0, len(ww.notesel))
+	for note, nstaff := range ww.notesel {
+		notes = append(notes, score.StaffNote{nstaff, note})
+	}
+	return notes
+}
 
-	f0, fN := ww.VisibleFrameRange()
+func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
+	sc := ww.score
+	return func(pos image.Point, finished bool, moved bool)bool {
+		prospect := ww.noteAtPixel(staff, pos)
+		if prospect == nil {
+			return false
+		}
+		Δpitch := staff.PitchForLine(prospect.delta) - note.Pitch
+		Δbeat := prospect.beatf - sc.Beatf(note)
+		_, selected := ww.notesel[note]
+		if finished {
+			if moved {
+				if selected {
+					sc.MvNotes(Δpitch, Δbeat, ww.selectedNotes()...)
+				} else {
+					sc.MvNotes(Δpitch, Δbeat, score.StaffNote{staff, note})
+				}
+			} else {
+				/* regular click */
+				_, selected := ww.notesel[note]
+				if !selected {
+					ww.notesel[note] = staff
+				} else {
+					delete(ww.notesel, note)
+				}
+				ww.renderstate.changed |= SCALE
+				ww.publish(ww.notesel)
+			}
+		} else {
+			if selected {
+				ww.getMouseState(pos).ndelta = &noteDrag{Δpitch, Δbeat}
+			} else {
+				ww.getMouseState(pos).note = prospect
+			}
+			ww.renderstate.changed |= SCALE
+			ww.publish(prospect)
+		}
+		return true
+	}}
+
+func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
+	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
+	sc := ww.score
 	for staff, rect := range ww.rect.staves {
-		if !mouse.In(rect) {
+		if staff.Minimised || !mouse.In(rect) {
 			continue
 		}
 		mid := rect.Min.Y + rect.Dy() / 2
-		for _, note := range(staff.Notes()) {
-			frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
-			if frame < f0 || frame > fN {
-				continue
-			}
+		next := sc.Iter(rng, staff)
+		var sn score.StaffNote
+		for next != nil {
+			sn, next = next()
+			frame, _ := sc.ToFrame(sc.Beatf(sn.Note))
 			x := ww.PixelAtFrame(frame)
-			delta, _ := staff.LineForPitch(note.Pitch)
+			delta, _ := staff.LineForPitch(sn.Note.Pitch)
 			y := mid - (yspacing / 2) * (delta)
 			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
+			// XXX would be good to target the closest note instead of the first
 			if mouse.In(r) {
-				return func(pos image.Point, finished bool, moved bool)bool {
-					prospect := ww.noteAtPixel(staff, pos)
-					if prospect == nil {
-						return false
-					}
-					if finished {
-						if moved {
-							staff.RemoveNote(note)
-							staff.AddNote(ww.mkNote(prospect, note.Duration))
-						}
-					} else {
-						ww.getMouseState(pos).note = prospect
-						ww.renderstate.changed |= SCALE
-						ww.publish(prospect)
-					}
-					return true
-				}, GrabCursor
+				return ww.noteDrag(staff, sn.Note), GrabCursor
 			}
 		}
 	}
 
 	// TODO ignore beat grabs when sufficiently zoomed out
-	beats := []*score.BeatRef{}
-	if ww.score != nil {
-		beats = ww.score.Beats()
-	}
-	for i, beat := range(beats) {
-		min, max := FrameN(0), nframes
-		if beat.Frame() < f0 {
-			min = 0
-			continue
-		} else if beat.Frame() > fN {
-			break
-		}
+	if sc != nil {
+		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
+		i := sc.BeatIndex(beat)
 		x := ww.PixelAtFrame(beat.Frame())
 		y0 := ww.rect.wave.Min.Y
 		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 		if mouse.In(padRect(r, 2, 0)) {
+			beats := sc.Beats()
+			min, max := FrameN(0), ww.NFrames()
 			if i + 1 < len(beats) {
 				max = beats[i + 1].Frame()
+			}
+			if i > 0 {
+				min = beats[i - 1].Frame()
 			}
 			return ww.dragBeat(min, max, beat), ResizeHCursor
 		}

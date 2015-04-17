@@ -204,8 +204,13 @@ func (score *Score) NearestBeat(frame FrameN) *BeatRef {
 
 func (score *Score) Quantize(beat float64) (*BeatRef, *big.Rat) {
 	beati := int(beat)
-	frac := beat - float64(beati)
 	best := big.NewRat(0, 1)
+	if beati < 0 {
+		return score.beats[0], best
+	} else if beati >= len(score.beats) {
+		return score.beats[len(score.beats) - 1], best
+	}
+	frac := beat - float64(beati)
 	minErr := frac
 	for _, i := range([]int{2, 3}) { // , 5}) { //, 7}) {
 		for denom := int64(i); denom <= 8; denom <<= 1 {

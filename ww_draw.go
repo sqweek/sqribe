@@ -426,26 +426,55 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note 
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	for _, note := range(staff.Notes()) {
 		delta, accidental := staff.LineForPitch(note.Pitch)
-		ww.drawNote(dst, r, mid, note, delta, accidental, color.NRGBA{0, 0, 0, 0xff})
+		_, selected := ww.notesel[note]
+		col := color.NRGBA{0, 0, 0, 0xff}
+		if selected {
+			α := uint8(0xff)
+			state := ww.getMouseState(ww.mouse.pos)
+			if state.ndelta != nil {
+				α = 0x88
+			}
+			col = color.NRGBA{0x88, 0x88, 0x88, α}
+		}
+		ww.drawNote(dst, r, mid, note, delta, accidental, col)
 	}
 }
 
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	s := ww.getMouseState(ww.mouse.pos)
-	if s.note == nil || s.note.staff != staff {
-		return
+	if s.ndelta != nil {
+		for _, sn := range ww.selectedNotes() {
+			if sn.Staff != staff {
+				continue
+			}
+			n := score.Note{Offset: big.NewRat(1,1), Duration: big.NewRat(1,1)}
+			n.Set(sn.Note)
+			n.Pitch += s.ndelta.Δpitch
+			beat, offset := ww.score.Quantize(ww.score.Beatf(sn.Note) + s.ndelta.Δbeat)
+			n.Beat = beat
+			n.Offset.Set(offset)
+			col := color.NRGBA{0x88, 0x88, 0x88, 0xaa}
+			delta, accidental := staff.LineForPitch(n.Pitch)
+			ww.drawNote(dst, r, mid, &n, delta, accidental, col)
+		}
+	} else if s.note != nil && s.note.staff == staff {
+		str, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
+		var dur big.Rat
+		dur.SetString(str)
+		n := ww.mkNote(s.note, &dur)
+		var col color.NRGBA
+		existingNote := staff.NoteAt(n)
+		if existingNote == nil {
+			col = colourFor(n.Offset, 0xbb)
+		} else {
+			if _, selected := ww.notesel[existingNote]; selected {
+				col = color.NRGBA{0x88, 0x88, 0x88, 0x88}
+			} else {
+				col = color.NRGBA{0, 0, 0, 0x88}
+			}
+		}
+		ww.drawNote(dst, r, mid, n, s.note.delta, nil, col)
 	}
-	str, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
-	var dur big.Rat
-	dur.SetString(str)
-	n := ww.mkNote(s.note, &dur)
-	var col color.NRGBA
-	if staff.NoteAt(n) == nil {
-		col = colourFor(n.Offset, 0xbb)
-	} else {
-		col = color.NRGBA{0, 0, 0, 0x88}
-	}
-	ww.drawNote(dst, r, mid, n, s.note.delta, nil, col)
 }
 
 func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, aToX func(float64)int, label func(float64)string) {
