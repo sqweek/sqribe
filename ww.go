@@ -171,7 +171,7 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 		G.plumb.selection.Sub(&sc, selxn)
 		sc.InitQuantizer(selxn)
 	}
-	ww.renderstate.changed |= SCALE
+	ww.renderstate.changed |= SCALE | LAYOUT
 	ww.publish(sc)
 }
 
