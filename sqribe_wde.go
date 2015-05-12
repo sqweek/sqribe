@@ -187,7 +187,7 @@ func drawstatus(dst draw.Image, r image.Rectangle) {
 }
 
 func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
-	rate := time.Millisecond * 33 /* maximum refresh rate */
+	rate := time.Millisecond * 25 /* maximum refresh rate */
 	lastframe := time.Now().Add(-rate)
 	var refresh func()
 	merged := 0
