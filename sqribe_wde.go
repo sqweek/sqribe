@@ -42,6 +42,10 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 				if e.Where.In(G.ww.Rect()) {
 					drag = G.ww.RightButtonDown(e.Where)
 				}
+			case wde.MiddleButton:
+				if e.Where.In(G.ww.Rect()) {
+					drag = G.ww.MiddleButtonDown(e.Where)
+				}
 			case wde.WheelUpButton:
 				G.ww.Zoom(0.75)
 			case wde.WheelDownButton:

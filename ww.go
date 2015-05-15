@@ -526,14 +526,28 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 	}
 }
 
+func (ww *WaveWidget) MiddleButtonDown(mouse image.Point) DragFn {
+	prevX := mouse.X
+	return func(pos image.Point, finished bool, moved bool)bool {
+		if moved {
+			ww.ScrollPixels(prevX - pos.X)
+			prevX = pos.X
+		}
+		return true
+	}
+}
+
 func (ww *WaveWidget) Scroll(amount float64) int {
+	return ww.ScrollPixels(int(float64(ww.r.Dx()) * amount))
+}
+
+func (ww *WaveWidget) ScrollPixels(dx int) int {
 	if ww.r.Empty() || ww.wav == nil {
 		return 0
 	}
 	original := ww.first_frame
-	width := ww.r.Dx()
-	shift := FrameN((float64(width) * amount) * float64(ww.frames_per_pixel))
-	rbound := ww.NFrames() - FrameN((width + 1) * ww.frames_per_pixel)
+	shift := FrameN(dx * ww.frames_per_pixel)
+	rbound := ww.NFrames() - FrameN((ww.r.Dx() + 1) * ww.frames_per_pixel)
 	ww.first_frame += shift
 	if ww.first_frame < 0 || rbound < 0 {
 		ww.first_frame = 0
