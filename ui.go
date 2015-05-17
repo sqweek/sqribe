@@ -7,6 +7,8 @@ import (
 	"image"
 	"time"
 
+	"github.com/sqweek/go.wde"
+
 	. "sqweek.net/sqribe/core/data"
 )
 
@@ -17,7 +19,7 @@ type Widget interface {
 }
 
 type Hoverable interface {
-	MouseMoved(image.Point) Cursor
+	MouseMoved(image.Point) wde.Cursor
 }
 
 type LeftDraggable interface {

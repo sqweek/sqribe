@@ -6,6 +6,8 @@ import (
 	"time"
 	"fmt"
 
+	"github.com/sqweek/go.wde"
+
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
@@ -45,7 +47,7 @@ type noteDrag struct {
 }
 
 type mouseState struct {
-	cursor Cursor
+	cursor wde.Cursor
 	dragFn DragFn
 	note *noteProspect
 	ndelta *noteDrag
@@ -287,7 +289,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		return true
 	}}
 
-func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
+func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
 	sc := ww.score
 	for staff, rect := range ww.rect.staves {
@@ -306,7 +308,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
 			// XXX would be good to target the closest note instead of the first
 			if mouse.In(r) {
-				return ww.noteDrag(staff, sn.Note), GrabCursor
+				return ww.noteDrag(staff, sn.Note), wde.GrabHoverCursor
 			}
 		}
 	}
@@ -327,23 +329,23 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, Cursor) {
 			if i > 0 {
 				min = beats[i - 1].Frame()
 			}
-			return ww.dragBeat(min, max, beat), ResizeHCursor
+			return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
 		}
 	}
 
 	snap := ww.score != nil && len(ww.score.Beats()) > 0 && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
 	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), 2, 0)) {
-		return ww.selectDrag(ww.selection.MaxFrame(), snap), ResizeLCursor
+		return ww.selectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
 	}
 	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MaxFrame())), 2, 0)) {
-		return ww.selectDrag(ww.selection.MinFrame(), snap), ResizeRCursor
+		return ww.selectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
 	}
 
 	/* if we're not dragging anything in particular, drag to select */
 	if mouse.In(ww.rect.wave) {
-		return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), NormalCursor
+		return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), wde.NormalCursor
 	}
-	return nil, NormalCursor
+	return nil, wde.NormalCursor
 }
 
 func (ww *WaveWidget) staffContaining(pos image.Point) *score.Staff {
@@ -439,7 +441,7 @@ func (n *noteProspect) Eq(n2 *noteProspect) bool {
 	return n.staff == n2.staff && n.delta == n2.delta && n.beatf == n2.beatf
 }
 
-func (ww *WaveWidget) MouseMoved(mousePos image.Point) Cursor {
+func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
 	orig := ww.mouse.state
 	s := ww.getMouseState(mousePos)
 	if s.note != nil && (orig == nil || orig.note == nil || !s.note.Eq(orig.note)) {

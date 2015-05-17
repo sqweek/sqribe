@@ -15,13 +15,11 @@ import (
 	"sqweek.net/sqribe/score"
 )
 
-var cursorCtl CursorCtl
-
 func toggle(flag *bool) {
 	*flag = !*flag
 }
 
-func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
+func event(events <-chan interface{}, redraw chan Widget, cursorCtl wde.CursorCtl, done chan bool, wg *sync.WaitGroup) {
 	defer func() {
 		done <- true
 		wg.Done()
@@ -81,7 +79,7 @@ func event(events <-chan interface{}, redraw chan Widget, done chan bool, wg *sy
 				drag(e.Where, false, true)
 			}
 		case wde.MouseMovedEvent:
-			var cur Cursor = NormalCursor
+			var cur wde.Cursor = wde.NormalCursor
 			if e.Where.In(G.ww.Rect()) {
 				cur = G.ww.MouseMoved(e.Where)
 			}
@@ -253,13 +251,12 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	cursorCtl = NewCursorCtl(dw)
 	done := make(chan bool)
 
 	G.waveBias = NewSlider(Mixer.Bias, false, redraw)
 
 	go drawstuff(dw, redraw, done)
-	go event(dw.EventChan(), redraw, done, &wg)
+	go event(dw.EventChan(), redraw, dw.Cursor(), done, &wg)
 
 	return &wg
 }
