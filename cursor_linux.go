@@ -6,8 +6,8 @@ import (
 	"github.com/BurntSushi/xgbutil/xcursor"
 	"github.com/BurntSushi/xgbutil/xwindow"
 
-	"github.com/skelterjohn/go.wde"
-	wdexgb "github.com/skelterjohn/go.wde/xgb"
+	"github.com/sqweek/go.wde"
+	wdexgb "github.com/sqweek/go.wde/xgb"
 
 	"fmt"
 )

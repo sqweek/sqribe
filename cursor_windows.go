@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/AllenDang/w32"
-	"github.com/skelterjohn/go.wde"
-	"github.com/skelterjohn/go.wde/win"
+	"github.com/sqweek/go.wde"
+	"github.com/sqweek/go.wde/win"
 )
 
 type WinCursorCtl struct {

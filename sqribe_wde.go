@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skelterjohn/go.wde"
-	_ "github.com/skelterjohn/go.wde/init"
+	"github.com/sqweek/go.wde"
+	_ "github.com/sqweek/go.wde/init"
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/score"
 )
