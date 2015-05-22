@@ -164,6 +164,7 @@ func (c *cache) add(id uint64, chunk *Chunk) {
 
 func (c *cache) broadcast(chunk *Chunk) {
 	for _, l := range(c.listeners) {
+		l := l
 		go func() {l <- chunk}()
 	}
 }
