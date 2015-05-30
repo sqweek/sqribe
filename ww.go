@@ -316,20 +316,22 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	// TODO ignore beat grabs when sufficiently zoomed out
 	if sc != nil {
 		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
-		i := sc.BeatIndex(beat)
-		x := ww.PixelAtFrame(beat.Frame())
-		y0 := ww.rect.wave.Min.Y
-		r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
-		if mouse.In(padRect(r, 2, 0)) {
-			beats := sc.Beats()
-			min, max := FrameN(0), ww.NFrames()
-			if i + 1 < len(beats) {
-				max = beats[i + 1].Frame()
+		if beat != nil {
+			i := sc.BeatIndex(beat)
+			x := ww.PixelAtFrame(beat.Frame())
+			y0 := ww.rect.wave.Min.Y
+			r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
+			if mouse.In(padRect(r, 2, 0)) {
+				beats := sc.Beats()
+				min, max := FrameN(0), ww.NFrames()
+				if i + 1 < len(beats) {
+					max = beats[i + 1].Frame()
+				}
+				if i > 0 {
+					min = beats[i - 1].Frame()
+				}
+				return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
 			}
-			if i > 0 {
-				min = beats[i - 1].Frame()
-			}
-			return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
 		}
 	}
 
