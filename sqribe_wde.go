@@ -19,7 +19,8 @@ func toggle(flag *bool) {
 	*flag = !*flag
 }
 
-func event(events <-chan interface{}, redraw chan Widget, cursorCtl wde.CursorCtl, done chan bool, wg *sync.WaitGroup) {
+func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
+	events := win.EventChan()
 	defer func() {
 		done <- true
 		wg.Done()
@@ -83,7 +84,7 @@ func event(events <-chan interface{}, redraw chan Widget, cursorCtl wde.CursorCt
 			if e.Where.In(G.ww.Rect()) {
 				cur = G.ww.MouseMoved(e.Where)
 			}
-			cursorCtl.Set(cur)
+			win.SetCursor(cur)
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
@@ -256,7 +257,7 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	G.waveBias = NewSlider(Mixer.Bias, false, redraw)
 
 	go drawstuff(dw, redraw, done)
-	go event(dw.EventChan(), redraw, dw.Cursor(), done, &wg)
+	go event(dw, redraw, done, &wg)
 
 	return &wg
 }
