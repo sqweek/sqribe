@@ -44,41 +44,6 @@ var G struct {
 	}
 }
 
-func coalesced(out chan interface{}) chan interface{} {
-	in := make(chan interface{})
-	go coalesce(in, out)
-	return in
-}
-
-func coalesce(in, out chan interface{}) {
-	defer close(out)
-	for in != nil {
-		ev, open := <-in
-		if !open {
-			return
-		}
-
-		for ev != nil {
-			select {
-			case ev2, open := <-in:
-				if open {
-					lst, ok := ev.([]interface{})
-					if ok {
-						ev = append(lst, ev2)
-					} else {
-						// lst is empty slice
-						ev = append(lst, ev, ev2)
-					}
-				} else {
-					in = nil
-				}
-			case out <- ev:
-				ev = nil
-			}
-		}
-	}
-}
-
 func open(filename string) error {
 	var err error
 	if G.wav != nil {

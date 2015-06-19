@@ -93,40 +93,52 @@ func crossfade(from, to []int16, steps FrameN) []int16 {
 	return out
 }
 
-const (
-	NOTHING = iota
-	BEAT
-	NOTE
-)
-
-func oneChange(change interface{}) int {
-	switch change.(type) {
-	case score.BeatChanged:
-		return BEAT
-	case score.StaffChanged:
-		return NOTE
-	}
-	return NOTHING
+type PlayChange struct {
+	beat, note bool
 }
 
-func whatChanged(change interface{}) int {
-	if change == nil {
-		return NOTHING
+func (pc *PlayChange) Empty() bool {
+	return !pc.beat && !pc.note
+}
+
+func (pc *PlayChange) Update(event interface{}) {
+	switch event.(type) {
+	case score.BeatChanged:
+		pc.beat = true
+	case score.StaffChanged:
+		pc.note = true
 	}
-	switch c := change.(type) {
-	case []interface{}:
-		r := NOTHING
-		for _, item := range c {
-			switch oneChange(item) {
-			case BEAT:
-				return BEAT
-			case NOTE:
-				r = NOTE
+}
+
+func coalesced(out chan PlayChange) chan interface{} {
+	in := make(chan interface{})
+	go coalesce(in, out)
+	return in
+}
+
+func coalesce(in chan interface{}, out chan PlayChange) {
+	defer close(out)
+	changes := PlayChange{}
+	for in != nil {
+		for changes.Empty() {
+			if ev, open := <-in; open {
+				changes.Update(ev)
+			} else {
+				return
 			}
 		}
-		return r
-	default:
-		return oneChange(c)
+		for !changes.Empty() {
+			select {
+			case ev2, open := <-in:
+				if open {
+					changes.Update(ev2)
+				} else {
+					in = nil
+				}
+			case out <- changes:
+				changes = PlayChange{}
+			}
+		}
 	}
 }
 
@@ -193,7 +205,7 @@ func playToggle() {
 		}
 		close(sampch)
 	}()
-	scorechan := make(chan interface{})
+	scorechan := make(chan PlayChange)
 	G.plumb.score.Sub(&playState, coalesced(scorechan))
 
 	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
@@ -211,17 +223,15 @@ func playToggle() {
 		i := FrameN(0)
 		for playState == PLAYING {
 			if len(inbuf) == 0 {
-				var change interface{}
 				select {
-				case change = <-scorechan:
+				case changed := <-scorechan:
+					if changed.beat {
+						bhead, bev = beatlst(f0, fN, f0 + i)
+					}
+					if changed.note || changed.beat {
+						evhead, mev = midilst(f0, fN, f0 + i)
+					}
 				default:
-				}
-				switch whatChanged(change) {
-				case BEAT:
-					bhead, bev = beatlst(f0, fN, f0 + i)
-					fallthrough
-				case NOTE:
-					evhead, mev = midilst(f0, fN, f0 + i)
 				}
 				inbuf = <-sampch
 				if len(inbuf) < bufsiz || len(inbuf) % bufsiz != 0 {
