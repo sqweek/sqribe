@@ -115,8 +115,8 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case wde.KeySpace:
 				playToggle()
 			case wde.KeyReturn:
-				if s, playing := audio.PlayingSample(); playing {
-					G.score.AddBeat(G.wav.ToFrame(s))
+				if f, playing := audio.PlayingFrame(); playing {
+					G.score.AddBeat(f)
 				}
 			case wde.KeyDelete:
 				rng := G.ww.GetSelectedTimeRange()

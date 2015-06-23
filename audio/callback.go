@@ -9,10 +9,9 @@ import (
 
 type callbackOps struct {
 	buf *RingBuffer
-	index SampleN
+	index FrameN
 	timing portaudio.StreamCallbackTimeInfo
 }
-
 
 
 func cbOps() *callbackOps {
@@ -25,31 +24,31 @@ func (cb *callbackOps) Open(params portaudio.StreamParameters) (*portaudio.Strea
 }
 
 func (cb *callbackOps) Append(wav []int16) int {
-	return cb.buf.Append(wav)
+	n := cb.buf.Append(wav)
+	return n
 }
 
 func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 	cb := ops.(*callbackOps)
-	if currentLen == 0 {
+	if stopped {
 		return
 	}
 	n := cb.buf.Extract(out)
-	cb.index += SampleN(n)
-	cb.index %= currentLen
+	cb.index += FrameN(n / Channels)
 	cb.timing = time
 }
 
 func (cb *callbackOps) Start() {
-	cb.buf.Clear()
 	cb.index = 0
+	cb.buf.Clear()
 }
 
-func (cb *callbackOps) Index() (SampleN, bool) {
+func (cb *callbackOps) Index() (FrameN, bool) {
 	if cb.timing.CurrentTime == 0 {
 		return cb.index, true
 	}
 	secs := (stream.Time() - cb.timing.OutputBufferDacTime).Seconds()
-	return cb.index + SampleN(samplesPerSecond * secs), secs < 0.5
+	return cb.index + FrameN(float64(SampleRate) * secs), secs < 0.5
 }
 
 type RingBuffer struct {
@@ -64,7 +63,8 @@ func NewRingBuffer(bufSize int) *RingBuffer {
 	return &ring
 }
 
-/* appends int16s. if the ring buffer is full, Append blocks until the samples can fit */
+/* appends int16s. if the ring buffer is full, Append blocks until the samples can fit.
+** the samples provided must be shorter than the buffer's capacity. */
 func (ring *RingBuffer) Append(wav []int16) int {
 	for len(wav) >= len(ring.buf) - ring.Size() {
 		time.Sleep(50 * time.Millisecond)

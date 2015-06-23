@@ -14,19 +14,17 @@ type audioOps interface {
 	Open(params portaudio.StreamParameters) (*portaudio.Stream, error)
 	Append(samples []int16) int
 	Start()
-	Index() (idx SampleN, ok bool)
+	Index() (idx FrameN, ok bool)
 }
 
 var useCallback = flag.Bool("cb", false, "use callback")
 
 var ops audioOps
 var stream *portaudio.Stream
-var samplesPerSecond float64
 
-var (
-	currentS0 SampleN
-	currentLen SampleN = 0
-)
+var stopped bool = true
+var fr, prevfr FrameRange
+var baseIndex, prevBase FrameN
 
 func HostApi() *portaudio.HostApiInfo {
 	/* TODO allow user to override host api */
@@ -69,9 +67,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	s16PerSecond := int(params.SampleRate) * params.Output.Channels
 	stream = s
-	samplesPerSecond = float64(s16PerSecond)
 	Channels = params.Output.Channels
 	SampleRate = int(params.SampleRate)
 
@@ -89,32 +85,39 @@ func Shutdown() {
 }
 
 func Append(wav []int16) int {
-	return ops.Append(wav)
+	n := ops.Append(wav)
+	fr.Max += FrameN(n / Channels)
+	return n
 }
 
-func Play(s0, period SampleN) {
-	if period == 0 {
-		return
+func Play(f0 FrameN) {
+	prevfr, prevBase = fr, baseIndex
+	fr = FrameRange{f0, f0}
+	baseIndex += (prevfr.Max - prevfr.Min)
+	if stopped {
+		stopped = false
+		ops.Start()
+		stream.Start()
 	}
-	currentLen = period
-	currentS0 = s0
-	ops.Start()
-	stream.Start()
 }
 
 func Stop() {
-	currentLen = 0
+	stopped = true
 	stream.Abort()
 }
 
 func IsPlaying() bool {
-	return currentLen != 0
+	return !stopped
 }
 
-func PlayingSample() (SampleN, bool) {
-	if currentLen == 0 {
+func PlayingFrame() (FrameN, bool) {
+	if stopped {
 		return 0, false
 	}
 	index, ok := ops.Index()
-	return currentS0 + (index % currentLen), ok
+	if index < baseIndex {
+		/* haven't looped around yet */
+		return prevfr.Min + (index - prevBase), ok
+	}
+	return fr.Min + (index - baseIndex), ok
 }

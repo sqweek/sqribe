@@ -208,7 +208,7 @@ func playToggle() {
 	scorechan := make(chan PlayChange)
 	G.plumb.score.Sub(&playState, coalesced(scorechan))
 
-	audio.Play(G.wav.ToSample(f0), G.wav.ToSample(padN))
+	audio.Play(f0)
 	/* synth & sample feeding thread */
 	go func() {
 		woodblock := Synth.Inst(midi.InstWoodblock)
@@ -292,6 +292,7 @@ func playToggle() {
 				i = 0
 				mev = evhead
 				bev = bhead
+				audio.Play(f0)
 			}
 		}
 		for _ = range(sampch) {
@@ -307,9 +308,9 @@ func playToggle() {
 	/* gui feedback thread */
 	go func() {
 		for {
-			s, playing := audio.PlayingSample()
+			f, playing := audio.PlayingFrame()
 			if !playing {
-				if playState == PLAYING && s != 0 {
+				if playState == PLAYING && f != 0 {
 					/* we think we're playing, but the audio callback hasn't
 					 * run for awhile. just stop. */
 					fmt.Println("lost audio callback, stopping")
@@ -317,7 +318,7 @@ func playToggle() {
 				}
 				break
 			}
-			G.ww.SetCursorByFrame(G.wav.ToFrame(s))
+			G.ww.SetCursorByFrame(f)
 			time.Sleep(66 * time.Millisecond)
 		}
 	}()

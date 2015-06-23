@@ -39,8 +39,8 @@ func (block *blockingOps) Start() {
 	block.playbackStart = monotonicTime()
 }
 
-func (block *blockingOps) Index() (SampleN, bool) {
+func (block *blockingOps) Index() (FrameN, bool) {
 	dt := monotonicTime() - block.playbackStart
-	return SampleN(samplesPerSecond * dt.Seconds()), true
+	return FrameN(float64(SampleRate) * dt.Seconds()), true
 }
 
