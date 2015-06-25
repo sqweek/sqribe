@@ -11,6 +11,11 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
+type Samples struct {
+	buf []int16
+	frame FrameN
+}
+
 type BeatEv struct {
 	Frame FrameN
 	Next *BeatEv
@@ -181,23 +186,24 @@ func playToggle() {
 
 	padN := N + nfPad
 	/* wave sample prefetch thread */
-	sampch := make(chan []int16, 10)
+	sampch := make(chan Samples, 10)
 	go func() {
-		bufsiz := FrameN(2048)
-		var buf []int16
+		bufsiz := FrameN(2048) // must be multiple of 64
+		var s Samples
 		i := FrameN(0)
 		frame0 := G.wav.Frames(f0, f0)
 		for playState == PLAYING {
+			s.frame = f0 + i
 			if i + bufsiz > N {
-				wave := G.wav.Frames(f0 + i, fN)
-				buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
-				copy(buf, wave)
-				copy(buf[len(wave):], crossfade(wave[len(wave) - len(frame0):], frame0, nfPad))
+				wave := G.wav.Frames(s.frame, fN)
+				s.buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
+				copy(s.buf, wave)
+				copy(s.buf[len(wave):], crossfade(wave[len(wave) - len(frame0):], frame0, nfPad))
 			} else {
-				buf = G.wav.Frames(f0 + i, f0 + i + bufsiz - 1)
+				s.buf = G.wav.Frames(s.frame, s.frame + bufsiz - 1)
 			}
-			nf := G.wav.ToFrame(SampleN(len(buf)))
-			sampch <- buf
+			nf := G.wav.ToFrame(SampleN(len(s.buf)))
+			sampch <- s
 			i += nf
 			if i >= padN {
 				i = 0
@@ -211,43 +217,49 @@ func playToggle() {
 	audio.Play(f0)
 	/* synth & sample feeding thread */
 	go func() {
+		var in Samples
 		woodblock := Synth.Inst(midi.InstWoodblock)
 		bev := bhead
 		bon := false
 		nf := FrameN(64)
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
-		inbuf := []int16{}
 		mev := evhead
 		offlist := make([]MidiEv, 0, 32)
-		i := FrameN(0)
 		for playState == PLAYING {
-			if len(inbuf) == 0 {
-				select {
-				case changed := <-scorechan:
-					if changed.beat {
-						bhead, bev = beatlst(f0, fN, f0 + i)
-					}
-					if changed.note || changed.beat {
-						evhead, mev = midilst(f0, fN, f0 + i)
-					}
-				default:
-				}
-				inbuf = <-sampch
-				if len(inbuf) < bufsiz || len(inbuf) % bufsiz != 0 {
-					fmt.Println("prefetch samples sent in non-64 frame multiple", len(inbuf))
+			if len(in.buf) == 0 {
+				prevframe := in.frame
+				in = <-sampch
+				if len(in.buf) < bufsiz || len(in.buf) % bufsiz != 0 {
+					fmt.Println("prefetch samples sent in non-64 frame multiple", len(in.buf))
 					playState = STOPPING
 					break
 				}
+				select {
+				case changed := <-scorechan:
+					if changed.beat {
+						bhead, bev = beatlst(f0, fN, in.frame)
+					}
+					if changed.note || changed.beat {
+						evhead, mev = midilst(f0, fN, in.frame)
+					}
+				default:
+				}
+				if prevframe > in.frame {
+					/* we just looped back around */
+					mev = evhead
+					bev = bhead
+					audio.Play(in.frame)
+				}
 			}
-			buf := inbuf[:bufsiz]
-			inbuf = inbuf[bufsiz:]
+			buf := in.buf[:bufsiz]
+			in.buf = in.buf[bufsiz:]
 
 			/* turn notes off first so notes at the same pitch directly following
 			** one another don't get truncated */
 			for j := len(offlist) - 1; j >= 0; j-- {
 				// XXX sorted list might be simpler?
-				if offlist[j].End < f0 + i + nf {
+				if offlist[j].End < in.frame + nf {
 					Synth.NoteOff(offlist[j].Chan, offlist[j].Pitch)
 					if j == len(offlist) - 1 {
 						offlist = offlist[:j]
@@ -261,14 +273,14 @@ func playToggle() {
 				Synth.NoteOff(woodblock, midi.PitchF6)
 				bon = false
 			} else if !Mixer.MuteMetronome {
-				for bev != nil && bev.Frame < f0 + i + nf {
+				for bev != nil && bev.Frame < in.frame + nf {
 					Synth.NoteOn(woodblock, midi.PitchF6, 120)
 					bon = true
 					bev = bev.Next
 				}
 			}
 			/* user placed notes */
-			for mev != nil && mev.Start < f0 + i + nf {
+			for mev != nil && mev.Start < in.frame + nf {
 				Synth.NoteOn(mev.Chan, mev.Pitch, mev.Velocity)
 				offlist = append(offlist, *mev)
 				mev = mev.Next
@@ -287,13 +299,6 @@ func playToggle() {
 				mbuf[j] = int16(α * float64(buf[j]) + β * float64(mbuf[j]))
 			}
 			audio.Append(mbuf)
-			i += nf
-			if i >= padN {
-				i = 0
-				mev = evhead
-				bev = bhead
-				audio.Play(f0)
-			}
 		}
 		for _ = range(sampch) {
 			// drain channel
