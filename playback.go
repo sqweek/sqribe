@@ -13,7 +13,7 @@ import (
 
 type Samples struct {
 	buf []int16
-	frame FrameN
+	frame, f0, fN FrameN
 }
 
 type BeatEv struct {
@@ -168,34 +168,30 @@ func playToggle() {
 
 	playState = PLAYING
 	rng := G.ww.GetSelectedTimeRange()
-	f0, fN := rng.MinFrame(), rng.MaxFrame()
-
-	if f0 == fN {
-		fN = G.wav.ToFrame(G.wav.NSamples) - 1
-		f0 = G.ww.FrameAtCursor()
+	if rng.MinFrame() == rng.MaxFrame() {
+		play(FrameRange{G.ww.FrameAtCursor(), G.wav.ToFrame(G.wav.NSamples) - 1})
+	} else {
+		play(rng)
 	}
-	fmt.Println("starting playback", f0, fN)
+}
 
-	/* short crossfade to loop smoothly */
-	N := fN - f0 + 1
-	// pad to nearest 64th frame, minimum 20 frames
-	nfPad := 19 + (64 - (N + 19) % 64)
+func play(rng TimeRange) {
+	fmt.Println("starting playback", rng.MinFrame(), rng.MaxFrame())
 
-	evhead, _ := midilst(f0, fN, f0)
-	bhead, _ := beatlst(f0, fN, f0)
-
-	padN := N + nfPad
 	/* wave sample prefetch thread */
 	sampch := make(chan Samples, 10)
 	go func() {
 		bufsiz := FrameN(2048) // must be multiple of 64
 		var s Samples
-		i := FrameN(0)
-		frame0 := G.wav.Frames(f0, f0)
+		s.frame = rng.MinFrame()
 		for playState == PLAYING {
-			s.frame = f0 + i
-			if i + bufsiz > N {
-				wave := G.wav.Frames(s.frame, fN)
+			/* re-evaluate f0/fN each iteration in case a bounding beat moves */
+			s.f0, s.fN = rng.MinFrame(), rng.MaxFrame()
+			if s.frame + bufsiz > s.fN {
+				// pad to nearest 64th frame, minimum 20 frames
+				nfPad := 19 + (64 - ((s.fN - s.f0 + 1) + 19) % 64)
+				wave := G.wav.Frames(s.frame, s.fN)
+				frame0 := G.wav.Frames(s.f0, s.f0)
 				s.buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
 				copy(s.buf, wave)
 				copy(s.buf[len(wave):], crossfade(wave[len(wave) - len(frame0):], frame0, nfPad))
@@ -204,9 +200,9 @@ func playToggle() {
 			}
 			nf := G.wav.ToFrame(SampleN(len(s.buf)))
 			sampch <- s
-			i += nf
-			if i >= padN {
-				i = 0
+			s.frame += nf
+			if s.frame >= s.fN {
+				s.frame = s.f0
 			}
 		}
 		close(sampch)
@@ -214,17 +210,17 @@ func playToggle() {
 	scorechan := make(chan PlayChange)
 	G.plumb.score.Sub(&playState, coalesced(scorechan))
 
-	audio.Play(f0)
+	audio.Play(rng.MinFrame())
 	/* synth & sample feeding thread */
 	go func() {
 		var in Samples
 		woodblock := Synth.Inst(midi.InstWoodblock)
-		bev := bhead
+		bhead, bev := beatlst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
 		bon := false
 		nf := FrameN(64)
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
-		mev := evhead
+		evhead, mev := midilst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
 		offlist := make([]MidiEv, 0, 32)
 		for playState == PLAYING {
 			if len(in.buf) == 0 {
@@ -238,10 +234,10 @@ func playToggle() {
 				select {
 				case changed := <-scorechan:
 					if changed.beat {
-						bhead, bev = beatlst(f0, fN, in.frame)
+						bhead, bev = beatlst(in.f0, in.fN, in.frame)
 					}
 					if changed.note || changed.beat {
-						evhead, mev = midilst(f0, fN, in.frame)
+						evhead, mev = midilst(in.f0, in.fN, in.frame)
 					}
 				default:
 				}
