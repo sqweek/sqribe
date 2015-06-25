@@ -91,14 +91,16 @@ func Append(wav []int16) int {
 }
 
 func Play(f0 FrameN) {
-	prevfr, prevBase = fr, baseIndex
-	fr = FrameRange{f0, f0}
-	baseIndex += (prevfr.Max - prevfr.Min)
 	if stopped {
+		baseIndex = 0
 		stopped = false
 		ops.Start()
 		stream.Start()
+	} else {
+		prevfr, prevBase = fr, baseIndex
+		baseIndex += (prevfr.Max - prevfr.Min)
 	}
+	fr = FrameRange{f0, f0}
 }
 
 func Stop() {
