@@ -138,8 +138,8 @@ func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
 				if !ok {
 					return
 				}
-				f0, fN := ww.VisibleFrameRange()
-				s0, sN := ww.wav.SampleRange(f0, fN)
+				frng:= ww.VisibleFrameRange()
+				s0, sN := ww.wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
 				if chunk.Intersects(s0, sN) {
 					ww.renderstate.changed |= WAV
 					ww.publish(chunk)
@@ -177,10 +177,10 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 	ww.publish(sc)
 }
 
-func (ww *WaveWidget) VisibleFrameRange() (FrameN, FrameN) {
+func (ww *WaveWidget) VisibleFrameRange() FrameRange {
 	w0 := ww.first_frame
 	wN := w0 + FrameN(ww.frames_per_pixel) * FrameN(ww.rect.wave.Dx())
-	return w0, wN
+	return FrameRange{w0, wN}
 }
 
 func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {

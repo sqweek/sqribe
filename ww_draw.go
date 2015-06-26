@@ -246,7 +246,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	}
 	black4 := color.RGBA{0x00, 0x00, 0x00, 0x88}
 	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
-	_, lastFrame := ww.VisibleFrameRange()
+	lastFrame := ww.VisibleFrameRange().MaxFrame()
 	minX, maxX := -1, -1
 	/* XXX doesn't need whole beats array, see drawBeatAxis() */
 	for i, beat := range(ww.score.Beats()) {
@@ -363,16 +363,34 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	drawVertSlider(dst, layout.volS, bg, fg, float64(staff.Velocity()) / 127.0)
 }
 
-func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note *score.Note, delta int, accidental *int, col color.NRGBA) {
-	black := color.NRGBA{0, 0, 0, col.A}
-	f0, fN := ww.VisibleFrameRange()
-	frame, _ := ww.score.ToFrame(ww.score.Beatf(note))
-	if frame < f0 || frame > fN {
+type DisplayNote struct {
+	delta int
+	accidental *int
+	col color.NRGBA
+	duration float64
+	beatf float64
+	downBeam bool
+}
+
+func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note) *DisplayNote {
+	dn := DisplayNote{}
+	dn.beatf = ww.score.Beatf(note)
+	dn.duration = note.Durf()
+	dn.delta, dn.accidental = staff.LineForPitch(note.Pitch)
+	dn.downBeam = (dn.delta > 2)
+	return &dn
+}
+
+func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *DisplayNote) {
+	black := color.NRGBA{0, 0, 0, n.col.A}
+	rng:= ww.VisibleFrameRange()
+	frame, _ := ww.score.ToFrame(n.beatf)
+	if frame < rng.MinFrame() || frame > rng.MaxFrame() {
 		return
 	}
 
 	x := ww.PixelAtFrame(frame)
-	y := mid - (yspacing / 2) * delta
+	y := mid - (yspacing / 2) * n.delta
 
 	/* ledger lines */
 	ydist := int(math.Abs(float64(y - mid)))
@@ -387,56 +405,68 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, note 
 	}
 
 	var head *NoteHead
-	if note.Durf() < 2 {
-		head = newNoteHead(col, image.Point{x, y}, yspacing/2, 35.0)
+	if n.duration < 2 {
+		head = newNoteHead(n.col, image.Point{x, y}, yspacing/2, 35.0)
 	} else {
-		head = newHollowNote(col, image.Point{x, y}, yspacing/2, 35.0)
+		head = newHollowNote(n.col, image.Point{x, y}, yspacing/2, 35.0)
 	}
 	draw.Draw(dst, r, head, r.Min, draw.Over)
-	if note.Durf() <= 3 {
-		downBeam := (delta > 2)
+	if n.duration <= 3 {
 		var beamEnd image.Point
 		var beam image.Rectangle
-		if downBeam {
+		if n.downBeam {
 			beamEnd = image.Pt(x - yspacing/2, y + yspacing * 2.5)
 			beam = image.Rectangle{image.Pt(x - yspacing/2, y), beamEnd.Add(image.Pt(1,1))}
 		} else {
 			beamEnd = image.Pt(x + yspacing/2 - 1, y - yspacing * 2.5 - 1)
 			beam = image.Rectangle{beamEnd, image.Pt(x + yspacing/2, y)}
 		}
-		draw.Draw(dst, beam, &image.Uniform{col}, r.Min, draw.Over)
+		draw.Draw(dst, beam, &image.Uniform{n.col}, r.Min, draw.Over)
 		i := 0
 		/* TODO dotted durations, triplets */
-		for d := 0.5; d >= note.Durf(); d /= 2 {
+		for d := 0.5; d >= n.duration; d /= 2 {
 			var c image.Point
-			if downBeam {
+			if n.downBeam {
 				c = image.Pt(beamEnd.X, beamEnd.Y - i * 3)
 			} else {
 				c = image.Pt(beamEnd.X, beamEnd.Y + i * 3)
 			}
 			i++
-			draw.Draw(dst, r, &NoteTail{CenteredGlyph{col, c, 4*yspacing/(2*5)}, downBeam}, r.Min, draw.Over)
+			draw.Draw(dst, r, &NoteTail{CenteredGlyph{n.col, c, 4*yspacing/(2*5)}, n.downBeam}, r.Min, draw.Over)
 		}
 	}
-	if accidental != nil {
-		draw.Draw(dst, r, newAccidental(col, image.Point{x - yspacing, y}, yspacing/2, *accidental), r.Min, draw.Over)
+	if n.accidental != nil {
+		draw.Draw(dst, r, newAccidental(n.col, image.Point{x - yspacing, y}, yspacing/2, *n.accidental), r.Min, draw.Over)
 	}
 }
 
+
 func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
-	for _, note := range(staff.Notes()) {
-		delta, accidental := staff.LineForPitch(note.Pitch)
-		_, selected := ww.notesel[note]
-		col := color.NRGBA{0, 0, 0, 0xff}
-		if selected {
-			α := uint8(0xff)
-			state := ww.getMouseState(ww.mouse.pos)
-			if state.ndelta != nil {
-				α = 0x88
-			}
-			col = color.NRGBA{0x88, 0x88, 0x88, α}
+	next := score.Chords(ww.score.Iter(ww.VisibleFrameRange(), staff))
+	var chord []score.StaffNote
+	for next != nil {
+		chord, next = next()
+		downBeam := true
+		notes := make([]*DisplayNote, len(chord))
+		for i, sn := range chord {
+			notes[i] = ww.dispNote(staff, sn.Note)
+			downBeam = downBeam && (notes[i].delta > 2)
 		}
-		ww.drawNote(dst, r, mid, note, delta, accidental, col)
+		for i, note := range notes {
+			_, selected := ww.notesel[chord[i].Note]
+			if selected {
+				α := uint8(0xff)
+				state := ww.getMouseState(ww.mouse.pos)
+				if state.ndelta != nil {
+					α = 0x88
+				}
+				note.col = color.NRGBA{0x88, 0x88, 0x88, α}
+			} else {
+				note.col = color.NRGBA{0, 0, 0, 0xff}
+			}
+			note.downBeam = downBeam
+			ww.drawNote(dst, r, mid, note)
+		}
 	}
 }
 
@@ -453,27 +483,28 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 			beat, offset := ww.score.Quantize(ww.score.Beatf(sn.Note) + s.ndelta.Δbeat)
 			n.Beat = beat
 			n.Offset.Set(offset)
-			col := color.NRGBA{0x88, 0x88, 0x88, 0xaa}
-			delta, accidental := staff.LineForPitch(n.Pitch)
-			ww.drawNote(dst, r, mid, &n, delta, accidental, col)
+			note := ww.dispNote(sn.Staff, sn.Note)
+			note.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
+			ww.drawNote(dst, r, mid, note)
 		}
 	} else if s.note != nil && s.note.staff == staff {
 		str, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 		var dur big.Rat
 		dur.SetString(str)
 		n := ww.mkNote(s.note, &dur)
-		var col color.NRGBA
+		note := ww.dispNote(staff, n)
+		// could avoid transitioning through staff.Note except for NoteAt
 		existingNote := staff.NoteAt(n)
 		if existingNote == nil {
-			col = colourFor(n.Offset, 0xbb)
+			note.col = colourFor(n.Offset, 0xbb)
 		} else {
 			if _, selected := ww.notesel[existingNote]; selected {
-				col = color.NRGBA{0x88, 0x88, 0x88, 0x88}
+				note.col = color.NRGBA{0x88, 0x88, 0x88, 0x88}
 			} else {
-				col = color.NRGBA{0, 0, 0, 0x88}
+				note.col = color.NRGBA{0, 0, 0, 0x88}
 			}
 		}
-		ww.drawNote(dst, r, mid, n, s.note.delta, nil, col)
+		ww.drawNote(dst, r, mid, note)
 	}
 }
 

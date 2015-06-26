@@ -385,3 +385,27 @@ func (score *Score) Iter(rng TimeRange, staves... *Staff) NoteIter {
 	return fn
 }
 
+type ChordIter func()([]StaffNote, ChordIter)
+
+func Chords(notes NoteIter) ChordIter {
+	if notes == nil {
+		return nil
+	}
+	sn, nextNote := notes()
+	chord := []StaffNote{sn}
+	var nextChord ChordIter
+	nextChord = func()([]StaffNote, ChordIter) {
+		for nextNote != nil {
+			sn, nextNote = nextNote()
+			if chord[0].Note.Beat == sn.Note.Beat && chord[0].Note.Offset.Cmp(sn.Note.Offset) == 0 {
+				chord = append(chord, sn)
+			} else {
+				result := chord
+				chord = []StaffNote{sn}
+				return result, nextChord
+			}
+		}
+		return chord, nil
+	}
+	return nextChord
+}
