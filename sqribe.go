@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"runtime"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
@@ -99,6 +100,17 @@ func main() {
 	G.ww = NewWaveWidget(redraw)
 
 	wg := InitWde(redraw)
+
+	// 1. audio callback thread
+	// 2. ui event goroutine
+	// 3. ui painting goroutine
+	// 4. sample prefetch goroutine
+	// 5. synth goroutine
+	// 6. feedback goroutine
+	// 7. quantizer
+	// 8. io cache fetcher
+	// 9. audio decoder
+	runtime.GOMAXPROCS(6)
 
 	audioFile := flag.Arg(0)
 	if len(audioFile) > 0 {

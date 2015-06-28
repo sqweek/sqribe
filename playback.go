@@ -179,7 +179,7 @@ func play(rng TimeRange) {
 	fmt.Println("starting playback", rng.MinFrame(), rng.MaxFrame())
 
 	/* wave sample prefetch thread */
-	sampch := make(chan Samples, 10)
+	sampch := make(chan Samples, 25)
 	go func() {
 		bufsiz := FrameN(2048) // must be multiple of 64
 		var s Samples

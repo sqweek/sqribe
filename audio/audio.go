@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"log"
-	"runtime"
 
 	. "sqweek.net/sqribe/core/types"
 )
@@ -48,8 +47,6 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-
-	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
 
 	host := HostApi()
 	if host == nil {
