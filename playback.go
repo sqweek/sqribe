@@ -270,8 +270,10 @@ func play(rng TimeRange) {
 				bon = false
 			} else if !Mixer.MuteMetronome {
 				for bev != nil && bev.Frame < in.frame + nf {
-					Synth.NoteOn(woodblock, midi.PitchF6, 120)
-					bon = true
+					if !bon {
+						Synth.NoteOn(woodblock, midi.PitchF6, 120)
+						bon = true
+					}
 					bev = bev.Next
 				}
 			}
@@ -295,6 +297,9 @@ func play(rng TimeRange) {
 				mbuf[j] = int16(α * float64(buf[j]) + β * float64(mbuf[j]))
 			}
 			audio.Append(mbuf)
+		}
+		for _, ev := range(offlist) {
+			Synth.NoteOff(ev.Chan, ev.Pitch)
 		}
 		for _ = range(sampch) {
 			// drain channel
