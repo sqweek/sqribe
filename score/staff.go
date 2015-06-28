@@ -171,6 +171,12 @@ func (note *Note) Set(note2 *Note) {
 	note.Duration.Set(note2.Duration)
 }
 
+func (src *Note) Dup() (dst *Note) {
+	dst = &Note{Offset: new(big.Rat), Duration: new(big.Rat)}
+	dst.Set(src)
+	return dst
+}
+
 func (staff *Staff) RemoveNote(note *Note) bool {
 	removed := staff.removeNote(note)
 	staff.plumb.C <- StaffChanged{staff}
@@ -258,8 +264,9 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 	}
 	affectedStaves := make(map[*Staff]bool)
 	repeatNote := func (staff *Staff, note *Note) {
-		note2 := Note{note.Pitch, note.Duration, score.beats[note.Beat.index + n], note.Offset}
-		staff.addNote(&note2)
+		note2 := note.Dup()
+		note2.Beat = score.beats[note.Beat.index + n]
+		staff.addNote(note2)
 		affectedStaves[staff] = true
 	}
 	score.perStaffNote(rng, repeatNote)
