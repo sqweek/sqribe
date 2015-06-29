@@ -277,13 +277,12 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 }
 
 
-func (score *Score) RemoveNotes(rng BeatRange) {
+func (score *Score) RemoveNotes(notes... StaffNote) {
 	affectedStaves := make(map[*Staff]bool)
-	f := func(staff *Staff, note *Note) {
-		staff.RemoveNote(note)
-		affectedStaves[staff] = true
+	for _, sn := range notes {
+		affectedStaves[sn.Staff] = true
+		sn.Staff.removeNote(sn.Note)
 	}
-	score.perStaffNote(rng, f)
 	for staff, _ := range affectedStaves {
 		staff.plumb.C <- StaffChanged{staff}
 	}

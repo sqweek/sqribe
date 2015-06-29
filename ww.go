@@ -164,6 +164,14 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 				if _, ok := ev.(score.BeatChanged); ok {
 					ww.renderstate.changed |= BEATS
 				}
+				if ev, ok := ev.(score.StaffChanged); ok {
+					for note, staff := range ww.notesel {
+						if ev.Staff == staff && staff.NoteAt(note) != note {
+							/* note has been removed from staff */
+							delete(ww.notesel, note)
+						}
+					}
+				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
 				ww.renderstate.changed |= SCALE
 				ww.publish(ev)
@@ -175,6 +183,14 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 	}
 	ww.renderstate.changed |= SCALE | LAYOUT
 	ww.publish(sc)
+}
+
+func (ww *WaveWidget) SelectedNotes() []score.StaffNote {
+	notes := make([]score.StaffNote, 0, len(ww.notesel))
+	for note, staff := range ww.notesel {
+		notes = append(notes, score.StaffNote{staff, note})
+	}
+	return notes
 }
 
 func (ww *WaveWidget) VisibleFrameRange() FrameRange {

@@ -119,10 +119,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 					G.score.AddBeat(f)
 				}
 			case wde.KeyDelete:
-				rng := G.ww.GetSelectedTimeRange()
-				if beats, ok := rng.(score.BeatRange); ok {
-					G.score.RemoveNotes(beats)
-				}
+				G.score.RemoveNotes(G.ww.SelectedNotes()...)
 			default:
 				switch e.Glyph {
 				case "%":
