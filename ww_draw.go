@@ -479,7 +479,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 			}
 			n := score.Note{Offset: big.NewRat(1,1), Duration: big.NewRat(1,1)}
 			n.Set(sn.Note)
-			n.Pitch += s.ndelta.Δpitch
+			n.Pitch += uint8(s.ndelta.Δpitch)
 			beat, offset := ww.score.Quantize(ww.score.Beatf(sn.Note) + s.ndelta.Δbeat)
 			n.Beat = beat
 			n.Offset.Set(offset)

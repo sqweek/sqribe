@@ -42,7 +42,7 @@ type noteProspect struct {
 }
 
 type noteDrag struct {
-	Δpitch uint8
+	Δpitch int8
 	Δbeat float64
 }
 
@@ -272,7 +272,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		if prospect == nil {
 			return false
 		}
-		Δpitch := staff.PitchForLine(prospect.delta) - note.Pitch
+		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
 		Δbeat := prospect.beatf - sc.Beatf(note)
 		_, selected := ww.notesel[note]
 		if finished {
@@ -630,5 +630,5 @@ func (ww *WaveWidget) Status() string {
 		nsharps = ww.score.Key()
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v %v", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps)
+	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v %v %v", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps, len(ww.notesel))
 }

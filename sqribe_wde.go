@@ -122,6 +122,10 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
 			default:
 				switch e.Glyph {
+				case "#":
+					G.score.MvNotes(1, 0, G.ww.SelectedNotes()...)
+				case "@":
+					G.score.MvNotes(-1, 0, G.ww.SelectedNotes()...)
 				case "%":
 					rng := G.ww.GetSelectedTimeRange()
 					if beats, ok := rng.(score.BeatRange); ok {

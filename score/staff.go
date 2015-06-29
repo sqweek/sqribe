@@ -221,14 +221,14 @@ func (staff *Staff) addNote(note *Note) {
 	}
 }
 
-func (score *Score) MvNotes(Δpitch uint8, Δbeat float64, notes... StaffNote) {
+func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
 	score.RLock()
 	changed := make(map[*Staff]struct{})
 	for _, sn := range notes {
 		sn.Staff.removeNote(sn.Note)
 	}
 	for _, sn := range notes {
-		sn.Note.Pitch += Δpitch
+		sn.Note.Pitch += uint8(Δpitch)
 		b := score.Beatf(sn.Note) + Δbeat
 		beat, offset := score.Quantize(b)
 		sn.Note.Beat = beat
