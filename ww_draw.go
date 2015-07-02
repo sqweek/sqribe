@@ -490,13 +490,12 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 			if sn.Staff != staff {
 				continue
 			}
-			n := score.Note{Offset: big.NewRat(1,1), Duration: big.NewRat(1,1)}
-			n.Set(sn.Note)
+			n := sn.Note.Dup()
 			n.Pitch += uint8(s.ndelta.Δpitch)
 			beat, offset := ww.score.Quantize(ww.score.Beatf(sn.Note) + s.ndelta.Δbeat)
 			n.Beat = beat
 			n.Offset.Set(offset)
-			note := ww.dispNote(sn.Staff, sn.Note)
+			note := ww.dispNote(sn.Staff, n)
 			note.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, note)
 		}
