@@ -131,3 +131,19 @@ func newAccidental(col color.NRGBA, p image.Point, r int, accidental int) image.
 	}
 	return &DefaultGlyph{CenteredGlyph{col, p, r}}
 }
+
+type DotGlyph struct {
+	CenteredGlyph
+}
+
+func (f *DotGlyph) At(x, y int) color.Color {
+	dx, dy := x - f.p.X, y - f.p.Y
+	if dx > 0 && dx <= 2 {
+		dx--
+	}
+	if (dy + dx >= -1 && dx + dy <= 1) &&
+	    (dy - dx >= -1 && dy - dx <= 1) {
+		return f.col
+	}
+	return color.NRGBA{0, 0, 0, 0}
+}

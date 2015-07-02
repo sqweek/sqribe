@@ -423,7 +423,6 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		}
 		draw.Draw(dst, beam, &image.Uniform{n.col}, r.Min, draw.Over)
 		i := 0
-		/* TODO dotted durations, triplets */
 		for d := 0.5; d >= n.duration; d /= 2 {
 			var c image.Point
 			if n.downBeam {
@@ -434,6 +433,20 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 			i++
 			draw.Draw(dst, r, &NoteTail{CenteredGlyph{n.col, c, 4*yspacing/(2*5)}, n.downBeam}, r.Min, draw.Over)
 		}
+	}
+	/* TODO triplets */
+	dotted := 0
+	for d := 2.0; d >= 1./128; d/=2 {
+		switch {
+		case math.Abs(d * 1.5 - n.duration) < 1e-6:
+			dotted = 1
+			break
+		case  math.Abs(d - n.duration) < 1e-6:
+			break
+		}
+	}
+	for i := 0; i < dotted; i++ {
+		draw.Draw(dst, r, &DotGlyph{CenteredGlyph{n.col, image.Point{x + yspacing/2 + 3 + 5*i, y}, yspacing/2}}, r.Min, draw.Over)
 	}
 	if n.accidental != nil {
 		draw.Draw(dst, r, newAccidental(n.col, image.Point{x - yspacing, y}, yspacing/2, *n.accidental), r.Min, draw.Over)
