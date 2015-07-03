@@ -218,7 +218,7 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 
 func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 	csel := color.NRGBA{0xbb, 0xbb, 0xee, 128}
-	rng := ww.GetSelectedTimeRange()
+	rng := ww.SelectedTimeRange()
 	sel0, selN := rng.MinFrame(), rng.MaxFrame()
 	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
@@ -486,7 +486,7 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	s := ww.getMouseState(ww.mouse.pos)
 	if s.ndelta != nil {
-		for _, sn := range ww.selectedNotes() {
+		for _, sn := range ww.SelectedNotes() {
 			if sn.Staff != staff {
 				continue
 			}

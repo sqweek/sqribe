@@ -127,7 +127,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				case "@":
 					G.score.MvNotes(-1, 0, G.ww.SelectedNotes()...)
 				case "%":
-					rng := G.ww.GetSelectedTimeRange()
+					rng := G.ww.SelectedTimeRange()
 					if beats, ok := rng.(score.BeatRange); ok {
 						G.score.RepeatNotes(beats)
 					}

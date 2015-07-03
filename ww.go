@@ -41,6 +41,10 @@ type noteProspect struct {
 	staff *score.Staff
 }
 
+func (n *noteProspect) Eq(n2 *noteProspect) bool {
+	return n.staff == n2.staff && n.delta == n2.delta && n.beatf == n2.beatf
+}
+
 type noteDrag struct {
 	Δpitch int8
 	Δbeat float64
@@ -120,7 +124,7 @@ func (ww *WaveWidget) ShuntSel(Δbeat int) {
 	}
 }
 
-func (ww *WaveWidget) GetSelectedTimeRange() TimeRange {
+func (ww *WaveWidget) SelectedTimeRange() TimeRange {
 	return ww.selection
 }
 
@@ -257,14 +261,6 @@ func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
-func (ww *WaveWidget) selectedNotes() []score.StaffNote {
-	notes := make([]score.StaffNote, 0, len(ww.notesel))
-	for note, nstaff := range ww.notesel {
-		notes = append(notes, score.StaffNote{nstaff, note})
-	}
-	return notes
-}
-
 func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	sc := ww.score
 	return func(pos image.Point, finished bool, moved bool)bool {
@@ -278,7 +274,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		if finished {
 			if moved {
 				if selected {
-					sc.MvNotes(Δpitch, Δbeat, ww.selectedNotes()...)
+					sc.MvNotes(Δpitch, Δbeat, ww.SelectedNotes()...)
 				} else {
 					sc.MvNotes(Δpitch, Δbeat, score.StaffNote{staff, note})
 				}
@@ -453,10 +449,6 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 	}
 	s := ww.getMouseState(mouse)
 	return s.dragFn
-}
-
-func (n *noteProspect) Eq(n2 *noteProspect) bool {
-	return n.staff == n2.staff && n.delta == n2.delta && n.beatf == n2.beatf
 }
 
 func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
