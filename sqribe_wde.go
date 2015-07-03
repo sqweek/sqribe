@@ -89,13 +89,13 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch e.Key {
 			case wde.KeyLeftArrow:
-				if e.Chord == "shift+arrow" {
+				if e.Chord == "shift+left_arrow" {
 					G.ww.ShuntSel(-1)
 				} else {
 					G.ww.Scroll(-0.25)
 				}
 			case wde.KeyRightArrow:
-				if e.Chord == "shift+arrow" {
+				if e.Chord == "shift+right_arrow" {
 					G.ww.ShuntSel(1)
 				} else {
 					G.ww.Scroll(0.25)
