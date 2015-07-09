@@ -87,19 +87,34 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			win.SetCursor(cur)
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
+			chord := true
+			switch e.Chord {
+			case "shift+left_arrow":
+				G.ww.ShuntSel(-1)
+			case "shift+right_arrow":
+				G.ww.ShuntSel(1)
+			case "shift+" + wde.KeyInsert, "ctrl+v":
+				G.ww.SetPasteMode(!G.ww.PasteMode())
+			case "shift+" + wde.KeyDelete, "ctrl+x":
+				G.ww.Snarf()
+				G.score.RemoveNotes(G.ww.SelectedNotes()...)
+				G.ww.SetPasteMode(true)
+			case "control+c":
+				G.ww.Snarf()
+				G.ww.SetPasteMode(true)
+			default:
+				chord = false
+			}
+			if chord {
+				continue
+			}
 			switch e.Key {
+			case wde.KeyEscape:
+				G.ww.SetPasteMode(false)
 			case wde.KeyLeftArrow:
-				if e.Chord == "shift+left_arrow" {
-					G.ww.ShuntSel(-1)
-				} else {
-					G.ww.Scroll(-0.25)
-				}
+				G.ww.Scroll(-0.25)
 			case wde.KeyRightArrow:
-				if e.Chord == "shift+right_arrow" {
-					G.ww.ShuntSel(1)
-				} else {
-					G.ww.Scroll(0.25)
-				}
+				G.ww.Scroll(0.25)
 			case wde.KeyUpArrow:
 				G.ww.Zoom(0.5)
 			case wde.KeyDownArrow:

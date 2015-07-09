@@ -197,30 +197,39 @@ func (staff *Staff) removeNote(note *Note) bool {
 	return false
 }
 
-func (staff *Staff) AddNote(note *Note) {
-	staff.addNote(note)
+func (staff *Staff) AddNote(note... *Note) {
+	staff.addNote(note...)
 	staff.plumb.C <- StaffChanged{staff}
 }
 
-func (staff *Staff) addNote(note *Note) {
-	if len(staff.notes) == 0 {
-		staff.notes = append(staff.notes, note)
-		return
-	}
-	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
-	i := sort.Search(len(staff.notes), searchFn)
-	if i == len(staff.notes) {
-		staff.notes = append(staff.notes, note)
-	} else if note.Cmp(staff.notes[i]) == 0 {
-		/* already have a note at this offset with the same pitch, update the duration */
-		staff.notes[i].Duration.Set(note.Duration)
-	} else {
-		staff.notes = append(staff.notes, nil)
-		copy(staff.notes[i+1:], staff.notes[i:])
-		staff.notes[i] = note
-	}
+func (staff *Staff) addNote(note... *Note) {
+	staff.notes = Merge(staff.notes, note...)
 }
 
+/* Merges 'notes' into the already-sorted 'list'. */
+func Merge(list []*Note, notes... *Note) []*Note {
+	if len(list) == 0 {
+		list = append(list, notes...)
+		return list
+	}
+	for _, note := range notes {
+		searchFn := func(i int)bool { return note.Cmp(list[i]) <= 0 }
+		i := sort.Search(len(list), searchFn)
+		if i == len(list) {
+			list= append(list, note)
+		} else if note.Cmp(list[i]) == 0 {
+			/* already have a note at this offset with the same pitch, update the duration */
+			list[i].Duration.Set(note.Duration)
+		} else {
+			list = append(list, nil)
+			copy(list[i+1:], list[i:])
+			list[i] = note
+		}
+	}
+	return list
+}
+
+//XXX Δbeat should probs be a big.Rat
 func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
 	score.RLock()
 	changed := make(map[*Staff]struct{})
@@ -228,11 +237,7 @@ func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
 		sn.Staff.removeNote(sn.Note)
 	}
 	for _, sn := range notes {
-		sn.Note.Pitch += uint8(Δpitch)
-		b := score.Beatf(sn.Note) + Δbeat
-		beat, offset := score.Quantize(b)
-		sn.Note.Beat = beat
-		sn.Note.Offset.Set(offset)
+		sn.Note.Mv(Δpitch, Δbeat, score)
 		sn.Staff.addNote(sn.Note)
 		changed[sn.Staff] = struct{}{}
 	}
@@ -240,6 +245,15 @@ func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
 	for staff, _ := range changed {
 		staff.plumb.C <- StaffChanged{staff}
 	}
+}
+
+func (note *Note) Mv(Δpitch int8, Δbeat float64, score *Score) *Note {
+	note.Pitch += uint8(Δpitch)
+	b := score.Beatf(note) + Δbeat
+	beat, offset := score.Quantize(b)
+	note.Beat = beat
+	note.Offset.Set(offset)
+	return note
 }
 
 /* Ignores Duration field of supplied Note. */

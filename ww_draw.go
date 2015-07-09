@@ -485,24 +485,29 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	s := ww.getMouseState(ww.mouse.pos)
+	menu, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 	if s.ndelta != nil {
 		for _, sn := range ww.SelectedNotes() {
 			if sn.Staff != staff {
 				continue
 			}
-			n := sn.Note.Dup()
-			n.Pitch += uint8(s.ndelta.Δpitch)
-			beat, offset := ww.score.Quantize(ww.score.Beatf(sn.Note) + s.ndelta.Δbeat)
-			n.Beat = beat
-			n.Offset.Set(offset)
-			note := ww.dispNote(sn.Staff, n)
-			note.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
-			ww.drawNote(dst, r, mid, note)
+			note := sn.Note.Dup().Mv(s.ndelta.Δpitch, s.ndelta.Δbeat, ww.score)
+			n := ww.dispNote(sn.Staff, note)
+			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
+			ww.drawNote(dst, r, mid, n)
+		}
+	} else if s.note != nil && ww.pasteMode && len(ww.snarf[staff]) > 0 && len(ww.snarf[s.note.staff]) > 0 {
+		anchor := ww.snarf[s.note.staff][0]
+		Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
+		Δbeat := s.note.beatf - ww.score.Beatf(anchor)
+		for _, note := range ww.snarf[staff] {
+			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat, ww.score))
+			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
+			ww.drawNote(dst, r, mid, n)
 		}
 	} else if s.note != nil && s.note.staff == staff {
-		str, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 		var dur big.Rat
-		dur.SetString(str)
+		dur.SetString(menu)
 		n := ww.mkNote(s.note, &dur)
 		note := ww.dispNote(staff, n)
 		// could avoid transitioning through staff.Note except for NoteAt

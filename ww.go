@@ -71,6 +71,8 @@ type WaveWidget struct {
 	selection TimeRange
 	rect WaveLayout
 	notesel map[*score.Note]*score.Staff
+	snarf map[*score.Staff] []*score.Note // the cut/copy buffer
+	pasteMode bool
 
 	/* renderer related state */
 	renderstate struct {
@@ -494,7 +496,8 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 
 func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 	s := ww.getMouseState(mouse)
-	if s.note == nil || ww.score == nil {
+	// XXX no way to exit pasteMode without pasting...
+	if s.note == nil || ww.score == nil || (ww.pasteMode && len(ww.snarf[s.note.staff]) > 0) {
 		return nil
 	}
 	note := s.note
@@ -534,6 +537,21 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 				ww.publish(&staff.Minimised)
 				return
 			}
+		}
+	}
+	if ww.pasteMode {
+		if s := ww.getMouseState(mouse); s != nil && len(ww.snarf[s.note.staff]) > 0 {
+			anchor := ww.snarf[s.note.staff][0]
+			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
+			Δbeat := s.note.beatf - ww.score.Beatf(anchor)
+			for staff, notes := range ww.snarf {
+				mv := make([]*score.Note, 0, len(notes))
+				for _, note := range notes {
+					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat, ww.score))
+				}
+				staff.AddNote(mv...)
+			}
+			ww.pasteMode = false
 		}
 	}
 }
@@ -593,6 +611,27 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 		ww.publish(fpp)
 	}
 	return delta
+}
+
+func (ww *WaveWidget) Snarf() {
+	snarf := make(map[*score.Staff] []*score.Note)
+	for note, staff := range ww.notesel {
+		snarf[staff] = score.Merge(snarf[staff], note.Dup())
+	}
+	ww.snarf = snarf
+}
+
+func (ww *WaveWidget) PasteMode() bool {
+	return ww.pasteMode
+}
+
+func (ww *WaveWidget) SetPasteMode(mode bool) {
+	if ww.pasteMode == mode || (mode && ww.snarf == nil) {
+		return
+	}
+	ww.pasteMode = mode
+	ww.renderstate.changed |= SCALE
+	ww.publish(ww.snarf)
 }
 
 func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {
