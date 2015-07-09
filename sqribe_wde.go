@@ -87,80 +87,69 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			win.SetCursor(cur)
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
-			chord := true
-			switch e.Chord {
-			case "shift+left_arrow":
+			switch {
+			case e.Chord == "shift+left_arrow":
 				G.ww.ShuntSel(-1)
-			case "shift+right_arrow":
+			case e.Chord == "shift+right_arrow":
 				G.ww.ShuntSel(1)
-			case "shift+" + wde.KeyInsert, "ctrl+v":
+			case e.Chord == "shift+" + wde.KeyInsert, e.Chord == "control+v", e.Key == wde.KeyInsert:
 				G.ww.SetPasteMode(!G.ww.PasteMode())
-			case "shift+" + wde.KeyDelete, "ctrl+x":
+			case e.Chord == "shift+" + wde.KeyDelete, e.Chord == "control+x":
 				G.ww.Snarf()
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
 				G.ww.SetPasteMode(true)
-			case "control+c":
+			case e.Chord == "control+c":
 				G.ww.Snarf()
 				G.ww.SetPasteMode(true)
-			default:
-				chord = false
-			}
-			if chord {
-				continue
-			}
-			switch e.Key {
-			case wde.KeyEscape:
+			case e.Key == wde.KeyEscape:
 				G.ww.SetPasteMode(false)
-			case wde.KeyLeftArrow:
+			case e.Key == wde.KeyLeftArrow:
 				G.ww.Scroll(-0.25)
-			case wde.KeyRightArrow:
+			case e.Key == wde.KeyRightArrow:
 				G.ww.Scroll(0.25)
-			case wde.KeyUpArrow:
+			case e.Key == wde.KeyUpArrow:
 				G.ww.Zoom(0.5)
-			case wde.KeyDownArrow:
+			case e.Key == wde.KeyDownArrow:
 				G.ww.Zoom(2.0)
-			case wde.KeyF2:
+			case e.Key == wde.KeyF2:
 				G.score.KeyChange(-1)
-			case wde.KeyF3:
+			case e.Key == wde.KeyF3:
 				G.score.KeyChange(1)
-			case wde.KeyPrior:
+			case e.Key == wde.KeyPrior:
 				Mixer.Bias.Shunt(0.1)
-			case wde.KeyNext:
+			case e.Key == wde.KeyNext:
 				Mixer.Bias.Shunt(-0.1)
-			case wde.KeySpace:
+			case e.Key == wde.KeySpace:
 				playToggle()
-			case wde.KeyReturn:
+			case e.Key == wde.KeyReturn:
 				if f, playing := audio.PlayingFrame(); playing {
 					G.score.AddBeat(f)
 				}
-			case wde.KeyDelete:
+			case e.Key == wde.KeyDelete:
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
-			default:
-				switch e.Glyph {
-				case "#":
-					G.score.MvNotes(1, 0, G.ww.SelectedNotes()...)
-				case "@":
-					G.score.MvNotes(-1, 0, G.ww.SelectedNotes()...)
-				case "%":
-					rng := G.ww.SelectedTimeRange()
-					if beats, ok := rng.(score.BeatRange); ok {
-						G.score.RepeatNotes(beats)
-					}
-				case "s", "S":
-					SaveState(G.audiofile)
-				case "t", "T":
-					toggle(&Mixer.MuteMetronome)
-				case "a", "A":
-					toggle(&Mixer.MuteWave)
-				case "m", "M":
-					toggle(&Mixer.MuteMidi)
-				case "q", "Q":
-					go G.score.QuantizeBeats()
-				case "x", "X":
-					err := ExportMXML("export.xml")
-					if err != nil {
-						log.Println("MXML export", err)
-					}
+			case e.Key == wde.KeyS:
+				SaveState(G.audiofile)
+			case e.Key == wde.KeyT:
+				toggle(&Mixer.MuteMetronome)
+			case e.Key == wde.KeyA:
+				toggle(&Mixer.MuteWave)
+			case e.Key == wde.KeyM:
+				toggle(&Mixer.MuteMidi)
+			case e.Key == wde.KeyQ:
+				go G.score.QuantizeBeats()
+			case e.Key == wde.KeyX:
+				err := ExportMXML("export.xml")
+				if err != nil {
+					log.Println("MXML export", err)
+				}
+			case e.Glyph == "#":
+				G.score.MvNotes(1, 0, G.ww.SelectedNotes()...)
+			case e.Glyph == "@":
+				G.score.MvNotes(-1, 0, G.ww.SelectedNotes()...)
+			case e.Glyph == "%":
+				rng := G.ww.SelectedTimeRange()
+				if beats, ok := rng.(score.BeatRange); ok {
+					G.score.RepeatNotes(beats)
 				}
 			}
 		case wde.ResizeEvent:
