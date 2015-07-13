@@ -143,9 +143,13 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 					log.Println("MXML export", err)
 				}
 			case e.Glyph == "#":
-				G.score.MvNotes(1, 0, G.ww.SelectedNotes()...)
+				G.score.MvNotes(1, &rZero, G.ww.SelectedNotes()...)
 			case e.Glyph == "@":
-				G.score.MvNotes(-1, 0, G.ww.SelectedNotes()...)
+				G.score.MvNotes(-1, &rZero, G.ww.SelectedNotes()...)
+			case e.Chord == "shift+8":
+				G.score.MvNotes(-12, &rZero, G.ww.SelectedNotes()...)
+			case e.Key == wde.Key8:
+				G.score.MvNotes(12, &rZero, G.ww.SelectedNotes()...)
 			case e.Glyph == "%":
 				rng := G.ww.SelectedTimeRange()
 				if beats, ok := rng.(score.BeatRange); ok {

@@ -47,7 +47,7 @@ func (n *noteProspect) Eq(n2 *noteProspect) bool {
 
 type noteDrag struct {
 	Δpitch int8
-	Δbeat float64
+	Δbeat *big.Rat
 }
 
 type mouseState struct {
@@ -271,7 +271,8 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 			return false
 		}
 		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
-		Δbeat := prospect.beatf - sc.Beatf(note)
+		beat, offset := sc.Quantize(prospect.beatf)
+		Δbeat := Δb(sc.BeatIndex(beat), offset, sc.BeatIndex(note.Beat), note.Offset)
 		_, selected := ww.notesel[note]
 		if finished {
 			if moved {
@@ -540,14 +541,16 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 		}
 	}
 	if ww.pasteMode {
+		sc := ww.score
 		if s := ww.getMouseState(mouse); s != nil && len(ww.snarf[s.note.staff]) > 0 {
 			anchor := ww.snarf[s.note.staff][0]
 			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
-			Δbeat := s.note.beatf - ww.score.Beatf(anchor)
+			beat, offset := sc.Quantize(s.note.beatf)
+			Δbeat := Δb(sc.BeatIndex(beat), offset, sc.BeatIndex(anchor.Beat), anchor.Offset)
 			for staff, notes := range ww.snarf {
 				mv := make([]*score.Note, 0, len(notes))
 				for _, note := range notes {
-					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat, ww.score))
+					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat, sc))
 				}
 				staff.AddNote(mv...)
 			}

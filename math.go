@@ -2,7 +2,22 @@ package main
 
 import (
 	"math"
+	"math/big"
 )
+
+var rZero big.Rat
+
+func ratb(beat int, offset *big.Rat) *big.Rat {
+	r := big.NewRat(int64(beat), 1)
+	r.Add(r, offset)
+	return r
+}
+
+func Δb(beat1 int, offset1 *big.Rat, beat2 int, offset2 *big.Rat) *big.Rat {
+	t := ratb(beat1, offset1)
+	t.Sub(t, ratb(beat2, offset2))
+	return t
+}
 
 func mod(n, d int) int {
 	r := n % d

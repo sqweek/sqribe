@@ -31,6 +31,24 @@ func (beat *BeatRef) Frame() FrameN {
 	return beat.frame
 }
 
+func (beat *BeatRef) Prev(score *Score) *BeatRef {
+	score.RLock()
+	defer score.RUnlock()
+	if beat.index - 1 < 0 {
+		return beat
+	}
+	return score.beats[beat.index - 1]
+}
+
+func (beat *BeatRef) Next(score *Score) *BeatRef {
+	score.RLock()
+	defer score.RUnlock()
+	if beat.index + 1 >= len(score.beats) {
+		return beat
+	}
+	return score.beats[beat.index + 1]
+}
+
 func (score *Score) Shunt(br BeatRange, Δbeat int) BeatRange {
 	score.RLock()
 	defer score.RUnlock()

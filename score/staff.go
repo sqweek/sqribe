@@ -229,8 +229,7 @@ func Merge(list []*Note, notes... *Note) []*Note {
 	return list
 }
 
-//XXX Δbeat should probs be a big.Rat
-func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
+func (score *Score) MvNotes(Δpitch int8, Δbeat *big.Rat, notes... StaffNote) {
 	score.RLock()
 	changed := make(map[*Staff]struct{})
 	for _, sn := range notes {
@@ -247,12 +246,21 @@ func (score *Score) MvNotes(Δpitch int8, Δbeat float64, notes... StaffNote) {
 	}
 }
 
-func (note *Note) Mv(Δpitch int8, Δbeat float64, score *Score) *Note {
+// needs to clip resulting pitch/beat
+func (note *Note) Mv(Δpitch int8, Δbeat *big.Rat, score *Score) *Note {
 	note.Pitch += uint8(Δpitch)
-	b := score.Beatf(note) + Δbeat
-	beat, offset := score.Quantize(b)
-	note.Beat = beat
-	note.Offset.Set(offset)
+	note.Offset.Add(note.Offset, Δbeat)
+	f, _ := note.Offset.Float64()
+	for f > 1.0 {
+		note.Beat = note.Beat.Next(score)
+		f -= 1.0;
+		note.Offset.Sub(note.Offset, big.NewRat(1, 1))
+	}
+	for f < 0.0 {
+		note.Beat = note.Beat.Prev(score)
+		f += 1.0;
+		note.Offset.Add(note.Offset, big.NewRat(1, 1))
+	}
 	return note
 }
 
