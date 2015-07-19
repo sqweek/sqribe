@@ -3,6 +3,8 @@ package fs
 import (
 	"fmt"
 	"os"
+	"strings"
+	"github.com/Allendang/w32"
 )
 
 var cacheDir string
@@ -51,4 +53,10 @@ func ReplaceFile(src, dst string) error {
 		return nil
 	}
 	return err
+}
+
+func ExeDir() string {
+	path := w32.GetModuleFileName(nil)
+	dirs := strings.Split(path, "\\")
+	return strings.Join(dirs[:len(dirs)-1], "\\")
 }

@@ -85,12 +85,12 @@ func main() {
 
 	G.score.Init(G.plumb.score)
 
-	G.font.luxi = mustMkFont("/d/go/src/code.google.com/p/freetype-go/testdata/luxisr.ttf", 10)
+	G.font.luxi = mustMkFont(fs.MustFind("luxisr.ttf"), 10)
 	G.noteMenu = mkMenu(StringMenuOps{}, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 	G.noteMenu.SetDefault("1")
 	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstHarp, midi.InstVoice)
 
-	Synth, err = SynthInit(audio.SampleRate, "/d/synth/FluidR3_GM.sf2")
+	Synth, err = SynthInit(audio.SampleRate, fs.MustFind("FluidR3_GM.sf2"))
 	if err != nil {
 		log.Fatal(err)
 	}
