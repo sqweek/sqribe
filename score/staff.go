@@ -137,13 +137,23 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote) {
 	staff.plumb.C <- StaffChanged{staff}
 }
 
-func (score *Score) Beatf(note *Note) float64 {
+func (score *Score) Beatf(note *Note) BeatPoint {
 	score.RLock()
 	defer score.RUnlock()
 	b := big.NewRat(int64(note.Beat.index), 1)
 	b.Add(b, note.Offset)
 	f, _ := b.Float64()
-	return f
+	return Beatf{score, f}
+}
+
+func (score *Score) EndBeatf(note *Note) BeatPoint {
+	score.RLock()
+	defer score.RUnlock()
+	b := big.NewRat(int64(note.Beat.index), 1)
+	b.Add(b, note.Offset)
+	b.Add(b, note.Duration)
+	f, _ := b.Float64()
+	return Beatf{score, f}
 }
 
 func (note *Note) Durf() float64 {

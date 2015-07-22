@@ -10,11 +10,27 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
+type BeatPoint interface {
+	Beat() *BeatRef
+	Offsetf() float64
+}
+
+type Beatf struct {
+	score *Score
+	f float64
+}
+
+func (b Beatf) Beat() *BeatRef {
+	return b.score.beats[int(b.f)]
+}
+
+func (b Beatf) Offsetf() float64 {
+	return float64(b.f) - float64(int(b.f))
+}
+
 type BeatMap interface {
-	// originally 'beat' was a big.Rat instead of float64, but it
-	// just doesn't make sense to quantize individual beats
-	ToFrame(beat float64) (FrameN, bool)
-	ToBeat(frame FrameN) (float64, bool)
+	ToFrame(beat BeatPoint) (FrameN, bool)
+	ToBeat(frame FrameN) (BeatPoint, bool)
 }
 
 type Score struct {

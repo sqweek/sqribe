@@ -67,16 +67,17 @@ func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
 	return changed
 }
 
-func (score *Score) ToFrame(beat float64) (FrameN, bool) {
+func (score *Score) ToFrame(beat BeatPoint) (FrameN, bool) {
 	score.RLock()
 	defer score.RUnlock()
-	i := int(beat)
-	α := beat - float64(i)
-	if (α < 1e-6 && i + 1 == len(score.beats)) {
-		return score.beats[i].frame, true
+	b := beat.Beat()
+	b2 := b.Next(score)
+	α := beat.Offsetf()
+	if (α < 1e-6 && b2 == b) {
+		return b.frame, true
 	}
-	if i >= 0 && i + 1 < len(score.beats) {
-		return FrameN((1 - α) * float64(score.beats[i].frame) + α * float64(score.beats[i+1].frame)), true
+	if b2 != b {
+		return FrameN((1 - α) * float64(b.frame) + α * float64(b2.frame)), true
 	}
 	return -1, false
 }
@@ -98,19 +99,19 @@ func (score *Score) index(frame FrameN) (int, bool) {
 }
 
 /* returns a fractional beat, and true if it is within the defined beat range */
-func (score *Score) ToBeat(frame FrameN) (float64, bool) {
+func (score *Score) ToBeat(frame FrameN) (BeatPoint, bool) {
 	score.RLock()
 	defer score.RUnlock()
 	if len(score.beats) == 0 || frame < score.beats[0].frame || frame > score.beats[len(score.beats)-1].frame {
 		/* should perhaps extrapolate based on bpm... */
-		return -1, false
+		return Beatf{score, -1}, false
 	}
 	i, exact := score.index(frame)
 	if exact {
-		return float64(i), true
+		return Beatf{score, float64(i)}, true
 	}
 	α := float64(frame - score.beats[i-1].frame) / float64(score.beats[i].frame - score.beats[i-1].frame)
-	return float64(i-1) + α, true
+	return Beatf{score, float64(i-1) + α}, true
 }
 
 func (score *Score) ClipBeat(index int) int {
@@ -220,15 +221,9 @@ func (score *Score) NearestBeat(frame FrameN) *BeatRef {
 	}
 }
 
-func (score *Score) Quantize(beat float64) (*BeatRef, *big.Rat) {
-	beati := int(beat)
+func (score *Score) Quantize(beat BeatPoint) (*BeatRef, *big.Rat) {
 	best := big.NewRat(0, 1)
-	if beati < 0 {
-		return score.beats[0], best
-	} else if beati >= len(score.beats) {
-		return score.beats[len(score.beats) - 1], best
-	}
-	frac := beat - float64(beati)
+	frac := beat.Offsetf()
 	minErr := frac
 	for _, i := range([]int{2, 3}) { // , 5}) { //, 7}) {
 		for denom := int64(i); denom <= 8; denom <<= 1 {
@@ -244,11 +239,12 @@ func (score *Score) Quantize(beat float64) (*BeatRef, *big.Rat) {
 			}
 		}
 	}
+	b := beat.Beat()
 	if 1 - frac < minErr {
-		beati++
+		b = b.Next(score)
 		best = big.NewRat(0, 1)
 	}
-	return score.beats[beati], best
+	return b, best
 }
 
 type QuantizeBeats struct {
@@ -313,7 +309,7 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 				f0 := q.beats.First.frame
 				for ib := q.b0; ib <= q.bN; ib++ {
 					qf := f0 + FrameN(float64(ib - q.b0) * q.df)
-					af, _ := score.ToFrame(float64(ib))
+					af := score.beats[ib].frame
 					ef := FrameN(int64(math.Abs(float64(qf - af))))
 					if ef > *q.Error {
 						*q.Error = ef

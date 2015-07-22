@@ -37,7 +37,7 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 	for next != nil {
 		sn, next = next()
 		start, _ := G.score.ToFrame(G.score.Beatf(sn.Note))
-		end, _ := G.score.ToFrame(G.score.Beatf(sn.Note) + sn.Note.Durf())
+		end, _ := G.score.ToFrame(G.score.EndBeatf(sn.Note))
 		if sn.Staff.Muted {
 			continue
 		}

@@ -368,7 +368,7 @@ type DisplayNote struct {
 	accidental *int
 	col color.NRGBA
 	duration float64
-	beatf float64
+	beatf score.BeatPoint
 	downBeam bool
 }
 
@@ -527,7 +527,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	}
 }
 
-func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, aToX func(float64)int, label func(float64)string) {
+func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, frames []FrameN, label func(float64)string) {
 	targetPixPerTick := 30
 	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
 	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
@@ -539,8 +539,12 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 		textY = r.Max.Y - 14
 	}
 	lastTextX := r.Min.X - textSpacing
+	xs := make([]int, 0, len(frames))
+	for _, f := range frames {
+		xs = append(xs, ww.PixelAtFrame(f))
+	}
 	for i, a := range vals {
-		x := aToX(a)
+		x := xs[i]
 		if x >= r.Min.X && x < r.Max.X && x >= lastMajX + targetPixPerTick {
 			lastMajX = x
 			draw.Draw(dst, tickRect(r, bottom, x, 7), &image.Uniform{fg}, image.ZP, draw.Over)
@@ -553,15 +557,13 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 			break
 		}
 		/* minor ticks */
-		dx := aToX(vals[i+1]) - x
+		dx := xs[i+1] - x
 		if dx > targetPixPerTick {
-			da := vals[i+1] - a
 			nminor := int((dx) / targetPixPerTick) - 1
 			for i := 1; i <= nminor; i++ {
-				am := a + float64(i) * (da / float64(nminor + 1))
-				x := aToX(am)
-				if x >= r.Min.X && x < r.Max.X {
-					draw.Draw(dst, tickRect(r, bottom, x, 4), &image.Uniform{fg}, image.ZP, draw.Over)
+				xm := x + int(float64(dx) * (float64(i) / float64(nminor + 1)))
+				if xm >= r.Min.X && xm < r.Max.X {
+					draw.Draw(dst, tickRect(r, bottom, xm, 4), &image.Uniform{fg}, image.ZP, draw.Over)
 				}
 			}
 		}
@@ -570,40 +572,34 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 
 func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	score := ww.score
-	beatToX := func(beatf float64) int {
-		frame, ok := score.ToFrame(beatf)
-		if !ok {
-			return r.Max.X + r.Dx()
-		}
-		return ww.PixelAtFrame(frame)
-	}
 	label := func(beatf float64) string {
 		return fmt.Sprintf("b%d", int(beatf) + 1)
 	}
 	beats := make([]float64, 0)
+	frames := make([]FrameN, 0)
 	if score != nil && len(score.Beats()) > 0 {
-		b0 := score.BeatIndex(score.NearestBeat(ww.FrameAtPixel(r.Min.X)))
-		bN := score.BeatIndex(score.NearestBeat(ww.FrameAtPixel(r.Max.X)))
-		b0 = score.ClipBeat(b0 - 1)
-		bN = score.ClipBeat(bN + 1)
-		for b := b0; b <= bN; b++ {
-			beats = append(beats, float64(b))
+		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).Prev(score)
+		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).Next(score)
+		for b := b0; ; b = b.Next(score) {
+			beats = append(beats, float64(score.BeatIndex(b)))
+			frames = append(frames, b.Frame())
+			if b == bN {
+				break
+			}
 		}
 	}
-	ww.drawTicks(dst, r, true, beats, beatToX, label)
+	ww.drawTicks(dst, r, true, beats, frames, label)
 }
 
 
 func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	wav := ww.wav
-	tToX := func(t float64) int {
-		return ww.PixelAtFrame(wav.FrameAtTime(time.Duration(t * 1000.0) * time.Millisecond))
-	}
 	label := func(t float64) string {
 		dur := time.Duration(t) * time.Second
 		return fmt.Sprintf("%02d:%02d", int(dur.Minutes()), int(dur.Seconds()) % 60)
 	}
 	times := make([]float64, 0)
+	frames := make([]FrameN, 0)
 	if wav != nil {
 		t0 := math.Trunc(ww.TimeAtCursor(r.Min.X).Seconds())
 		if t0 < 0 {
@@ -612,7 +608,8 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 		tN := math.Ceil(ww.TimeAtCursor(r.Max.X).Seconds())
 		for t := t0; t <= tN; t += 1.0 {
 			times = append(times, t)
+			frames = append(frames, wav.FrameAtTime(time.Duration(t * 1000.0) * time.Millisecond))
 		}
 	}
-	ww.drawTicks(dst, r, false, times, tToX, label)
+	ww.drawTicks(dst, r, false, times, frames, label)
 }

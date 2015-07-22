@@ -37,7 +37,7 @@ const yspacing = 12 // pixels between staff lines
 
 type noteProspect struct {
 	delta int
-	beatf float64
+	beatf score.BeatPoint
 	staff *score.Staff
 }
 
