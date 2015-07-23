@@ -273,7 +273,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		draw.Draw(dst, image.Rect(x-1, r.Min.Y+2, x+2, r.Min.Y+3), &image.Uniform{black}, r.Min, draw.Over)
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
-	if minX >= maxX {
+	if minX >= maxX || minX == -1 || maxX == -1 {
 		return
 	}
 	for _, staff := range ww.score.Staves() {
