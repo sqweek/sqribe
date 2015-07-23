@@ -170,7 +170,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 /* rounds sub-second duration to nearest ms/μs/ns */
 func niceDur(dur time.Duration) string {
 	if dur >= time.Second {
-		return dur.String()
+		return fmt.Sprintf("%.2fs", dur.Seconds())
 	}
 	switch {
 	case dur >= time.Millisecond:
