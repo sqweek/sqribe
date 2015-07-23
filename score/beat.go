@@ -73,13 +73,11 @@ func (score *Score) ToFrame(beat BeatPoint) (FrameN, bool) {
 	b := beat.Beat()
 	b2 := b.Next(score)
 	α := beat.Offsetf()
-	if (α < 1e-6 && b2 == b) {
-		return b.frame, true
+	if b2 == b {
+		// last beat. any point past this is clipped to the beat's frame
+		return b.frame, α < 1e-6
 	}
-	if b2 != b {
-		return FrameN((1 - α) * float64(b.frame) + α * float64(b2.frame)), true
-	}
-	return -1, false
+	return FrameN((1 - α) * float64(b.frame) + α * float64(b2.frame)), true
 }
 
 /* returns insertion index and true if the frame is already present */
