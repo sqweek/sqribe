@@ -501,7 +501,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		anchor := ww.snarf[s.note.staff][0]
 		Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
 		beat, offset := sc.Quantize(s.note.beatf)
-		Δbeat := Δb(sc.BeatIndex(beat), offset, sc.BeatIndex(anchor.Beat), anchor.Offset)
+		Δbeat := Δb(sc, beat, offset, anchor.Beat, anchor.Offset)
 		for _, note := range ww.snarf[staff] {
 			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat, sc))
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
@@ -581,12 +581,18 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	if score != nil && len(score.Beats()) > 0 {
 		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).Prev(score)
 		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).Next(score)
+		// initialise i to index of b0
+		i := 0
+		for b := b0; b.Prev(score) != b; b = b.Prev(score) {
+			i++
+		}
 		for b := b0; ; b = b.Next(score) {
-			beats = append(beats, float64(score.BeatIndex(b)))
+			beats = append(beats, float64(i))
 			frames = append(frames, b.Frame())
 			if b == bN {
 				break
 			}
+			i++
 		}
 	}
 	ww.drawTicks(dst, r, true, beats, frames, label)

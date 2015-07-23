@@ -272,7 +272,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		}
 		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
 		beat, offset := sc.Quantize(prospect.beatf)
-		Δbeat := Δb(sc.BeatIndex(beat), offset, sc.BeatIndex(note.Beat), note.Offset)
+		Δbeat := Δb(sc, beat, offset, note.Beat, note.Offset)
 		_, selected := ww.notesel[note]
 		if finished {
 			if moved {
@@ -332,18 +332,17 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	if sc != nil {
 		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
 		if beat != nil {
-			i := sc.BeatIndex(beat)
 			x := ww.PixelAtFrame(beat.Frame())
 			y0 := ww.rect.wave.Min.Y
 			r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 			if mouse.In(padRect(r, 2, 0)) {
-				beats := sc.Beats()
+				prev, next := beat.Prev(sc), beat.Next(sc)
 				min, max := FrameN(0), ww.NFrames()
-				if i + 1 < len(beats) {
-					max = beats[i + 1].Frame()
+				if next != beat {
+					max = next.Frame()
 				}
-				if i > 0 {
-					min = beats[i - 1].Frame()
+				if prev != beat {
+					min = prev.Frame()
 				}
 				return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
 			}
@@ -545,7 +544,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 			anchor := ww.snarf[s.note.staff][0]
 			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
 			beat, offset := sc.Quantize(s.note.beatf)
-			Δbeat := Δb(sc.BeatIndex(beat), offset, sc.BeatIndex(anchor.Beat), anchor.Offset)
+			Δbeat := Δb(sc, beat, offset, anchor.Beat, anchor.Offset)
 			for staff, notes := range ww.snarf {
 				mv := make([]*score.Note, 0, len(notes))
 				for _, note := range notes {
@@ -649,19 +648,16 @@ func (ww *WaveWidget) Status() string {
 	pitch := uint8(0)
 	delta := 0
 	delta2 := 0
-	beati := 0
 	offset := big.NewRat(1, 1)
 	nsharps := score.KeySig(-99)
 	if s.note != nil {
 		beatf := s.note.beatf
 		delta = s.note.delta
-		beat, o := ww.score.Quantize(beatf)
-		beati = ww.score.BeatIndex(beat)
-		offset = o
+		_, offset = ww.score.Quantize(beatf)
 		pitch = s.note.staff.PitchForLine(delta)
 		delta2, _ = s.note.staff.LineForPitch(pitch)
 		nsharps = ww.score.Key()
 	}
 
-	return fmt.Sprintf("line=%d (%d) pitch=%d %s pos=%d:%v %v %v", delta, delta2, pitch, midi.PitchName(pitch), beati, offset, nsharps, len(ww.notesel))
+	return fmt.Sprintf("line=%d (%d) pitch=%d %s offset=%v %v %v", delta, delta2, pitch, midi.PitchName(pitch), offset, nsharps, len(ww.notesel))
 }

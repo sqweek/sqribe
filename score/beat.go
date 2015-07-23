@@ -149,12 +149,6 @@ func newBeat(index int, frame FrameN) *BeatRef {
 	return beat
 }
 
-func (score *Score) BeatIndex(beat *BeatRef) int {
-	score.RLock()
-	defer score.RUnlock()
-	return beat.index
-}
-
 func (score *Score) LoadBeats(f []FrameN) {
 	score.Lock()
 	if len(score.beats) > 0 {
@@ -249,7 +243,7 @@ func (score *Score) Quantize(beat BeatPoint) (*BeatRef, *big.Rat) {
 
 type QuantizeBeats struct {
 	beats BeatRange
-	b0, bN int
+	nb int // number of divisions
 	df float64
 	Error *FrameN
 }
@@ -259,13 +253,16 @@ func (q QuantizeBeats) Nop() bool {
 }
 
 func (q QuantizeBeats) AvgFramesPerBeat() FrameN {
-	return FrameN(float64(q.beats.Last.frame - q.beats.First.frame + 1) / float64(q.bN - q.b0))
+	return FrameN(float64(q.beats.Last.frame - q.beats.First.frame + 1) / float64(q.nb))
 }
 
 func (q *QuantizeBeats) reset(score *Score) {
 	f0, fN := q.beats.First.frame, q.beats.Last.frame
-	q.b0, q.bN = score.BeatIndex(q.beats.First), score.BeatIndex(q.beats.Last)
-	q.df = float64(fN - f0) / float64(q.bN - q.b0)
+	q.nb = 0
+	for b := q.beats.First; b != q.beats.Last; b = b.Next(score) {
+		q.nb++
+	}
+	q.df = float64(fN - f0) / float64(q.nb)
 	q.Error = nil
 }
 
@@ -293,8 +290,10 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 				continue
 			}
 			f0 := q.beats.First.frame
-			for ib := q.b0 + 1; ib <= q.bN - 1; ib++ {
-				score.beats[ib].frame = f0 + FrameN(float64(ib - q.b0) * q.df)
+			b := q.beats.First.Next(score)
+			for i := 1; i < q.nb; i++ {
+				b.frame = f0 + FrameN(float64(i) * q.df)
+				b = b.Next(score)
 			}
 			*q.Error = 0
 			score.plumb.C <- BeatChanged{}
@@ -307,13 +306,14 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 			if q.Error == nil {
 				q.Error = new(FrameN)
 				f0 := q.beats.First.frame
-				for ib := q.b0; ib <= q.bN; ib++ {
-					qf := f0 + FrameN(float64(ib - q.b0) * q.df)
-					af := score.beats[ib].frame
-					ef := FrameN(int64(math.Abs(float64(qf - af))))
+				b := q.beats.First.Next(score)
+				for i := 1; i < q.nb; i++ {
+					qf := f0 + FrameN(float64(i) * q.df)
+					ef := FrameN(int64(math.Abs(float64(qf - b.frame))))
 					if ef > *q.Error {
 						*q.Error = ef
 					}
+					b = b.Next(score)
 				}
 			}
 			reply <- q
