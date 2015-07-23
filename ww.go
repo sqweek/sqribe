@@ -475,7 +475,6 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
-	//indent := ww.rect.wave.Min.X - ww.r.Min.X
 	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
 		ww.score.AddStaff(&score.TrebleClef)
 		ww.renderstate.changed |= LAYOUT
@@ -571,7 +570,7 @@ func (ww *WaveWidget) MiddleButtonDown(mouse image.Point) DragFn {
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {
-	return ww.ScrollPixels(int(float64(ww.r.Dx()) * amount))
+	return ww.ScrollPixels(int(float64(ww.rect.wave.Dx()) * amount))
 }
 
 func (ww *WaveWidget) ScrollPixels(dx int) int {
@@ -580,7 +579,7 @@ func (ww *WaveWidget) ScrollPixels(dx int) int {
 	}
 	original := ww.first_frame
 	shift := FrameN(dx * ww.frames_per_pixel)
-	rbound := ww.NFrames() - FrameN((ww.r.Dx() + 1) * ww.frames_per_pixel)
+	rbound := ww.NFrames() - FrameN((ww.rect.wave.Dx() + 1) * ww.frames_per_pixel)
 	ww.first_frame += shift
 	if ww.first_frame < 0 || rbound < 0 {
 		ww.first_frame = 0
