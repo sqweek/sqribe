@@ -544,8 +544,9 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 		xs = append(xs, ww.PixelAtFrame(f))
 	}
 	for i, a := range vals {
+		last := (i + 1 == len(vals))
 		x := xs[i]
-		if x >= r.Min.X && x < r.Max.X && x >= lastMajX + targetPixPerTick {
+		if (x >= r.Min.X && x < r.Max.X) && (x >= lastMajX + targetPixPerTick || last) {
 			lastMajX = x
 			draw.Draw(dst, tickRect(r, bottom, x, 7), &image.Uniform{fg}, image.ZP, draw.Over)
 			if x > lastTextX + textSpacing {
@@ -553,7 +554,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 				G.font.luxi.DrawC(dst, fg, r, label(a), image.Point{x, textY})
 			}
 		}
-		if i + 1 == len(vals) || x >= r.Max.X {
+		if last || x >= r.Max.X {
 			break
 		}
 		/* minor ticks */
@@ -605,7 +606,12 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 		if t0 < 0 {
 			t0 = 0.0
 		}
-		tN := math.Ceil(ww.TimeAtCursor(r.Max.X).Seconds())
+		tRight := ww.TimeAtCursor(r.Max.X)
+		tMax := wav.TimeAtFrame(ww.NFrames())
+		if tRight > tMax {
+			tRight = tMax
+		}
+		tN := math.Ceil(tRight.Seconds())
 		for t := t0; t <= tN; t += 1.0 {
 			times = append(times, t)
 			frames = append(frames, wav.FrameAtTime(time.Duration(t * 1000.0) * time.Millisecond))
