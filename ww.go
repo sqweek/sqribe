@@ -275,6 +275,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		Δbeat := Δb(sc, beat, offset, note.Beat, note.Offset)
 		_, selected := ww.notesel[note]
 		if finished {
+			ww.mouse.state = nil
 			if moved {
 				if selected {
 					sc.MvNotes(Δpitch, Δbeat, ww.SelectedNotes()...)
