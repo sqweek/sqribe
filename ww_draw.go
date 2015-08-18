@@ -581,15 +581,11 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	if score != nil && len(score.Beats()) > 0 {
 		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).Prev(score)
 		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).Next(score)
-		// initialise i to index of b0
-		i := 0
-		for b := b0; b.Prev(score) != b; b = b.Prev(score) {
-			i++
-		}
+		i := b0.BeatNum(score)
 		for b := b0; ; b = b.Next(score) {
 			beats = append(beats, float64(i))
 			frames = append(frames, b.Frame())
-			if b == bN {
+			if b.Frame() >= bN.Frame() || b == b.Next(score) {
 				break
 			}
 			i++

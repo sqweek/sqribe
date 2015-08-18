@@ -49,6 +49,14 @@ func (beat *BeatRef) Next(score *Score) *BeatRef {
 	return score.beats[beat.index + 1]
 }
 
+func (beat *BeatRef) BeatNum(score *Score) int {
+	i, b, prev := 0, beat, beat.Prev(score)
+	for b != prev {
+		i, b, prev = i + 1, prev, prev.Prev(score)
+	}
+	return i
+}
+
 func (score *Score) Shunt(br BeatRange, Δbeat int) BeatRange {
 	score.RLock()
 	defer score.RUnlock()
