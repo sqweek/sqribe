@@ -32,7 +32,7 @@ type stateV1 struct {
 func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.BeatFrames()
-	s.Staves = G.score.SavedStaves()
+	s.Staves = G.score.SavedStaves(s.Beats)
 	s.MixWeight = Mixer.Bias.Value()
 	s.MetronomeOff = Mixer.MuteMetronome
 	s.WaveOff = Mixer.MuteWave
@@ -41,7 +41,7 @@ func (s *stateV1) Capture() {
 
 func (s *stateV1) Restore() {
 	G.score.LoadBeats(s.Beats)
-	G.score.LoadStaves(s.Staves)
+	G.score.LoadStaves(s.Staves, s.Beats)
 	Mixer.Bias.Set(s.MixWeight)
 	Mixer.MuteMetronome = s.MetronomeOff
 	Mixer.MuteWave = s.WaveOff

@@ -15,23 +15,8 @@ func ratb(beat int, offset *big.Rat) *big.Rat {
 	return r
 }
 
-func Δb(sc *score.Score, beat1 *score.BeatRef, offset1 *big.Rat, beat2 *score.BeatRef, offset2 *big.Rat) *big.Rat {
-	db := 0
-	if (beat1.Frame() <= beat2.Frame()) {
-		for b := beat1; b != beat2; b = b.Next(sc) {
-			db--
-			if b.Next(sc) == b {
-				break
-			}
-		}
-	} else {
-		for b := beat1; b != beat2; b = b.Prev(sc) {
-			db++
-			if b.Prev(sc) == b {
-				break
-			}
-		}
-	}
+func Δb(beat1 *score.BeatRef, offset1 *big.Rat, beat2 *score.BeatRef, offset2 *big.Rat) *big.Rat {
+	db := beat1.Subtract(beat2)
 	t := ratb(db, offset1)
 	t.Sub(t, ratb(0, offset2))
 	return t

@@ -1,6 +1,7 @@
 package score
 
 import (
+	"fmt"
 	"math/big"
 	"sort"
 
@@ -88,27 +89,29 @@ func (score *Score) AddStaff(clef *Clef) {
 	score.plumb.C <- StaffChanged{staff}
 }
 
-func (score *Score) SavedStaves() []SavedStaff {
-	score.RLock()
-	defer score.RUnlock()
+func (score *Score) SavedStaves(beats []FrameN) []SavedStaff {
 	saved := make([]SavedStaff, 0, len(score.staves))
 	for _, staff := range score.staves {
-		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.velocity - 100, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes()})
+		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.velocity - 100, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes(beats)})
 	}
 	return saved
 }
 
-func (staff *Staff) SavedNotes() []SavedNote {
+func (staff *Staff) SavedNotes(beats []FrameN) []SavedNote {
 	out := make([]SavedNote, 0, len(staff.notes))
+	i := 0
 	for _, note := range staff.notes {
-		b := big.NewRat(int64(note.Beat.index), 1)
+		for beats[i] < note.Beat.frame {
+			i++
+		}
+		b := big.NewRat(int64(i), 1)
 		b.Add(b, note.Offset)
 		out = append(out, SavedNote{note.Pitch, note.Duration, b})
 	}
 	return out
 }
 
-func (score *Score) LoadStaves(in []SavedStaff) {
+func (score *Score) LoadStaves(in []SavedStaff, beats []FrameN) {
 	if len(score.staves) > 0 {
 		score.staves = score.staves[0:0]
 	}
@@ -118,42 +121,45 @@ func (score *Score) LoadStaves(in []SavedStaff) {
 			clef = &TrebleClef
 		}
 		staff := &Staff{saved.Name, saved.Voice, saved.Velocity + 100, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb, false}
-		staff.LoadNotes(score, saved.Notes)
+		staff.LoadNotes(score, saved.Notes, beats)
 		score.staves = append(score.staves, staff)
 	}
 }
 
-func (staff *Staff) LoadNotes(score *Score, in []SavedNote) {
+func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
 	if len(staff.notes) > 0 {
 		staff.notes = staff.notes[0:0]
 	}
+	beat := score.beat0
 	for _, saved := range in {
 		beatf, _ := saved.Offset.Float64()
-		beati := int(beatf)
-		saved.Offset.Sub(saved.Offset, big.NewRat(int64(beati), 1))
-		note := &Note{saved.Pitch, saved.Duration, score.beats[beati], saved.Offset}
+		i := int(beatf)
+		for beat.frame < beats[i] {
+			beat = beat.next
+		}
+		saved.Offset.Sub(saved.Offset, big.NewRat(int64(i), 1))
+		note := &Note{saved.Pitch, saved.Duration, beat, saved.Offset}
 		staff.AddNote(note)
 	}
 	staff.plumb.C <- StaffChanged{staff}
 }
 
 func (score *Score) Beatf(note *Note) BeatPoint {
-	score.RLock()
-	defer score.RUnlock()
-	b := big.NewRat(int64(note.Beat.index), 1)
-	b.Add(b, note.Offset)
-	f, _ := b.Float64()
-	return Beatf{score, f}
+	f, _ := note.Offset.Float64()
+	return BeatPt{note.Beat, f}
 }
 
 func (score *Score) EndBeatf(note *Note) BeatPoint {
-	score.RLock()
-	defer score.RUnlock()
-	b := big.NewRat(int64(note.Beat.index), 1)
-	b.Add(b, note.Offset)
-	b.Add(b, note.Duration)
-	f, _ := b.Float64()
-	return Beatf{score, f}
+	var r big.Rat
+	r.Set(note.Offset)
+	r.Add(&r, note.Duration)
+	f, _ := r.Float64()
+	b := note.Beat
+	for f > 1 {
+		b = b.LNext()
+		f -= 1
+	}
+	return BeatPt{b, f}
 }
 
 func (note *Note) Durf() float64 {
@@ -240,37 +246,38 @@ func Merge(list []*Note, notes... *Note) []*Note {
 }
 
 func (score *Score) MvNotes(Δpitch int8, Δbeat *big.Rat, notes... StaffNote) {
-	score.RLock()
 	changed := make(map[*Staff]struct{})
 	for _, sn := range notes {
 		sn.Staff.removeNote(sn.Note)
 	}
 	for _, sn := range notes {
-		sn.Note.Mv(Δpitch, Δbeat, score)
+		sn.Note.Mv(Δpitch, Δbeat)
 		sn.Staff.addNote(sn.Note)
 		changed[sn.Staff] = struct{}{}
 	}
-	score.RUnlock()
 	for staff, _ := range changed {
 		staff.plumb.C <- StaffChanged{staff}
 	}
 }
 
 // needs to clip resulting pitch/beat
-func (note *Note) Mv(Δpitch int8, Δbeat *big.Rat, score *Score) *Note {
+func (note *Note) Mv(Δpitch int8, Δbeat *big.Rat) *Note {
+	fmt.Println("Mv", Δpitch, Δbeat)
+	fmt.Println("	", note)
 	note.Pitch += uint8(Δpitch)
 	note.Offset.Add(note.Offset, Δbeat)
 	f, _ := note.Offset.Float64()
 	for f > 1.0 {
-		note.Beat = note.Beat.Next(score)
+		note.Beat = note.Beat.LNext()
 		f -= 1.0;
 		note.Offset.Sub(note.Offset, big.NewRat(1, 1))
 	}
 	for f < 0.0 {
-		note.Beat = note.Beat.Prev(score)
+		note.Beat = note.Beat.LPrev()
 		f += 1.0;
 		note.Offset.Add(note.Offset, big.NewRat(1, 1))
 	}
+	fmt.Println("	", note)
 	return note
 }
 
@@ -288,21 +295,19 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 	if rng.First == rng.Last {
 		return
 	}
-	score.RLock()
-	n := rng.Last.index - rng.First.index
-	if extra := rng.Last.index + n - len(score.beats); extra > 0 {
+	n := rng.Last.Subtract(rng.First)
+	if extra := rng.Last.Walk(n).Subtract(rng.Last); extra > 0 {
 		/* truncate the source range so we don't go past the defined beats */
-		rng = BeatRange{rng.First, score.beats[rng.Last.index - extra]}
+		rng = BeatRange{rng.First, rng.Last.Walk(-extra)}
 	}
 	affectedStaves := make(map[*Staff]bool)
 	repeatNote := func (staff *Staff, note *Note) {
 		note2 := note.Dup()
-		note2.Beat = score.beats[note.Beat.index + n]
+		note2.Beat = rng.Last.Walk(note.Beat.Subtract(rng.First))
 		staff.addNote(note2)
 		affectedStaves[staff] = true
 	}
 	score.perStaffNote(rng, repeatNote)
-	score.RUnlock()
 	for staff, _ := range affectedStaves {
 		staff.plumb.C <- StaffChanged{staff}
 	}

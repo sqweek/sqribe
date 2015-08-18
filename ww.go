@@ -272,7 +272,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		}
 		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
 		beat, offset := sc.Quantize(prospect.beatf)
-		Δbeat := Δb(sc, beat, offset, note.Beat, note.Offset)
+		Δbeat := Δb(beat, offset, note.Beat, note.Offset)
 		_, selected := ww.notesel[note]
 		if finished {
 			ww.mouse.state = nil
@@ -337,12 +337,12 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 			y0 := ww.rect.wave.Min.Y
 			r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
 			if mouse.In(padRect(r, 2, 0)) {
-				prev, next := beat.Prev(sc), beat.Next(sc)
+				prev, next := beat.Prev(), beat.Next()
 				min, max := FrameN(0), ww.NFrames()
-				if next != beat {
+				if next != nil {
 					max = next.Frame()
 				}
-				if prev != beat {
+				if prev != nil {
 					min = prev.Frame()
 				}
 				return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
@@ -350,7 +350,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 		}
 	}
 
-	snap := ww.score != nil && len(ww.score.Beats()) > 0 && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
+	snap := ww.score != nil && ww.score.HasBeats() && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
 	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), 2, 0)) {
 		return ww.selectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
 	}
@@ -545,11 +545,11 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 			anchor := ww.snarf[s.note.staff][0]
 			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
 			beat, offset := sc.Quantize(s.note.beatf)
-			Δbeat := Δb(sc, beat, offset, anchor.Beat, anchor.Offset)
+			Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 			for staff, notes := range ww.snarf {
 				mv := make([]*score.Note, 0, len(notes))
 				for _, note := range notes {
-					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat, sc))
+					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat))
 				}
 				staff.AddNote(mv...)
 			}

@@ -1,6 +1,7 @@
 package score
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -20,7 +21,7 @@ func (r BeatRange) MaxFrame() FrameN {
 }
 
 type BeatRef struct {
-	index int
+	prev, next *BeatRef
 	frame FrameN
 }
 
@@ -31,38 +32,81 @@ func (beat *BeatRef) Frame() FrameN {
 	return beat.frame
 }
 
-func (beat *BeatRef) Prev(score *Score) *BeatRef {
-	score.RLock()
-	defer score.RUnlock()
-	if beat.index - 1 < 0 {
-		return beat
-	}
-	return score.beats[beat.index - 1]
+func (beat *BeatRef) Prev() *BeatRef {
+	return beat.prev
 }
 
-func (beat *BeatRef) Next(score *Score) *BeatRef {
-	score.RLock()
-	defer score.RUnlock()
-	if beat.index + 1 >= len(score.beats) {
-		return beat
-	}
-	return score.beats[beat.index + 1]
+func (beat *BeatRef) Next() *BeatRef {
+	return beat.next
 }
 
-func (beat *BeatRef) BeatNum(score *Score) int {
-	i, b, prev := 0, beat, beat.Prev(score)
-	for b != prev {
-		i, b, prev = i + 1, prev, prev.Prev(score)
+func (beat *BeatRef) LPrev() *BeatRef {
+	if beat.prev == nil {
+		return beat
+	}
+	return beat.prev
+}
+
+func (beat *BeatRef) LNext() *BeatRef {
+	if beat.next == nil {
+		return beat
+	}
+	return beat.next
+}
+
+func (beat *BeatRef) Walk(Δbeat int) *BeatRef {
+	b := beat
+	if Δbeat < 0 {
+		for i := 0; i > Δbeat; i-- {
+			b = b.LPrev()
+		}
+	} else {
+		for i := 0; i < Δbeat; i++ {
+			b = b.LNext()
+		}
+	}
+	return b
+}
+
+func (beat *BeatRef) BeatNum() int {
+	i, b := 0, beat
+	for b.prev != nil {
+		i, b = i + 1, b.prev
 	}
 	return i
 }
 
+func sub(low, high *BeatRef) (d int) {
+	for b := low; b != nil && b.frame < high.frame; b = b.next {
+		d++
+	}
+	return d
+}
+
+/* calculates (b1 - b2); ie. the signed number of beats in between them */
+func (b1 *BeatRef) Subtract(b2 *BeatRef) int {
+	if b1.frame > b2.frame {
+		return sub(b2, b1)
+	} else if b1.frame < b2.frame {
+		return -sub(b1, b2)
+	}
+	return 0
+}
+
 func (score *Score) Shunt(br BeatRange, Δbeat int) BeatRange {
-	score.RLock()
-	defer score.RUnlock()
-	b0 := score.ClipBeat(br.First.index + Δbeat)
-	bN := score.ClipBeat(br.Last.index + Δbeat)
-	return BeatRange{score.beats[b0], score.beats[bN]}
+	if Δbeat == 0 {
+		return br
+	}
+	nbeats := br.Last.Subtract(br.First)
+	if Δbeat < 0 {
+		b0 := br.First.Walk(Δbeat)
+		bN := b0.Walk(nbeats)
+		return BeatRange{b0, bN}
+	} else {
+		bN := br.Last.Walk(Δbeat)
+		b0 := bN.Walk(-nbeats)
+		return BeatRange{b0, bN}
+	}
 }
 
 func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
@@ -75,150 +119,130 @@ func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
 	return changed
 }
 
-func (score *Score) ToFrame(beat BeatPoint) (FrameN, bool) {
-	score.RLock()
-	defer score.RUnlock()
-	b := beat.Beat()
-	b2 := b.Next(score)
-	α := beat.Offsetf()
-	if b2 == b {
+func (score *Score) ToFrame(pt BeatPoint) (FrameN, bool) {
+	b := pt.Beat()
+	b2 := b.next
+	α := pt.Offsetf()
+	if b2 == nil {
 		// last beat. any point past this is clipped to the beat's frame
 		return b.frame, α < 1e-6
 	}
 	return FrameN((1 - α) * float64(b.frame) + α * float64(b2.frame)), true
 }
 
-/* returns insertion index and true if the frame is already present */
-func (score *Score) index(frame FrameN) (int, bool) {
-	/* TODO binary search instead of linear */
-	if len(score.beats) == 0 || frame < score.beats[0].frame {
-		return 0, false
-	}
-	for i := 0; i < len(score.beats); i++ {
-		if frame == score.beats[i].frame {
-			return i, true
-		} else if i + 1 >= len(score.beats) || frame < score.beats[i+1].frame {
-			return i+1, false
-		}
-	}
-	return len(score.beats), false
-}
-
 /* returns a fractional beat, and true if it is within the defined beat range */
 func (score *Score) ToBeat(frame FrameN) (BeatPoint, bool) {
-	score.RLock()
-	defer score.RUnlock()
-	if len(score.beats) == 0 || frame < score.beats[0].frame || frame > score.beats[len(score.beats)-1].frame {
+	if frame < score.beat0.frame || frame > score.beatN.frame {
 		/* should perhaps extrapolate based on bpm... */
-		return Beatf{score, -1}, false
+		return BeatPt{nil, 0.0}, false
 	}
-	i, exact := score.index(frame)
-	if exact {
-		return Beatf{score, float64(i)}, true
+	for b := score.beat0; ; b = b.next {
+		if b.next == nil {
+			return BeatPt{b, 0.0}, true
+		}
+		if b.frame <= frame && frame <= b.next.frame {
+			α := float64(frame - b.frame) / float64(b.next.frame - b.frame)
+			return BeatPt{b, α}, true
+		}
 	}
-	α := float64(frame - score.beats[i-1].frame) / float64(score.beats[i].frame - score.beats[i-1].frame)
-	return Beatf{score, float64(i-1) + α}, true
-}
-
-func (score *Score) ClipBeat(index int) int {
-	if len(score.beats) == 0 {
-		return -1
-	}
-	score.RLock()
-	defer score.RUnlock()
-	if index > len(score.beats) {
-		return len(score.beats) - 1
-	} else if index < 0 {
-		return 0
-	}
-	return index
-}
-
-func (score *Score) Beats() []*BeatRef {
-	return score.beats
 }
 
 func (score *Score) BeatFrames() []FrameN {
-	score.RLock()
-	defer score.RUnlock()
-	f := make([]FrameN, 0, len(score.beats))
-	for i := 0; i < len(score.beats); i++ {
-		f = append(f, score.beats[i].frame)
+	f := make([]FrameN, 0)
+	for b := score.beat0; b != nil; b = b.next {
+		f = append(f, b.frame)
 	}
 	return f
 }
 
-func newBeat(index int, frame FrameN) *BeatRef {
-	beat := new(BeatRef)
-	beat.index = index
-	beat.frame = frame
-	return beat
+func (score *Score) HasBeats() bool {
+	return score.beat0 != nil
+}
+
+func beatList(f []FrameN) (hd, tl *BeatRef) {
+	if len(f) == 0 {
+		return nil, nil
+	}
+	hd = &BeatRef{nil, nil ,f[0]}
+	tl = hd
+	for i := 1; i < len(f); i++ {
+		b := &BeatRef{tl, nil, f[i]}
+		tl.next = b
+		tl = b
+	}
+	return hd, tl
 }
 
 func (score *Score) LoadBeats(f []FrameN) {
-	score.Lock()
-	if len(score.beats) > 0 {
-		score.beats = score.beats[0:0]
+	hd, tl := beatList(f)
+	score.beat0, score.beatN = hd, tl
+	for b := score.beat0; b != nil; b = b.next {
+		pf, nf := FrameN(-1), FrameN(-1)
+		if b.prev != nil { pf = b.prev.frame }
+		if b.next != nil { nf = b.next.frame }
+		fmt.Println(b.frame, pf, "<- ->", nf)
 	}
-	for i := 0; i < len(f); i++ {
-		score.beats = append(score.beats, newBeat(i, f[i]))
+	for b := score.beat0; b != nil; b = b.next {
+		for b2 := score.beat0; b2 != nil; b2 = b2.next {
+			fmt.Println(b.frame, "-", b2.frame, "=", b.Subtract(b2))
+		}
 	}
-	score.Unlock()
+
 	score.plumb.C <- BeatChanged{}
 }
 
 func (score *Score) AddBeat(frame FrameN) {
-	score.Lock()
-	changed := score.addBeat(frame)
-	score.Unlock()
-	if changed {
+	if score.addBeat(frame) {
 		score.plumb.C <- BeatChanged{}
 	}
 }
 
 func (score *Score) addBeat(frame FrameN) bool {
-	if len(score.beats) == 0 {
-		score.beats = append(score.beats, newBeat(0, frame))
+	if score.beat0 == nil {
+		score.beat0 = &BeatRef{nil, nil, frame}
+		score.beatN = score.beat0
 		return true
 	}
 	tolerance := FrameN(10000) //XXX should be based on sample rate/bpm
-	i, exact := score.index(frame)
-	if exact {
-		return false
-	}
-	if i > 0 && frame - score.beats[i-1].frame < tolerance {
-		score.beats[i-1].frame = (score.beats[i-1].frame + frame) / 2
-	} else if i == len(score.beats) {
-		score.beats = append(score.beats, newBeat(len(score.beats), frame))
-	} else if score.beats[i].frame - frame < tolerance {
-		score.beats[i].frame = (score.beats[i].frame + frame) / 2
-	} else {
-		score.beats = append(score.beats, nil)
-		copy(score.beats[i+1:], score.beats[i:])
-		score.beats[i] = newBeat(i, frame)
-		for j := i+1; j < len(score.beats); j++ {
-			score.beats[j].index = j
+	for b := score.beat0; b != nil; b = b.next {
+		if frame == b.frame {
+			return false
+		}
+		if frame > b.frame && (b.next == nil || frame < b.next.frame) {
+			if frame - b.frame <= tolerance {
+				b.frame = frame
+			} else if b.next == nil || (b.next.frame - frame > tolerance) {
+				ref := &BeatRef{b, b.next, frame}
+				ref.prev.next = ref
+				if ref.next != nil {
+					ref.next.prev = ref
+				} else {
+					score.beatN = ref
+				}
+			} else {
+				b.next.frame = frame
+			}
+			return true
 		}
 	}
-	return true
+	panic("unreachable")
 }
 
 func (score *Score) NearestBeat(frame FrameN) *BeatRef {
-	score.RLock()
-	defer score.RUnlock()
-	if len(score.beats) == 0 {
-		return nil
+	for b := score.beat0; b != nil; b = b.next {
+		if frame == b.frame || b.next == nil {
+			return b
+		}
+		if frame < b.next.frame {
+			mid := (b.frame + b.next.frame) / 2
+			if frame < mid {
+				return b
+			} else {
+				return b.next
+			}
+		}
 	}
-	i, exact := score.index(frame)
-	if exact || i == 0 {
-		return score.beats[i]
-	} else if i == len(score.beats) {
-		return score.beats[len(score.beats) - 1]
-	} else if frame - score.beats[i-1].frame < score.beats[i].frame - frame {
-		return score.beats[i - 1]
-	} else {
-		return score.beats[i]
-	}
+	return nil
 }
 
 func (score *Score) Quantize(beat BeatPoint) (*BeatRef, *big.Rat) {
@@ -241,7 +265,7 @@ func (score *Score) Quantize(beat BeatPoint) (*BeatRef, *big.Rat) {
 	}
 	b := beat.Beat()
 	if 1 - frac < minErr {
-		b = b.Next(score)
+		b = b.LNext()
 		best = big.NewRat(0, 1)
 	}
 	return b, best
@@ -262,12 +286,9 @@ func (q QuantizeBeats) AvgFramesPerBeat() FrameN {
 	return FrameN(float64(q.beats.Last.frame - q.beats.First.frame + 1) / float64(q.nb))
 }
 
-func (q *QuantizeBeats) reset(score *Score) {
+func (q *QuantizeBeats) reset() {
 	f0, fN := q.beats.First.frame, q.beats.Last.frame
-	q.nb = 0
-	for b := q.beats.First; b != q.beats.Last; b = b.Next(score) {
-		q.nb++
-	}
+	q.nb = q.beats.Last.Subtract(q.beats.First)
 	q.df = float64(fN - f0) / float64(q.nb)
 	q.Error = nil
 }
@@ -278,17 +299,15 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 		select {
 		case ev := <-beats:
 			if _, ok := ev.(BeatChanged); ok && !q.Nop() {
-				q.reset(score)
+				q.reset()
 			}
 		case ev := <-selxn:
-			if len(score.beats) > 0 {
-				switch e := ev.(type) {
-				case BeatRange:
-					q.beats = e
-					q.reset(score)
-				default:
-					q.beats = BeatRange{nil, nil}
-				}
+			switch e := ev.(type) {
+			case BeatRange:
+				q.beats = e
+				q.reset()
+			default:
+				q.beats = BeatRange{nil, nil}
 			}
 		case reply := <-apply:
 			if q.Nop() {
@@ -296,10 +315,10 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 				continue
 			}
 			f0 := q.beats.First.frame
-			b := q.beats.First.Next(score)
+			b := q.beats.First.LNext()
 			for i := 1; i < q.nb; i++ {
 				b.frame = f0 + FrameN(float64(i) * q.df)
-				b = b.Next(score)
+				b = b.LNext()
 			}
 			*q.Error = 0
 			score.plumb.C <- BeatChanged{}
@@ -312,14 +331,14 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 			if q.Error == nil {
 				q.Error = new(FrameN)
 				f0 := q.beats.First.frame
-				b := q.beats.First.Next(score)
+				b := q.beats.First.LNext()
 				for i := 1; i < q.nb; i++ {
 					qf := f0 + FrameN(float64(i) * q.df)
 					ef := FrameN(int64(math.Abs(float64(qf - b.frame))))
 					if ef > *q.Error {
 						*q.Error = ef
 					}
-					b = b.Next(score)
+					b = b.LNext()
 				}
 			}
 			reply <- q

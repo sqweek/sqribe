@@ -1,7 +1,6 @@
 package score
 
 import (
-	"sync"
 	"math/big"
 
 	"sqweek.net/sqribe/midi"
@@ -15,17 +14,17 @@ type BeatPoint interface {
 	Offsetf() float64
 }
 
-type Beatf struct {
-	score *Score
-	f float64
+type BeatPt struct {
+	beat *BeatRef
+	α float64
 }
 
-func (b Beatf) Beat() *BeatRef {
-	return b.score.beats[int(b.f)]
+func (pt BeatPt) Beat() *BeatRef {
+	return pt.beat
 }
 
-func (b Beatf) Offsetf() float64 {
-	return float64(b.f) - float64(int(b.f))
+func (pt BeatPt) Offsetf() float64 {
+	return pt.α
 }
 
 type BeatMap interface {
@@ -34,9 +33,8 @@ type BeatMap interface {
 }
 
 type Score struct {
-	sync.RWMutex
 	staves []*Staff
-	beats []*BeatRef
+	beat0, beatN *BeatRef
 	beatLen *big.Rat
 	plumb *plumb.Port
 

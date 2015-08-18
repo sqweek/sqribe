@@ -248,8 +248,9 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
 	lastFrame := ww.VisibleFrameRange().MaxFrame()
 	minX, maxX := -1, -1
-	/* XXX doesn't need whole beats array, see drawBeatAxis() */
-	for i, beat := range(ww.score.Beats()) {
+	b0 := ww.score.NearestBeat(ww.first_frame)
+	i := b0.BeatNum() - 1
+	for beat := b0; beat != nil; beat = beat.Next() {
 		if beat.Frame() < ww.first_frame {
 			minX = r.Min.X
 			continue
@@ -268,6 +269,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		if i % 4 == 0 {
 			black = black4
 		}
+		i++
 		draw.Draw(dst, image.Rect(x-3, r.Min.Y, x+4, r.Min.Y+1), &image.Uniform{black}, r.Min, draw.Over)
 		draw.Draw(dst, image.Rect(x-2, r.Min.Y+1, x+3, r.Min.Y+2), &image.Uniform{black}, r.Min, draw.Over)
 		draw.Draw(dst, image.Rect(x-1, r.Min.Y+2, x+2, r.Min.Y+3), &image.Uniform{black}, r.Min, draw.Over)
@@ -491,7 +493,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 			if sn.Staff != staff {
 				continue
 			}
-			note := sn.Note.Dup().Mv(s.ndelta.Δpitch, s.ndelta.Δbeat, ww.score)
+			note := sn.Note.Dup().Mv(s.ndelta.Δpitch, s.ndelta.Δbeat)
 			n := ww.dispNote(sn.Staff, note)
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
@@ -501,9 +503,9 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		anchor := ww.snarf[s.note.staff][0]
 		Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
 		beat, offset := sc.Quantize(s.note.beatf)
-		Δbeat := Δb(sc, beat, offset, anchor.Beat, anchor.Offset)
+		Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 		for _, note := range ww.snarf[staff] {
-			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat, sc))
+			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat))
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
 		}
@@ -578,16 +580,14 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	}
 	beats := make([]float64, 0)
 	frames := make([]FrameN, 0)
-	if score != nil && len(score.Beats()) > 0 {
-		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).Prev(score)
-		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).Next(score)
-		i := b0.BeatNum(score)
-		for b := b0; ; b = b.Next(score) {
+	if score != nil && score.HasBeats() {
+		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).LPrev()
+		// XXX should start search from b0
+		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).LNext()
+		i := b0.BeatNum()
+		for b := b0; b != nil && b.Frame() <= bN.Frame(); b = b.Next() {
 			beats = append(beats, float64(i))
 			frames = append(frames, b.Frame())
-			if b.Frame() >= bN.Frame() || b == b.Next(score) {
-				break
-			}
 			i++
 		}
 	}
