@@ -130,7 +130,7 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
 	if len(staff.notes) > 0 {
 		staff.notes = staff.notes[0:0]
 	}
-	beat := score.beat0
+	beat := score.Head
 	for _, saved := range in {
 		beatf, _ := saved.Offset.Float64()
 		i := int(beatf)

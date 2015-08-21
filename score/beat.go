@@ -1,12 +1,40 @@
 package score
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 
 	. "sqweek.net/sqribe/core/types"
 )
+
+type BeatList struct {
+	Head, Tail *BeatRef
+}
+
+func (l *BeatList) cellp(beat *BeatRef) **BeatRef {
+	if beat.prev == nil {
+		return &l.Head
+	}
+	return &beat.prev.next
+}
+
+func (l *BeatList) celln(beat *BeatRef) **BeatRef {
+	if beat.next == nil {
+		return &l.Tail
+	}
+	return &beat.next.prev
+}
+
+func (l *BeatList) Link(beat *BeatRef) {
+	*l.cellp(beat) = beat
+	*l.celln(beat) = beat
+}
+
+func (l *BeatList) Unlink(beat *BeatRef) {
+	*l.cellp(beat) = beat.next
+	*l.celln(beat) = beat.prev
+	beat.next, beat.prev = nil, nil
+}
 
 type BeatRange struct {
 	First, Last *BeatRef
@@ -69,7 +97,7 @@ func (beat *BeatRef) Walk(Δbeat int) *BeatRef {
 }
 
 func (beat *BeatRef) BeatNum() int {
-	i, b := 0, beat
+	i, b := 1, beat
 	for b.prev != nil {
 		i, b = i + 1, b.prev
 	}
@@ -119,7 +147,7 @@ func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
 	return changed
 }
 
-func (score *Score) ToFrame(pt BeatPoint) (FrameN, bool) {
+func (beats *BeatList) ToFrame(pt BeatPoint) (FrameN, bool) {
 	b := pt.Beat()
 	b2 := b.next
 	α := pt.Offsetf()
@@ -131,12 +159,12 @@ func (score *Score) ToFrame(pt BeatPoint) (FrameN, bool) {
 }
 
 /* returns a fractional beat, and true if it is within the defined beat range */
-func (score *Score) ToBeat(frame FrameN) (BeatPoint, bool) {
-	if frame < score.beat0.frame || frame > score.beatN.frame {
+func (beats *BeatList) ToBeat(frame FrameN) (BeatPoint, bool) {
+	if frame < beats.Head.frame || frame > beats.Tail.frame {
 		/* should perhaps extrapolate based on bpm... */
 		return BeatPt{nil, 0.0}, false
 	}
-	for b := score.beat0; ; b = b.next {
+	for b := beats.Head; ; b = b.next {
 		if b.next == nil {
 			return BeatPt{b, 0.0}, true
 		}
@@ -147,89 +175,96 @@ func (score *Score) ToBeat(frame FrameN) (BeatPoint, bool) {
 	}
 }
 
-func (score *Score) BeatFrames() []FrameN {
+func (beats *BeatList) BeatFrames() []FrameN {
 	f := make([]FrameN, 0)
-	for b := score.beat0; b != nil; b = b.next {
+	for b := beats.Head; b != nil; b = b.next {
 		f = append(f, b.frame)
 	}
 	return f
 }
 
-func (score *Score) HasBeats() bool {
-	return score.beat0 != nil
+func (beats *BeatList) HasBeats() bool {
+	return beats.Head != nil
 }
 
-func beatList(f []FrameN) (hd, tl *BeatRef) {
+func mkBeats(f []FrameN) (beats BeatList) {
+	beats = BeatList{}
 	if len(f) == 0 {
-		return nil, nil
+		return
 	}
-	hd = &BeatRef{nil, nil ,f[0]}
-	tl = hd
+	beats.Head = &BeatRef{nil, nil ,f[0]}
+	beats.Tail = beats.Head
 	for i := 1; i < len(f); i++ {
-		b := &BeatRef{tl, nil, f[i]}
-		tl.next = b
-		tl = b
+		b := &BeatRef{beats.Tail, nil, f[i]}
+		beats.Tail.next = b
+		beats.Tail = b
 	}
-	return hd, tl
+	return beats
 }
 
 func (score *Score) LoadBeats(f []FrameN) {
-	hd, tl := beatList(f)
-	score.beat0, score.beatN = hd, tl
-	for b := score.beat0; b != nil; b = b.next {
-		pf, nf := FrameN(-1), FrameN(-1)
-		if b.prev != nil { pf = b.prev.frame }
-		if b.next != nil { nf = b.next.frame }
-		fmt.Println(b.frame, pf, "<- ->", nf)
-	}
-	for b := score.beat0; b != nil; b = b.next {
-		for b2 := score.beat0; b2 != nil; b2 = b2.next {
-			fmt.Println(b.frame, "-", b2.frame, "=", b.Subtract(b2))
-		}
-	}
-
+	score.BeatList = mkBeats(f)
 	score.plumb.C <- BeatChanged{}
 }
 
 func (score *Score) AddBeat(frame FrameN) {
-	if score.addBeat(frame) {
+	op := &AddBeatOp{frame: frame}
+	if op.apply(score) {
 		score.plumb.C <- BeatChanged{}
 	}
 }
 
-func (score *Score) addBeat(frame FrameN) bool {
-	if score.beat0 == nil {
-		score.beat0 = &BeatRef{nil, nil, frame}
-		score.beatN = score.beat0
+type AddBeatOp struct {
+	frame FrameN
+	beat *BeatRef
+	old FrameN
+}
+
+func (op *AddBeatOp) reset() {
+	op.old = -1
+	op.beat = nil
+}
+
+func (op *AddBeatOp) apply(score *Score) bool {
+	op.reset()
+	if score.Head == nil {
+		op.beat = &BeatRef{nil, nil, op.frame}
+		score.Head = op.beat
+		score.Tail = op.beat
 		return true
 	}
 	tolerance := FrameN(10000) //XXX should be based on sample rate/bpm
-	for b := score.beat0; b != nil; b = b.next {
-		if frame == b.frame {
-			return false
+	op.beat = score.NearestBeat(op.frame)
+	Δf := op.frame - op.beat.frame
+	if Δf == 0 {
+		return false
+	} else if Δf < -tolerance || Δf > tolerance {
+		if Δf > 0 {
+			op.beat = &BeatRef{op.beat, op.beat.next, op.frame}
+		} else {
+			op.beat = &BeatRef{op.beat.prev, op.beat, op.frame}
 		}
-		if frame > b.frame && (b.next == nil || frame < b.next.frame) {
-			if frame - b.frame <= tolerance {
-				b.frame = frame
-			} else if b.next == nil || (b.next.frame - frame > tolerance) {
-				ref := &BeatRef{b, b.next, frame}
-				ref.prev.next = ref
-				if ref.next != nil {
-					ref.next.prev = ref
-				} else {
-					score.beatN = ref
-				}
-			} else {
-				b.next.frame = frame
-			}
-			return true
-		}
+		score.Link(op.beat)
+	} else {
+		op.old = op.beat.frame
+		op.beat.frame = op.frame
 	}
-	panic("unreachable")
+	return true
 }
 
-func (score *Score) NearestBeat(frame FrameN) *BeatRef {
-	for b := score.beat0; b != nil; b = b.next {
+func (op *AddBeatOp) undo(score *Score) {
+	if op.beat == nil {
+		return
+	} else if op.old != -1 {
+		op.beat.frame = op.old
+	} else {
+		score.Unlink(op.beat)
+	}
+	op.reset()
+}
+
+func (beats *BeatList) NearestBeat(frame FrameN) *BeatRef {
+	for b := beats.Head; b != nil; b = b.next {
 		if frame == b.frame || b.next == nil {
 			return b
 		}

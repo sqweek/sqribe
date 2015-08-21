@@ -33,8 +33,8 @@ type BeatMap interface {
 }
 
 type Score struct {
+	BeatList
 	staves []*Staff
-	beat0, beatN *BeatRef
 	beatLen *big.Rat
 	plumb *plumb.Port
 

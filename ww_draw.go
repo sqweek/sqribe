@@ -576,7 +576,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	score := ww.score
 	label := func(beatf float64) string {
-		return fmt.Sprintf("b%d", int(beatf) + 1)
+		return fmt.Sprintf("b%d", int(beatf))
 	}
 	beats := make([]float64, 0)
 	frames := make([]FrameN, 0)
