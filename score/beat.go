@@ -280,6 +280,10 @@ func (beats *BeatList) NearestBeat(frame FrameN) *BeatRef {
 	return nil
 }
 
+// 2 4 8 16 32 64 128
+// 3 6 12 24 48 96
+// 5 10 20 40 80
+// 7 14 28 56 112
 func (score *Score) Quantize(beat BeatPoint) (*BeatRef, *big.Rat) {
 	best := big.NewRat(0, 1)
 	frac := beat.Offsetf()
