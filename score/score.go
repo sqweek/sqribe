@@ -31,11 +31,22 @@ type BeatMap interface {
 	ToBeat(frame FrameN) (BeatPoint, bool)
 }
 
+type ScoreOp interface {
+	apply(score *Score) bool
+}
+
+type request struct {
+	op ScoreOp
+	result chan bool
+}
+
 type Score struct {
 	BeatList
 	staves []*Staff
 	beatLen *big.Rat
 	plumb *plumb.Port
+
+	updates chan request
 
 	quantApply chan chan bool
 	quantCalc chan chan QuantizeBeats
@@ -49,6 +60,12 @@ type Measure struct {
 func (score *Score) Init(plumb *plumb.Port) {
 	score.beatLen = big.NewRat(1, 4)
 	score.plumb = plumb
+	score.updates = make(chan request)
+	go func() {
+		for req := range score.updates {
+			req.result <- req.op.apply(score)
+		}
+	}()
 }
 
 func (score *Score) Sub(origin interface{}, c chan interface{}) {
@@ -57,5 +74,11 @@ func (score *Score) Sub(origin interface{}, c chan interface{}) {
 
 func (score *Score) Unsub(origin interface{}) {
 	score.plumb.Unsub(origin)
+}
+
+func (score *Score) update(op ScoreOp) bool {
+	req := request{op, make(chan bool)}
+	score.updates <- req
+	return <-req.result
 }
 

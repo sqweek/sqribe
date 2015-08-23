@@ -497,7 +497,8 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 	s := ww.getMouseState(mouse)
 	// XXX no way to exit pasteMode without pasting...
-	if s.note == nil || ww.score == nil || (ww.pasteMode && len(ww.snarf[s.note.staff]) > 0) {
+	sc := ww.score
+	if s.note == nil || sc == nil || (ww.pasteMode && len(ww.snarf[s.note.staff]) > 0) {
 		return nil
 	}
 	note := s.note
@@ -509,7 +510,7 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 			var dur *big.Rat = new(big.Rat)
 			dur.SetString(str)
 			newNote := ww.mkNote(note, dur)
-			note.staff.AddNote(newNote)
+			sc.AddNotes(note.staff, newNote)
 			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)
 		}
 	}()
@@ -551,7 +552,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 				for _, note := range notes {
 					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat))
 				}
-				staff.AddNote(mv...)
+				sc.AddNotes(staff, mv...)
 			}
 			ww.pasteMode = false
 		}

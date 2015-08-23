@@ -1,7 +1,6 @@
 package score
 
 import (
-	"fmt"
 	"math/big"
 	"sort"
 
@@ -79,14 +78,27 @@ func (score *Score) Staves() []*Staff {
 	return score.staves
 }
 
+type AddStaffOp struct {
+	clef *Clef
+}
+
 func (score *Score) AddStaff(clef *Clef) {
+	score.update(&AddStaffOp{clef})
+	score.plumb.C <- StaffChanged{score.staves[len(score.staves)-1]}
+}
+
+func (op *AddStaffOp) apply(score *Score) bool {
 	nsharps := KeySig(0)
 	if len(score.staves) > 0 {
 		nsharps = score.staves[0].nsharps
 	}
-	staff := &Staff{clef: clef, voice: midi.InstPiano, velocity: 100, nsharps: nsharps, plumb: score.plumb}
+	staff := &Staff{clef: op.clef, voice: midi.InstPiano, velocity: 100, nsharps: nsharps, plumb: score.plumb}
 	score.staves = append(score.staves, staff)
-	score.plumb.C <- StaffChanged{staff}
+	return true
+}
+
+func (op *AddStaffOp) undo(score *Score) {
+	score.staves = score.staves[:len(score.staves)-1]
 }
 
 func (score *Score) SavedStaves(beats []FrameN) []SavedStaff {
@@ -139,7 +151,7 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
 		}
 		saved.Offset.Sub(saved.Offset, big.NewRat(int64(i), 1))
 		note := &Note{saved.Pitch, saved.Duration, beat, saved.Offset}
-		staff.AddNote(note)
+		staff.notes = append(staff.notes, note)
 	}
 	staff.plumb.C <- StaffChanged{staff}
 }
@@ -180,32 +192,19 @@ func (note *Note) Cmp(note2 *Note) int {
 	return d
 }
 
-func (note *Note) Set(note2 *Note) {
-	note.Beat = note2.Beat
-	note.Offset.Set(note2.Offset)
-	note.Pitch = note2.Pitch
-	note.Duration.Set(note2.Duration)
-}
-
 func (src *Note) Dup() (dst *Note) {
 	dst = &Note{Offset: new(big.Rat), Duration: new(big.Rat)}
-	dst.Set(src)
+	dst.Beat = src.Beat
+	dst.Offset.Set(src.Offset)
+	dst.Pitch = src.Pitch
+	dst.Duration.Set(src.Duration)
 	return dst
-}
-
-func (staff *Staff) RemoveNote(note *Note) bool {
-	removed := staff.removeNote(note)
-	staff.plumb.C <- StaffChanged{staff}
-	return removed
 }
 
 func (staff *Staff) removeNote(note *Note) bool {
 	searchFn := func(i int)bool { return note.Cmp(staff.notes[i]) <= 0 }
 	i := sort.Search(len(staff.notes), searchFn)
-	if i == len(staff.notes) {
-		return false
-	}
-	if note.Cmp(staff.notes[i]) == 0 {
+	if i < len(staff.notes) && note == staff.notes[i] {
 		copy(staff.notes[i:], staff.notes[i+1:])
 		staff.notes = staff.notes[:len(staff.notes) - 1]
 		return true
@@ -213,9 +212,27 @@ func (staff *Staff) removeNote(note *Note) bool {
 	return false
 }
 
-func (staff *Staff) AddNote(note... *Note) {
-	staff.addNote(note...)
-	staff.plumb.C <- StaffChanged{staff}
+func (score *Score) AddNotes(staff *Staff, notes... *Note) {
+	score.update(&AddNotesOp{staff, notes})
+	score.plumb.C <- StaffChanged{staff}
+}
+
+type AddNotesOp struct {
+	staff *Staff
+	notes []*Note
+}
+
+func (op *AddNotesOp) apply(score *Score) bool {
+	op.staff.addNote(op.notes...)
+	return true
+}
+
+func (op *AddNotesOp) undo(score *Score) {
+	for _, note := range op.notes {
+		if !op.staff.removeNote(note) {
+			//XXX need to restore original duration
+		}
+	}
 }
 
 func (staff *Staff) addNote(note... *Note) {
@@ -246,24 +263,48 @@ func Merge(list []*Note, notes... *Note) []*Note {
 }
 
 func (score *Score) MvNotes(Δpitch int8, Δbeat *big.Rat, notes... StaffNote) {
-	changed := make(map[*Staff]struct{})
+	score.update(&MvNotesOp{Δpitch, Δbeat, notes})
+	score.stavesChanged(notes)
+}
+
+func (score *Score) stavesChanged(notes []StaffNote) {
+	done := make(map[*Staff]struct{})
 	for _, sn := range notes {
+		if _, ok := done[sn.Staff]; !ok {
+			score.plumb.C <- StaffChanged{sn.Staff}
+			done[sn.Staff] = struct{}{}
+		}
+	}
+}
+
+type MvNotesOp struct {
+	Δpitch int8
+	Δbeat *big.Rat
+	notes []StaffNote
+}
+
+func (op *MvNotesOp) apply(score *Score) bool {
+	op.mv(op.Δpitch, op.Δbeat)
+	return true
+}
+
+func (op *MvNotesOp) mv(Δpitch int8, Δbeat *big.Rat) {
+	for _, sn := range op.notes {
 		sn.Staff.removeNote(sn.Note)
 	}
-	for _, sn := range notes {
+	for _, sn := range op.notes {
 		sn.Note.Mv(Δpitch, Δbeat)
 		sn.Staff.addNote(sn.Note)
-		changed[sn.Staff] = struct{}{}
 	}
-	for staff, _ := range changed {
-		staff.plumb.C <- StaffChanged{staff}
-	}
+}
+
+func (op *MvNotesOp) undo(score *Score) {
+	// XXX if addNote modified Duration of any notes, that is not restored
+	op.mv(-op.Δpitch, (&big.Rat{}).Neg(op.Δbeat))
 }
 
 // needs to clip resulting pitch/beat
 func (note *Note) Mv(Δpitch int8, Δbeat *big.Rat) *Note {
-	fmt.Println("Mv", Δpitch, Δbeat)
-	fmt.Println("	", note)
 	note.Pitch += uint8(Δpitch)
 	note.Offset.Add(note.Offset, Δbeat)
 	f, _ := note.Offset.Float64()
@@ -277,7 +318,6 @@ func (note *Note) Mv(Δpitch int8, Δbeat *big.Rat) *Note {
 		f += 1.0;
 		note.Offset.Add(note.Offset, big.NewRat(1, 1))
 	}
-	fmt.Println("	", note)
 	return note
 }
 
@@ -295,33 +335,60 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 	if rng.First == rng.Last {
 		return
 	}
+	op := &RepeatNotesOp{rng: rng}
+	score.update(op)
+	score.stavesChanged(op.added)
+}
+
+type RepeatNotesOp struct {
+	rng BeatRange
+	added []StaffNote
+}
+
+func (op *RepeatNotesOp) apply(score *Score) bool {
+	rng := op.rng
+	dest := op.rng.Last
 	n := rng.Last.Subtract(rng.First)
-	if extra := rng.Last.Walk(n).Subtract(rng.Last); extra > 0 {
+	if extra := rng.Last.Walk(n).Subtract(rng.Last); extra < n {
 		/* truncate the source range so we don't go past the defined beats */
-		rng = BeatRange{rng.First, rng.Last.Walk(-extra)}
+		rng = BeatRange{rng.First, rng.Last.Walk(extra - n)}
 	}
-	affectedStaves := make(map[*Staff]bool)
 	repeatNote := func (staff *Staff, note *Note) {
 		note2 := note.Dup()
-		note2.Beat = rng.Last.Walk(note.Beat.Subtract(rng.First))
+		note2.Beat = dest.Walk(note.Beat.Subtract(rng.First))
 		staff.addNote(note2)
-		affectedStaves[staff] = true
+		op.added = append(op.added, StaffNote{staff, note2})
 	}
 	score.perStaffNote(rng, repeatNote)
-	for staff, _ := range affectedStaves {
-		staff.plumb.C <- StaffChanged{staff}
+	return true
+}
+
+func (op *RepeatNotesOp) undo(score *Score) {
+	// XXX if addNote modified the durations of any existing notes that is not undone
+	for _, sn := range op.added {
+		sn.Staff.removeNote(sn.Note)
 	}
 }
 
-
 func (score *Score) RemoveNotes(notes... StaffNote) {
-	affectedStaves := make(map[*Staff]bool)
-	for _, sn := range notes {
-		affectedStaves[sn.Staff] = true
+	score.update(&RemoveNotesOp{notes})
+	score.stavesChanged(notes)
+}
+
+type RemoveNotesOp struct {
+	notes []StaffNote
+}
+
+func (op *RemoveNotesOp) apply(score *Score) bool {
+	for _, sn := range op.notes {
 		sn.Staff.removeNote(sn.Note)
 	}
-	for staff, _ := range affectedStaves {
-		staff.plumb.C <- StaffChanged{staff}
+	return len(op.notes) > 0
+}
+
+func (op *RemoveNotesOp) undo(score *Score) {
+	for _, sn := range op.notes {
+		sn.Staff.addNote(sn.Note)
 	}
 }
 

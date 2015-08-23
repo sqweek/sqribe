@@ -208,8 +208,7 @@ func (score *Score) LoadBeats(f []FrameN) {
 }
 
 func (score *Score) AddBeat(frame FrameN) {
-	op := &AddBeatOp{frame: frame}
-	if op.apply(score) {
+	if score.update(&AddBeatOp{frame: frame}) {
 		score.plumb.C <- BeatChanged{}
 	}
 }
@@ -353,13 +352,10 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 				reply <- true
 				continue
 			}
-			f0 := q.beats.First.frame
-			b := q.beats.First.LNext()
-			for i := 1; i < q.nb; i++ {
-				b.frame = f0 + FrameN(float64(i) * q.df)
-				b = b.LNext()
+			score.update(&QuantizeOp{&q, make(map[*BeatRef]FrameN)})
+			if q.Error != nil {
+				*q.Error = 0
 			}
-			*q.Error = 0
 			score.plumb.C <- BeatChanged{}
 			reply <- true
 		case reply := <-calc:
@@ -382,6 +378,29 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 			}
 			reply <- q
 		}
+	}
+}
+
+type QuantizeOp struct {
+	q *QuantizeBeats
+	orig map[*BeatRef]FrameN
+}
+
+func (op *QuantizeOp) apply(score *Score) bool {
+	f0 := op.q.beats.First.frame
+	b := op.q.beats.First.LNext()
+	for i := 1; i < op.q.nb; i++ {
+		op.orig[b] = b.frame
+		b.frame = f0 + FrameN(float64(i) * op.q.df)
+		b = b.LNext()
+	}
+	return true
+}
+
+func (op *QuantizeOp) undo(score *Score) {
+	for beat, orig_frame := range op.orig {
+		beat.frame = orig_frame
+		delete(op.orig, beat)
 	}
 }
 
