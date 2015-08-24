@@ -172,7 +172,10 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 				}
 				if ev, ok := ev.(score.StaffChanged); ok {
 					for note, staff := range ww.notesel {
-						if ev.Staff == staff && staff.NoteAt(note) != note {
+						if _, ok := ev.Staves[staff]; !ok {
+							continue
+						}
+						if staff.NoteAt(note) != note {
 							/* note has been removed from staff */
 							delete(ww.notesel, note)
 						}

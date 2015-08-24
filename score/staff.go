@@ -47,7 +47,25 @@ type SavedNote struct {
 }
 
 type StaffChanged struct {
-	Staff *Staff
+	Staves map[*Staff]struct{}
+}
+
+func staffChanged(staves... *Staff) StaffChanged {
+	c := StaffChanged{make(map[*Staff]struct{})}
+	for _, staff := range staves {
+		c.Staves[staff] = struct{}{}
+	}
+	return c
+}
+
+func notesChanged(notes []StaffNote) StaffChanged {
+	c := StaffChanged{make(map[*Staff]struct{})}
+	for _, sn := range notes {
+		if _, ok := c.Staves[sn.Staff]; !ok {
+			c.Staves[sn.Staff] = struct{}{}
+		}
+	}
+	return c
 }
 
 type StaffNote struct {
@@ -70,8 +88,8 @@ func (score *Score) KeyChange(dsharps int) {
 		} else if staff.nsharps < -7 {
 			staff.nsharps += 12
 		}
-		staff.plumb.C <- StaffChanged{staff}
 	}
+	score.plumb.C <- staffChanged(score.staves...)
 }
 
 func (score *Score) Staves() []*Staff {
@@ -84,7 +102,7 @@ type AddStaffOp struct {
 
 func (score *Score) AddStaff(clef *Clef) {
 	score.update(&AddStaffOp{clef})
-	score.plumb.C <- StaffChanged{score.staves[len(score.staves)-1]}
+	score.plumb.C <- staffChanged(score.staves[len(score.staves)-1])
 }
 
 func (op *AddStaffOp) apply(score *Score) bool {
@@ -136,6 +154,7 @@ func (score *Score) LoadStaves(in []SavedStaff, beats []FrameN) {
 		staff.LoadNotes(score, saved.Notes, beats)
 		score.staves = append(score.staves, staff)
 	}
+	score.plumb.C <- staffChanged(score.staves...)
 }
 
 func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
@@ -153,7 +172,6 @@ func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
 		note := &Note{saved.Pitch, saved.Duration, beat, saved.Offset}
 		staff.notes = append(staff.notes, note)
 	}
-	staff.plumb.C <- StaffChanged{staff}
 }
 
 func (score *Score) Beatf(note *Note) BeatPoint {
@@ -214,7 +232,7 @@ func (staff *Staff) removeNote(note *Note) bool {
 
 func (score *Score) AddNotes(staff *Staff, notes... *Note) {
 	score.update(&AddNotesOp{staff, notes})
-	score.plumb.C <- StaffChanged{staff}
+	score.plumb.C <- staffChanged(staff)
 }
 
 type AddNotesOp struct {
@@ -264,17 +282,7 @@ func Merge(list []*Note, notes... *Note) []*Note {
 
 func (score *Score) MvNotes(Δpitch int8, Δbeat *big.Rat, notes... StaffNote) {
 	score.update(&MvNotesOp{Δpitch, Δbeat, notes})
-	score.stavesChanged(notes)
-}
-
-func (score *Score) stavesChanged(notes []StaffNote) {
-	done := make(map[*Staff]struct{})
-	for _, sn := range notes {
-		if _, ok := done[sn.Staff]; !ok {
-			score.plumb.C <- StaffChanged{sn.Staff}
-			done[sn.Staff] = struct{}{}
-		}
-	}
+	score.plumb.C <- notesChanged(notes)
 }
 
 type MvNotesOp struct {
@@ -337,7 +345,7 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 	}
 	op := &RepeatNotesOp{rng: rng}
 	score.update(op)
-	score.stavesChanged(op.added)
+	score.plumb.C <- notesChanged(op.added)
 }
 
 type RepeatNotesOp struct {
@@ -372,7 +380,7 @@ func (op *RepeatNotesOp) undo(score *Score) {
 
 func (score *Score) RemoveNotes(notes... StaffNote) {
 	score.update(&RemoveNotesOp{notes})
-	score.stavesChanged(notes)
+	score.plumb.C <- notesChanged(notes)
 }
 
 type RemoveNotesOp struct {
@@ -434,17 +442,17 @@ func (staff *Staff) Notes() []*Note {
 
 func (staff *Staff) SetVoice(voice int) {
 	staff.voice = voice
-	staff.plumb.C <- StaffChanged{staff}
+	staff.plumb.C <- staffChanged(staff)
 }
 
 func (staff *Staff) SetVelocity(velocity int) {
 	staff.velocity = velocity
-	staff.plumb.C <- StaffChanged{staff}
+	staff.plumb.C <- staffChanged(staff)
 }
 
 func (staff *Staff) ToggleMute() {
 	staff.Muted = !staff.Muted
-	staff.plumb.C <- StaffChanged{staff}
+	staff.plumb.C <- staffChanged(staff)
 }
 
 func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {
