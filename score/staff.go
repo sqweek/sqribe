@@ -361,13 +361,15 @@ func (op *RepeatNotesOp) apply(score *Score) bool {
 		/* truncate the source range so we don't go past the defined beats */
 		rng = BeatRange{rng.First, rng.Last.Walk(extra - n)}
 	}
-	repeatNote := func (staff *Staff, note *Note) {
-		note2 := note.Dup()
-		note2.Beat = dest.Walk(note.Beat.Subtract(rng.First))
-		staff.addNote(note2)
-		op.added = append(op.added, StaffNote{staff, note2})
+	next := score.Iter(rng)
+	var src StaffNote
+	for next != nil {
+		src, next = next()
+		note := src.Note.Dup()
+		note.Beat = dest.Walk(note.Beat.Subtract(rng.First))
+		src.Staff.addNote(note)
+		op.added = append(op.added, StaffNote{src.Staff, note})
 	}
-	score.perStaffNote(rng, repeatNote)
 	return true
 }
 
@@ -397,30 +399,6 @@ func (op *RemoveNotesOp) apply(score *Score) bool {
 func (op *RemoveNotesOp) undo(score *Score) {
 	for _, sn := range op.notes {
 		sn.Staff.addNote(sn.Note)
-	}
-}
-
-func (score *Score) perStaffNote(rng BeatRange, f func(staff *Staff, note *Note)) {
-	for i := 0; i < len(score.staves); i++ {
-		staff := score.staves[i]
-		if !staff.Muted {
-			staff.perNote(rng, func(note *Note) {f(staff, note)})
-		}
-	}
-}
-
-func (staff *Staff) perNote(rng BeatRange, f func(note *Note)) {
-	searchFn := func(i int)bool { return rng.First.frame <= staff.notes[i].Beat.frame }
-	selectedNotes := make([]*Note, 0, 16)
-	for i := sort.Search(len(staff.notes), searchFn); i < len(staff.notes); i++ {
-		note := staff.notes[i]
-		if note.Beat.frame >= rng.Last.frame {
-			break
-		}
-		selectedNotes = append(selectedNotes, note)
-	}
-	for _, note := range selectedNotes {
-		f(note)
 	}
 }
 
