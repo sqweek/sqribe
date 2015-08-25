@@ -16,11 +16,6 @@ import (
 	. "sqweek.net/sqribe/core/data"
 )
 
-var Mixer struct {
-	Bias *BoundFloat
-	MuteWave, MuteMidi, MuteMetronome bool
-}
-
 var G struct {
 	/* global state */
 	audiofile string
@@ -38,8 +33,6 @@ var G struct {
 	instMenu MenuWidget
 	noteMenu MenuWidget
 	waveBias *SliderWidget
-	mixer struct {
-	}
 	font struct {
 		luxi *Font
 	}

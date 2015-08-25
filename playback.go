@@ -21,11 +21,16 @@ type BeatEv struct {
 	Next *BeatEv
 }
 
-type MidiEv struct {
+type MidiOff struct {
+	End FrameN
 	Pitch uint8
 	Chan uint8
-	Velocity uint8
-	Start, End FrameN
+}
+
+type MidiEv struct {
+	Start FrameN
+	Mix *StaffMix
+	Off MidiOff
 	Next *MidiEv
 }
 
@@ -38,9 +43,6 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 		sn, next = next()
 		start, _ := G.score.ToFrame(G.score.Beatf(sn.Note))
 		end, _ := G.score.ToFrame(G.score.EndBeatf(sn.Note))
-		if sn.Staff.Muted {
-			continue
-		}
 		if end <= f0 {
 			continue
 		} else if start >= fN {
@@ -53,8 +55,8 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 			end = fN
 		}
 
-		midichan := Synth.Inst(uint8(sn.Staff.Voice()))
-		*evtail = &MidiEv{sn.Note.Pitch, midichan, uint8(sn.Staff.Velocity()), start, end, nil}
+		mix := Mixer.For(sn.Staff)
+		*evtail = &MidiEv{start, mix, MidiOff{end, sn.Note.Pitch, 255}, nil}
 		if start >= fcur && evcur == nil {
 			evcur = *evtail
 		}
@@ -221,7 +223,7 @@ func play(rng TimeRange) {
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
 		evhead, mev := midilst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
-		offlist := make([]MidiEv, 0, 32)
+		offlist := make([]MidiOff, 0, 32)
 		for playState == PLAYING {
 			if len(in.buf) == 0 {
 				prevframe := in.frame
@@ -279,8 +281,11 @@ func play(rng TimeRange) {
 			}
 			/* user placed notes */
 			for mev != nil && mev.Start < in.frame + nf {
-				Synth.NoteOn(mev.Chan, mev.Pitch, mev.Velocity)
-				offlist = append(offlist, *mev)
+				if !mev.Mix.Muted {
+					mev.Off.Chan = Synth.Inst(uint8(mev.Mix.Voice))
+					Synth.NoteOn(mev.Off.Chan, mev.Off.Pitch, uint8(mev.Mix.Velocity))
+					offlist = append(offlist, mev.Off)
+				}
 				mev = mev.Next
 			}
 

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/score"
 )
 
 type XMLWriter struct {
@@ -85,7 +84,7 @@ func mxmlIdent(wr *XMLWriter) {
 }
 
 func mxmlParts(wr *XMLWriter) {
-	staves := G.score.SavedStaves(G.score.BeatFrames())
+	staves := savedStaves(&G.score, G.score.BeatFrames())
 	list := wr.Tag("part-list")
 	for i, staff := range staves {
 		instName := midi.InstName(staff.Voice)
@@ -113,7 +112,7 @@ func flt(rat *big.Rat) float64 {
 	return float
 }
 
-func mxmlPart(wr *XMLWriter, staff score.SavedStaff, id string) {
+func mxmlPart(wr *XMLWriter, staff SavedStaff, id string) {
 	defer wr.CloseTag(wr.Tag("part", "id", id))
 	ticks := 384
 	divisions := ticks/4

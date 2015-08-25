@@ -4,45 +4,20 @@ import (
 	"math/big"
 	"sort"
 
-	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/plumb"
-
 	. "sqweek.net/sqribe/core/types"
 )
 
 type Staff struct {
 	name string
-	voice int
-	velocity int
 	clef *Clef
 	nsharps KeySig	// key signature (-ve for flats)
-	Muted bool
 	notes []*Note
-	plumb *plumb.Port
-
-	Minimised bool // should probably live elsewhere...
 }
 
 type Note struct {
 	Pitch uint8 /* midi pitch */
 	Duration *big.Rat
 	Beat *BeatRef
-	Offset *big.Rat
-}
-
-type SavedStaff struct {
-	Name string
-	Voice int
-	Velocity int
-	Origin uint8
-	Nsharps int
-	Muted bool `json:",omitempty"`
-	Notes []SavedNote
-}
-
-type SavedNote struct {
-	Pitch uint8
-	Duration *big.Rat
 	Offset *big.Rat
 }
 
@@ -96,82 +71,32 @@ func (score *Score) Staves() []*Staff {
 	return score.staves
 }
 
-type AddStaffOp struct {
-	clef *Clef
+func MkStaff(name string, clef *Clef, key KeySig) *Staff {
+	return &Staff{name: name, clef: clef, nsharps: key}
 }
 
-func (score *Score) AddStaff(clef *Clef) {
-	score.update(&AddStaffOp{clef})
-	score.plumb.C <- staffChanged(score.staves[len(score.staves)-1])
+/* XXX should probably be an Op but only used during startup for now */
+func (score *Score) SetStaves(staves []*Staff) {
+	score.staves = staves
+	score.plumb.C <- staffChanged(staves...)
+}
+
+type AddStaffOp struct {
+	staff *Staff
+}
+
+func (score *Score) AddStaff(staff *Staff) {
+	score.update(&AddStaffOp{staff})
+	score.plumb.C <- staffChanged(staff)
 }
 
 func (op *AddStaffOp) apply(score *Score) bool {
-	nsharps := KeySig(0)
-	if len(score.staves) > 0 {
-		nsharps = score.staves[0].nsharps
-	}
-	staff := &Staff{clef: op.clef, voice: midi.InstPiano, velocity: 100, nsharps: nsharps, plumb: score.plumb}
-	score.staves = append(score.staves, staff)
+	score.staves = append(score.staves, op.staff)
 	return true
 }
 
 func (op *AddStaffOp) undo(score *Score) {
 	score.staves = score.staves[:len(score.staves)-1]
-}
-
-func (score *Score) SavedStaves(beats []FrameN) []SavedStaff {
-	saved := make([]SavedStaff, 0, len(score.staves))
-	for _, staff := range score.staves {
-		saved = append(saved, SavedStaff{staff.name, staff.voice, staff.velocity - 100, staff.clef.Origin, int(staff.nsharps), staff.Muted, staff.SavedNotes(beats)})
-	}
-	return saved
-}
-
-func (staff *Staff) SavedNotes(beats []FrameN) []SavedNote {
-	out := make([]SavedNote, 0, len(staff.notes))
-	i := 0
-	for _, note := range staff.notes {
-		for beats[i] < note.Beat.frame {
-			i++
-		}
-		b := big.NewRat(int64(i), 1)
-		b.Add(b, note.Offset)
-		out = append(out, SavedNote{note.Pitch, note.Duration, b})
-	}
-	return out
-}
-
-func (score *Score) LoadStaves(in []SavedStaff, beats []FrameN) {
-	if len(score.staves) > 0 {
-		score.staves = score.staves[0:0]
-	}
-	for _, saved := range in {
-		clef := FindClef(saved.Origin)
-		if clef == nil {
-			clef = &TrebleClef
-		}
-		staff := &Staff{saved.Name, saved.Voice, saved.Velocity + 100, clef, KeySig(saved.Nsharps), saved.Muted, nil, score.plumb, false}
-		staff.LoadNotes(score, saved.Notes, beats)
-		score.staves = append(score.staves, staff)
-	}
-	score.plumb.C <- staffChanged(score.staves...)
-}
-
-func (staff *Staff) LoadNotes(score *Score, in []SavedNote, beats []FrameN) {
-	if len(staff.notes) > 0 {
-		staff.notes = staff.notes[0:0]
-	}
-	beat := score.Head
-	for _, saved := range in {
-		beatf, _ := saved.Offset.Float64()
-		i := int(beatf)
-		for beat.frame < beats[i] {
-			beat = beat.next
-		}
-		saved.Offset.Sub(saved.Offset, big.NewRat(int64(i), 1))
-		note := &Note{saved.Pitch, saved.Duration, beat, saved.Offset}
-		staff.notes = append(staff.notes, note)
-	}
 }
 
 func (score *Score) Beatf(note *Note) BeatPoint {
@@ -406,31 +331,16 @@ func (staff *Staff) Name() string {
 	return staff.name
 }
 
-func (staff *Staff) Voice() int {
-	return staff.voice
+func (staff *Staff) Clef() *Clef {
+	return staff.clef
 }
 
-func (staff *Staff) Velocity() int {
-	return staff.velocity
+func (staff *Staff) Key() KeySig {
+	return staff.nsharps
 }
 
 func (staff *Staff) Notes() []*Note {
 	return staff.notes
-}
-
-func (staff *Staff) SetVoice(voice int) {
-	staff.voice = voice
-	staff.plumb.C <- staffChanged(staff)
-}
-
-func (staff *Staff) SetVelocity(velocity int) {
-	staff.velocity = velocity
-	staff.plumb.C <- staffChanged(staff)
-}
-
-func (staff *Staff) ToggleMute() {
-	staff.Muted = !staff.Muted
-	staff.plumb.C <- staffChanged(staff)
 }
 
 func (staff *Staff) KeyAccidentalLines() (KeySig, []int) {

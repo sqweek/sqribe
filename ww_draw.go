@@ -27,6 +27,7 @@ type WaveLayout struct {
 
 type MixerLayout struct {
 	r, sig, minmaxB, muteB, instC, volS image.Rectangle
+	Minimised bool
 }
 
 func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
@@ -65,13 +66,11 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
 		spaceY := rect.wave.Dy()
 		staves := score.Staves()
 		for staff, _ := range rect.staves {
-			// not sure if deletion is ok here, as event loop also references rect.mixers
-			//delete(rect.mixers, staff)
-			//delete(rect.staves ,staff)
-			if !staff.Minimised {
-				nstaves++
-			} else {
+			// XXX need to drop old staves
+			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
 				spaceY -= minimisedH
+			} else {
+				nstaves++
 			}
 		}
 		scoreh := 0
@@ -83,18 +82,22 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
 			scoreh = minh
 		}
 		ypos := rect.wave.Min.Y
-		for i := 0; i < len(staves); i++ {
+		for _, staff := range staves {
 			var height int
-			if staves[i].Minimised {
+			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
 				height = minimisedH
 			} else {
 				height = scoreh
 			}
 			srect := image.Rect(rect.wave.Min.X, ypos, rect.wave.Max.X, ypos + height)
 			ypos += height
-			rect.staves[staves[i]] = srect
-			mixlayout := MixerLayout{}
-			rect.mixers[staves[i]] = mixlayout.calc(yspacing, leftRect(srect, infow))
+			rect.staves[staff] = srect
+			mix, ok := rect.mixers[staff]
+			if !ok {
+				mix = &MixerLayout{}
+				rect.mixers[staff] = mix
+			}
+			mix.calc(yspacing, leftRect(srect, infow))
 		}
 	}
 }
@@ -279,7 +282,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		return
 	}
 	for _, staff := range ww.score.Staves() {
-		if staff.Minimised {
+		if mix, ok := ww.rect.mixers[staff]; ok && mix.Minimised {
 			continue
 		}
 		rect := ww.rect.staves[staff]
@@ -313,6 +316,7 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.Color, fill col
 
 func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	layout := ww.rect.mixers[staff]
+	mix := Mixer.For(staff)
 	r := layout.r
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
 	bg := color.NRGBA{0x55, 0x44, 0x44, 0xff}
@@ -322,23 +326,23 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	drawBorders(dst, r, border, bg)
 
 	drawBorders(dst, layout.minmaxB, fg, bg)
-	if staff.Minimised {
+	if layout.Minimised {
 		G.font.luxi.DrawC(dst, fg, layout.minmaxB, "+", centerPt(layout.minmaxB))
 	} else {
 		G.font.luxi.DrawC(dst, fg, layout.minmaxB, "-", centerPt(layout.minmaxB))
 	}
 	drawBorders(dst, layout.instC, border, white)
-	instName := midi.InstName(staff.Voice())
+	instName := midi.InstName(mix.Voice)
 	G.font.luxi.DrawC(dst, black, layout.instC, instName, centerPt(layout.instC))
 
 	var fill color.NRGBA
-	if staff.Muted {
+	if mix.Muted {
 		fill = bg
 	} else {
 		fill = fg
 	}
 	drawBorders(dst, layout.muteB, border, fill)
-	if staff.Minimised {
+	if layout.Minimised {
 		return
 	}
 
@@ -362,7 +366,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 
 //	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
 //	drawBorders(dst, restR, border, bg)
-	drawVertSlider(dst, layout.volS, bg, fg, float64(staff.Velocity()) / 127.0)
+	drawVertSlider(dst, layout.volS, bg, fg, float64(mix.Velocity) / 127.0)
 }
 
 type DisplayNote struct {

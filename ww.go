@@ -306,13 +306,21 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 			ww.publish(prospect)
 		}
 		return true
-	}}
+	}
+}
+
+func (ww *WaveWidget) Minimised(staff *score.Staff) bool {
+	if layout, ok := ww.rect.mixers[staff]; ok {
+		return layout.Minimised
+	}
+	return false
+}
 
 func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
 	sc := ww.score
 	for staff, rect := range ww.rect.staves {
-		if staff.Minimised || !mouse.In(rect) {
+		if ww.Minimised(staff) || !mouse.In(rect) {
 			continue
 		}
 		mid := rect.Min.Y + rect.Dy() / 2
@@ -430,13 +438,13 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 			layout := MixerLayout{}
 			layout.calc(yspacing, r)
 			if mouse.In(layout.instC) {
-				G.instMenu.SetDefault(staff.Voice())
+				G.instMenu.SetDefault(Mixer.For(staff).Voice)
 				reply := G.instMenu.Popup(ww.r, ww.refresh, mouse)
 				go func() {
 					item := <-reply
 					id, ok := item.(int)
 					if item != nil && ok {
-						staff.SetVoice(id)
+						Mixer.For(staff).Voice = id
 					}
 				}()
 				return G.instMenu.Drag
@@ -445,7 +453,7 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 					if (moved || finished) && pos.In(layout.volS) {
 						α := float64(pos.Y - layout.volS.Min.Y) / float64(layout.volS.Dy())
 						vel := 127 - int(127.0 * α + 0.5)
-						staff.SetVelocity(vel)
+						Mixer.For(staff).Velocity = vel
 						return true
 					}
 					return false
@@ -479,7 +487,7 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
-		ww.score.AddStaff(&score.TrebleClef)
+		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
 		ww.renderstate.changed |= LAYOUT
 		ww.publish(&score.TrebleClef)
 		return
@@ -487,11 +495,11 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	for staff, layout := range ww.rect.mixers {
 		if mouse.In(layout.r) {
 			if mouse.In(layout.muteB) {
-				staff.ToggleMute()
+				toggle(&Mixer.For(staff).Muted)
 			} else if mouse.In(layout.minmaxB) {
-				staff.Minimised = !staff.Minimised
+				toggle(&layout.Minimised)
 				ww.renderstate.changed |= LAYOUT
-				ww.publish(&staff.Minimised)
+				ww.publish(&layout.Minimised)
 			}
 		}
 	}
@@ -523,7 +531,7 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if mouse.In(ww.rect.mixer) {
 		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
-			ww.score.AddStaff(&score.BassClef)
+			ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
 			ww.renderstate.changed |= LAYOUT
 			ww.publish(&score.BassClef)
 			return
@@ -531,14 +539,14 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 		for staff, _ := range ww.rect.staves {
 			layout := ww.rect.mixers[staff]
 			if mouse.In(layout.minmaxB) {
-				staff.Minimised = false
-				for staff2, _ := range ww.rect.staves {
+				layout.Minimised = false
+				for staff2, layout2 := range ww.rect.mixers {
 					if staff2 != staff {
-						staff2.Minimised = true
+						layout2.Minimised = true
 					}
 				}
 				ww.renderstate.changed |= LAYOUT
-				ww.publish(&staff.Minimised)
+				ww.publish(&layout.Minimised)
 				return
 			}
 		}
