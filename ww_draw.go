@@ -244,7 +244,7 @@ func (ww *WaveWidget) drawMixer(dst draw.Image, infow int) {
 }
 
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
-	if ww.score == nil {
+	if ww.score == nil || !ww.score.HasBeats() {
 		return
 	}
 	black4 := color.RGBA{0x00, 0x00, 0x00, 0x88}

@@ -160,7 +160,7 @@ func (beats *BeatList) ToFrame(pt BeatPoint) (FrameN, bool) {
 
 /* returns a fractional beat, and true if it is within the defined beat range */
 func (beats *BeatList) ToBeat(frame FrameN) (BeatPoint, bool) {
-	if frame < beats.Head.frame || frame > beats.Tail.frame {
+	if !beats.HasBeats() || frame < beats.Head.frame || frame > beats.Tail.frame {
 		/* should perhaps extrapolate based on bpm... */
 		return BeatPt{nil, 0.0}, false
 	}
