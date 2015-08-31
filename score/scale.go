@@ -96,7 +96,7 @@ func (staff *Staff) accidental(tone int) int {
 	return staff.nsharps.accidental(tone)
 }
 
-func toneForPitch(pitch uint8, clef *Clef, key KeySig) int {
+func (key KeySig) toneForPitch(pitch uint8) int {
 	degree := int(pitch % 12)
 	for s, _ := range(scale2degree) {
 		if scale2degree[s] + key.accidental(s) == degree {
@@ -108,7 +108,7 @@ func toneForPitch(pitch uint8, clef *Clef, key KeySig) int {
 
 func lineWithAccidental(clef *Clef, nsharps KeySig, pitch uint8, dir int) (int, *int) {
 	p := pitch + uint8(dir)
-	tone := toneForPitch(p, clef, nsharps)
+	tone := nsharps.toneForPitch(p)
 	line, ok := lineForPitch(clef, nsharps, p)
 	if !ok {
 		return tone, nil
@@ -135,7 +135,7 @@ func chooseAccidental(clef *Clef, key KeySig, pitch uint8) (int, *int) {
 
 /* raw pitch -> line conversion, no accidentals considered. */
 func lineForPitch(clef *Clef, nsharps KeySig, pitch uint8) (int, bool) {
-	tone := toneForPitch(pitch, clef, nsharps)
+	tone := nsharps.toneForPitch(pitch)
 	if tone == -1 {
 		return 0, false
 	}
@@ -154,13 +154,14 @@ func lineForPitch(clef *Clef, nsharps KeySig, pitch uint8) (int, bool) {
 }
 
 func (staff *Staff) LineForPitch(pitch uint8) (int, *int) {
-	clef := staff.clef
-	key := staff.nsharps
-	delta, ok := lineForPitch(clef, key, pitch)
-	if !ok {
-		return chooseAccidental(clef, key, pitch)
+	return staff.clef.LineForPitch(staff.nsharps, pitch)
+}
+
+func (clef *Clef) LineForPitch(key KeySig, pitch uint8) (int, *int) {
+	if delta, ok := lineForPitch(clef, key, pitch); ok {
+		return delta, nil
 	}
-	return delta, nil
+	return chooseAccidental(clef, key, pitch)
 }
 
 func (clef Clef) tones2lines(tones []int) []int {
