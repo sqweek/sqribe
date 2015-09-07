@@ -97,7 +97,6 @@ func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 		staff := score.MkStaff(sv.Name, clef, score.KeySig(sv.Nsharps))
 		sc.AddNotes(staff, loadNotes(sc, staff, sv.Notes, beats)...)
 		staves = append(staves, staff)
-		fmt.Println(staff)
 		Mixer.LoadStaff(staff, sv)
 	}
 	sc.SetStaves(staves)

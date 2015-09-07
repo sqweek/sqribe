@@ -251,11 +251,12 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
 	lastFrame := ww.VisibleFrameRange().MaxFrame()
 	minX, maxX := -1, -1
-	b0 := ww.score.NearestBeat(ww.first_frame)
+	b0 := ww.score.NearestBeat(ww.first_frame).LPrev()
 	i := b0.BeatNum() - 1
 	for beat := b0; beat != nil; beat = beat.Next() {
 		if beat.Frame() < ww.first_frame {
 			minX = r.Min.X
+			i++
 			continue
 		}
 		if beat.Frame() > lastFrame {
