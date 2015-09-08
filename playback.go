@@ -216,6 +216,7 @@ func play(rng TimeRange) {
 	/* synth & sample feeding thread */
 	go func() {
 		var in Samples
+		var cutoff FrameN
 		woodblock := Synth.Inst(midi.InstWoodblock)
 		bhead, bev := beatlst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
 		bon := false
@@ -249,15 +250,17 @@ func play(rng TimeRange) {
 					bev = bhead
 					audio.Play(in.frame)
 				}
+				cutoff = in.frame
 			}
 			buf := in.buf[:bufsiz]
 			in.buf = in.buf[bufsiz:]
+			cutoff += nf
 
 			/* turn notes off first so notes at the same pitch directly following
 			** one another don't get truncated */
 			for j := len(offlist) - 1; j >= 0; j-- {
 				// XXX sorted list might be simpler?
-				if offlist[j].End < in.frame + nf {
+				if offlist[j].End < cutoff {
 					Synth.NoteOff(offlist[j].Chan, offlist[j].Pitch)
 					if j == len(offlist) - 1 {
 						offlist = offlist[:j]
@@ -271,7 +274,7 @@ func play(rng TimeRange) {
 				Synth.NoteOff(woodblock, midi.PitchF6)
 				bon = false
 			} else if !Mixer.MuteMetronome {
-				for bev != nil && bev.Frame < in.frame + nf {
+				for bev != nil && bev.Frame < cutoff {
 					if !bon {
 						Synth.NoteOn(woodblock, midi.PitchF6, 120)
 						bon = true
@@ -280,7 +283,7 @@ func play(rng TimeRange) {
 				}
 			}
 			/* user placed notes */
-			for mev != nil && mev.Start < in.frame + nf {
+			for mev != nil && mev.Start < cutoff {
 				if !mev.Mix.Muted {
 					mev.Off.Chan = Synth.Inst(uint8(mev.Mix.Voice))
 					Synth.NoteOn(mev.Off.Chan, mev.Off.Pitch, uint8(mev.Mix.Velocity))
