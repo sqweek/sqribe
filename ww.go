@@ -6,7 +6,7 @@ import (
 	"time"
 	"fmt"
 
-	"github.com/sqweek/go.wde"
+	"github.com/skelterjohn/go.wde"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/midi"

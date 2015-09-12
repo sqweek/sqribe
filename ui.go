@@ -7,7 +7,7 @@ import (
 	"image"
 	"time"
 
-	"github.com/sqweek/go.wde"
+	"github.com/skelterjohn/go.wde"
 
 	. "sqweek.net/sqribe/core/data"
 )
