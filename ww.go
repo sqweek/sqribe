@@ -31,8 +31,6 @@ const (
 	EVERYTHING changeMask = MAXBIT - 1
 )
 
-const beatIncursion = 5 // pixels
-
 const yspacing = 12 // pixels between staff lines
 
 type noteProspect struct {
@@ -236,7 +234,15 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return ww.rect.wave.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-func (ww *WaveWidget) dragBeat(min, max FrameN, beat *score.BeatRef) DragFn {
+func (ww *WaveWidget) beatDrag(beat *score.BeatRef) DragFn {
+	prev, next := beat.Prev(), beat.Next()
+	min, max := FrameN(0), ww.NFrames()
+	if next != nil {
+		max = next.Frame()
+	}
+	if prev != nil {
+		min = prev.Frame()
+	}
 	return func(pos image.Point, finished bool, moved bool) bool {
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max || !moved {
@@ -247,7 +253,7 @@ func (ww *WaveWidget) dragBeat(min, max FrameN, beat *score.BeatRef) DragFn {
 	}
 }
 
-func (ww *WaveWidget) selectDrag(anchor FrameN, snap bool) DragFn {
+func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
 	return func(pos image.Point, finished bool, moved bool)bool {
 		if !moved {
 			return false
@@ -309,18 +315,25 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	}
 }
 
-func (ww *WaveWidget) Minimised(staff *score.Staff) bool {
-	if layout, ok := ww.rect.mixers[staff]; ok {
-		return layout.Minimised
-	}
-	return false
-}
-
 func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
-	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
+	beath := 8
+	grabw := 2
 	sc := ww.score
+	bAxis, tAxis := mouse.In(ww.rect.beatAxis), mouse.In(ww.rect.timeAxis)
+	snap := bAxis && sc != nil && sc.HasBeats()
+	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
+		return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
+	}
+	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
+		return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
+	}
+	if bAxis || tAxis {
+		return ww.timeSelectDrag(ww.FrameAtPixel(mouse.X), snap), wde.IBeamCursor
+	}
+
+	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
 	for staff, rect := range ww.rect.staves {
-		if ww.Minimised(staff) || !mouse.In(rect) {
+		if mix, ok := ww.rect.mixers[staff]; (ok && mix.Minimised) || !mouse.In(rect) {
 			continue
 		}
 		mid := rect.Min.Y + rect.Dy() / 2
@@ -341,38 +354,16 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	}
 
 	// TODO ignore beat grabs when sufficiently zoomed out
-	if sc != nil {
+	if sc != nil && mouse.Y <= ww.rect.wave.Min.Y + beath {
 		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
 		if beat != nil {
 			x := ww.PixelAtFrame(beat.Frame())
-			y0 := ww.rect.wave.Min.Y
-			r := image.Rect(x, y0, x + 1, y0 + beatIncursion)
-			if mouse.In(padRect(r, 2, 0)) {
-				prev, next := beat.Prev(), beat.Next()
-				min, max := FrameN(0), ww.NFrames()
-				if next != nil {
-					max = next.Frame()
-				}
-				if prev != nil {
-					min = prev.Frame()
-				}
-				return ww.dragBeat(min, max, beat), wde.ResizeEWCursor
+			if x - grabw <= mouse.X && mouse.X <= x + grabw {
+				return ww.beatDrag(beat), wde.ResizeEWCursor
 			}
 		}
 	}
 
-	snap := ww.score != nil && ww.score.HasBeats() && (mouse.Y - ww.r.Min.Y < 4 * ww.r.Dy() / 5)
-	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), 2, 0)) {
-		return ww.selectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
-	}
-	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MaxFrame())), 2, 0)) {
-		return ww.selectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
-	}
-
-	/* if we're not dragging anything in particular, drag to select */
-	if mouse.In(ww.rect.wave) {
-		return ww.selectDrag(ww.FrameAtPixel(mouse.X), snap), wde.NormalCursor
-	}
 	return nil, wde.NormalCursor
 }
 
