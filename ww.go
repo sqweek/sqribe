@@ -53,6 +53,7 @@ type mouseState struct {
 	dragFn DragFn
 	note *noteProspect
 	ndelta *noteDrag
+	rectSelect *image.Rectangle
 }
 
 type WaveWidget struct {
@@ -315,6 +316,33 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	}
 }
 
+func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
+	// XXX funny interaction with scrolling because we hold on to pixel values
+	sc := ww.score
+	return func(end image.Point, finished bool, moved bool)bool {
+		r := image.Rectangle{start, end}.Canon()
+		if !finished {
+			ww.getMouseState(end).rectSelect = &r
+			ww.renderstate.changed |= SCALE
+			ww.publish(r)
+		} else {
+			var sn score.StaffNote
+			next := sc.Iter(ww.VisibleFrameRange())
+			for next != nil {
+				sn, next = next()
+				dn := ww.dispNote(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
+				if dn.pt != nil && dn.pt.In(r) {
+					ww.notesel[sn.Note] = sn.Staff
+				}
+			}
+			ww.getMouseState(end).rectSelect = nil
+			ww.renderstate.changed |= SCALE
+			ww.publish(&ww.notesel)
+		}
+		return true
+	}
+}
+
 func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	beath := 8
 	grabw := 2
@@ -362,6 +390,10 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 				return ww.beatDrag(beat), wde.ResizeEWCursor
 			}
 		}
+	}
+
+	if mouse.In(ww.rect.wave) {
+		return ww.noteSelectDrag(mouse), wde.NormalCursor
 	}
 
 	return nil, wde.NormalCursor

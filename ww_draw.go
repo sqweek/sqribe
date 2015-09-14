@@ -282,6 +282,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 	if minX >= maxX || minX == -1 || maxX == -1 {
 		return
 	}
+	selRect := ww.getMouseState(ww.mouse.pos).rectSelect
 	for _, staff := range ww.score.Staves() {
 		if mix, ok := ww.rect.mixers[staff]; ok && mix.Minimised {
 			continue
@@ -290,9 +291,13 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		mid := rect.Min.Y + rect.Dy() / 2
 		drawStaffLines(dst, black4, minX, maxX, mid)
 
-		ww.drawNotes(dst, r, staff, mid)
+		ww.drawNotes(dst, r, staff, mid, selRect)
 
 		ww.drawProspectiveNote(dst, r, staff, mid)
+	}
+	if selRect != nil {
+		drawBorders(dst, *selRect, color.NRGBA{0xff,0xff,0xff,0x88}, color.NRGBA{0xff,0xff,0xff,0x44})
+		// TODO highlight notes within selection rect
 	}
 }
 
@@ -377,56 +382,57 @@ type DisplayNote struct {
 	duration float64
 	beatf score.BeatPoint
 	downBeam bool
+	pt *image.Point // centre of note head. nil if not visible
 }
 
-func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note) *DisplayNote {
+func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int) *DisplayNote {
 	dn := DisplayNote{}
 	dn.beatf = ww.score.Beatf(note)
 	dn.duration = note.Durf()
 	dn.delta, dn.accidental = staff.LineForPitch(note.Pitch)
 	dn.downBeam = (dn.delta > 2)
+	rng:= ww.VisibleFrameRange()
+	frame, _ := ww.score.ToFrame(dn.beatf)
+	if frame >= rng.MinFrame() && frame <= rng.MaxFrame() {
+		dn.pt = &image.Point{ww.PixelAtFrame(frame), mid - (yspacing / 2) * dn.delta}
+	}
 	return &dn
 }
 
 func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *DisplayNote) {
-	black := color.NRGBA{0, 0, 0, n.col.A}
-	rng:= ww.VisibleFrameRange()
-	frame, _ := ww.score.ToFrame(n.beatf)
-	if frame < rng.MinFrame() || frame > rng.MaxFrame() {
+	if n.pt == nil {
 		return
 	}
-
-	x := ww.PixelAtFrame(frame)
-	y := mid - (yspacing / 2) * n.delta
+	black := color.NRGBA{0, 0, 0, n.col.A}
 
 	/* ledger lines */
-	ydist := int(math.Abs(float64(y - mid)))
+	ydist := int(math.Abs(float64(n.pt.Y - mid)))
 	sgn := 1
-	if (mid > y) {
+	if (mid > n.pt.Y) {
 		sgn = -1
 	}
 	for dy := yspacing * 3; dy <= ydist; dy += yspacing {
 		width := yspacing / 2 + 1
-		line := image.Rect(x - width, mid + sgn*dy, x + width + 1, mid + sgn*(dy + 1))
+		line := image.Rect(n.pt.X - width, mid + sgn*dy, n.pt.X + width + 1, mid + sgn*(dy + 1))
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
 
 	var head *NoteHead
 	if n.duration < 2 {
-		head = newNoteHead(n.col, image.Point{x, y}, yspacing/2, 35.0)
+		head = newNoteHead(n.col, *n.pt, yspacing/2, 35.0)
 	} else {
-		head = newHollowNote(n.col, image.Point{x, y}, yspacing/2, 35.0)
+		head = newHollowNote(n.col, *n.pt, yspacing/2, 35.0)
 	}
 	draw.Draw(dst, r, head, r.Min, draw.Over)
 	if n.duration <= 3 {
 		var beamEnd image.Point
 		var beam image.Rectangle
 		if n.downBeam {
-			beamEnd = image.Pt(x - yspacing/2, y + yspacing * 2.5)
-			beam = image.Rectangle{image.Pt(x - yspacing/2, y), beamEnd.Add(image.Pt(1,1))}
+			beamEnd = n.pt.Add(image.Pt(-yspacing/2 + 1, yspacing * 2.5 + 1))
+			beam = image.Rectangle{n.pt.Add(image.Pt(-yspacing/2, 0)), beamEnd}
 		} else {
-			beamEnd = image.Pt(x + yspacing/2 - 1, y - yspacing * 2.5 - 1)
-			beam = image.Rectangle{beamEnd, image.Pt(x + yspacing/2, y)}
+			beamEnd = n.pt.Add(image.Pt(yspacing/2 - 1, -yspacing * 2.5 - 1))
+			beam = image.Rectangle{beamEnd, n.pt.Add(image.Pt(yspacing/2, 0))}
 		}
 		draw.Draw(dst, beam, &image.Uniform{n.col}, r.Min, draw.Over)
 		i := 0
@@ -453,15 +459,15 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		}
 	}
 	for i := 0; i < dotted; i++ {
-		draw.Draw(dst, r, &DotGlyph{CenteredGlyph{n.col, image.Point{x + yspacing/2 + 3 + 5*i, y}, yspacing/2}}, r.Min, draw.Over)
+		draw.Draw(dst, r, &DotGlyph{CenteredGlyph{n.col, n.pt.Add(image.Pt(yspacing/2 + 3 + 5*i, 0)), yspacing/2}}, r.Min, draw.Over)
 	}
 	if n.accidental != nil {
-		draw.Draw(dst, r, newAccidental(n.col, image.Point{x - yspacing, y}, yspacing/2, *n.accidental), r.Min, draw.Over)
+		draw.Draw(dst, r, newAccidental(n.col, n.pt.Sub(image.Pt(yspacing, 0)), yspacing/2, *n.accidental), r.Min, draw.Over)
 	}
 }
 
 
-func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
+func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int, selRect *image.Rectangle) {
 	next := score.Chords(ww.score.Iter(ww.VisibleFrameRange(), staff))
 	var chord []score.StaffNote
 	for next != nil {
@@ -469,7 +475,7 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 		downBeam := true
 		notes := make([]*DisplayNote, len(chord))
 		for i, sn := range chord {
-			notes[i] = ww.dispNote(staff, sn.Note)
+			notes[i] = ww.dispNote(staff, sn.Note, mid)
 			downBeam = downBeam && (notes[i].delta > 2)
 		}
 		for i, note := range notes {
@@ -481,6 +487,8 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 					α = 0x88
 				}
 				note.col = color.NRGBA{0x88, 0x88, 0x88, α}
+			} else if note.pt != nil && selRect != nil && note.pt.In(*selRect) {
+				note.col = color.NRGBA{0x66, 0x66, 0xaa, 0xff}
 			} else {
 				note.col = color.NRGBA{0, 0, 0, 0xff}
 			}
@@ -499,7 +507,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 				continue
 			}
 			note := sn.Note.Dup().Mv(s.ndelta.Δpitch, s.ndelta.Δbeat)
-			n := ww.dispNote(sn.Staff, note)
+			n := ww.dispNote(sn.Staff, note, mid)
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
 		}
@@ -510,7 +518,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		beat, offset := sc.Quantize(s.note.beatf)
 		Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 		for _, note := range ww.snarf[staff] {
-			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat))
+			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat), mid)
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
 		}
@@ -518,7 +526,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		var dur big.Rat
 		dur.SetString(menu)
 		n := ww.mkNote(s.note, &dur)
-		note := ww.dispNote(staff, n)
+		note := ww.dispNote(staff, n, mid)
 		// could avoid transitioning through staff.Note except for NoteAt
 		existingNote := staff.NoteAt(n)
 		if existingNote == nil {
