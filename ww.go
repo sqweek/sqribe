@@ -100,11 +100,15 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	return &ww
 }
 
+func (ww *WaveWidget) changed(mask changeMask, ev interface{}) {
+	ww.renderstate.changed |= mask
+	ww.publish(ev)
+}
+
 func (ww *WaveWidget) SelectAudio(sel TimeRange) {
 	ww.selection = sel
 	G.plumb.selection.C <- sel
-	ww.renderstate.changed |= SELXN
-	ww.refresh <- ww
+	ww.changed(SELXN, sel)
 }
 
 func (ww *WaveWidget) SelectAudioSnapToBeats(start, end FrameN) {
@@ -146,14 +150,12 @@ func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
 				frng:= ww.VisibleFrameRange()
 				s0, sN := ww.wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
 				if chunk.Intersects(s0, sN) {
-					ww.renderstate.changed |= WAV
-					ww.publish(chunk)
+					ww.changed(WAV, chunk)
 				}
 			}
 		}()
 	}
-	ww.renderstate.changed |= WAV | VIEWPOS
-	ww.publish(wav)
+	ww.changed(WAV | VIEWPOS, wav)
 }
 
 func (ww *WaveWidget) SetScore(sc *score.Score) {
@@ -181,16 +183,14 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 					}
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
-				ww.renderstate.changed |= SCALE
-				ww.publish(ev)
+				ww.changed(SCALE, ev)
 			}
 		}()
 		selxn := make(chan interface{})
 		G.plumb.selection.Sub(&sc, selxn)
 		sc.InitQuantizer(selxn)
 	}
-	ww.renderstate.changed |= SCALE | LAYOUT
-	ww.publish(sc)
+	ww.changed(SCALE | LAYOUT, sc)
 }
 
 func (ww *WaveWidget) SelectedNotes() []score.StaffNote {
@@ -209,8 +209,7 @@ func (ww *WaveWidget) VisibleFrameRange() FrameRange {
 
 func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {
 	ww.cursorX = ww.PixelAtFrame(frame)
-	ww.renderstate.changed |= CURSOR
-	ww.publish(frame)
+	ww.changed(CURSOR, frame)
 }
 
 func (ww *WaveWidget) NFrames() FrameN {
@@ -300,8 +299,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 				} else {
 					delete(ww.notesel, note)
 				}
-				ww.renderstate.changed |= SCALE
-				ww.publish(ww.notesel)
+				ww.changed(SCALE, ww.notesel)
 			}
 		} else {
 			if selected {
@@ -309,8 +307,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 			} else {
 				ww.getMouseState(pos).note = prospect
 			}
-			ww.renderstate.changed |= SCALE
-			ww.publish(prospect)
+			ww.changed(SCALE, prospect)
 		}
 		return true
 	}
@@ -323,8 +320,7 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 		r := image.Rectangle{start, end}.Canon()
 		if !finished {
 			ww.getMouseState(end).rectSelect = &r
-			ww.renderstate.changed |= SCALE
-			ww.publish(r)
+			ww.changed(SCALE, r)
 		} else {
 			var sn score.StaffNote
 			next := sc.Iter(ww.VisibleFrameRange())
@@ -336,8 +332,7 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 				}
 			}
 			ww.getMouseState(end).rectSelect = nil
-			ww.renderstate.changed |= SCALE
-			ww.publish(&ww.notesel)
+			ww.changed(SCALE, &ww.notesel)
 		}
 		return true
 	}
@@ -492,13 +487,11 @@ func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
 	orig := ww.mouse.state
 	s := ww.getMouseState(mousePos)
 	if s.note != nil && (orig == nil || orig.note == nil || !s.note.Eq(orig.note)) {
-		ww.renderstate.changed |= SCALE
-		ww.publish(mousePos)
+		ww.changed(SCALE, mousePos)
 	}
 	if !audio.IsPlaying() && ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
 		ww.cursorX = mousePos.X
-		ww.renderstate.changed |= CURSOR
-		ww.publish(ww.cursorX)
+		ww.changed(CURSOR, ww.cursorX)
 	}
 	return s.cursor
 }
@@ -511,8 +504,7 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
 		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
-		ww.renderstate.changed |= LAYOUT
-		ww.publish(&score.TrebleClef)
+		ww.changed(LAYOUT, &score.TrebleClef)
 		return
 	}
 	for staff, layout := range ww.rect.mixers {
@@ -521,8 +513,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 				toggle(&Mixer.For(staff).Muted)
 			} else if mouse.In(layout.minmaxB) {
 				toggle(&layout.Minimised)
-				ww.renderstate.changed |= LAYOUT
-				ww.publish(&layout.Minimised)
+				ww.changed(LAYOUT, &layout.Minimised)
 			}
 		}
 	}
@@ -555,8 +546,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if mouse.In(ww.rect.mixer) {
 		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
 			ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
-			ww.renderstate.changed |= LAYOUT
-			ww.publish(&score.BassClef)
+			ww.changed(LAYOUT, &score.BassClef)
 			return
 		}
 		for staff, _ := range ww.rect.staves {
@@ -568,8 +558,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 						layout2.Minimised = true
 					}
 				}
-				ww.renderstate.changed |= LAYOUT
-				ww.publish(&layout.Minimised)
+				ww.changed(LAYOUT, &layout.Minimised)
 				return
 			}
 		}
@@ -623,9 +612,8 @@ func (ww *WaveWidget) ScrollPixels(dx int) int {
 	}
 	diff := int(ww.first_frame - original)
 	if diff != 0 {
-		ww.renderstate.changed |= WAV | CURSOR | VIEWPOS
 		ww.mouse.state = nil
-		ww.publish(ww.first_frame)
+		ww.changed(WAV | CURSOR | VIEWPOS, ww.first_frame)
 	}
 	return diff
 }
@@ -643,9 +631,8 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 		dx := x - ww.rect.wave.Min.X
 		ww.first_frame = frameAtMouse - FrameN(dx * fpp)
 		ww.frames_per_pixel = fpp
-		ww.renderstate.changed |= WAV | CURSOR | VIEWPOS
 		ww.mouse.state = nil
-		ww.publish(fpp)
+		ww.changed(WAV | CURSOR | VIEWPOS, fpp)
 	}
 	return delta
 }
@@ -667,8 +654,7 @@ func (ww *WaveWidget) SetPasteMode(mode bool) {
 		return
 	}
 	ww.pasteMode = mode
-	ww.renderstate.changed |= SCALE
-	ww.publish(ww.snarf)
+	ww.changed(SCALE, ww.snarf)
 }
 
 func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {
