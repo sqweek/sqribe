@@ -316,12 +316,18 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 	// XXX funny interaction with scrolling because we hold on to pixel values
 	sc := ww.score
+	addToSel := G.kb.shift
 	return func(end image.Point, finished bool, moved bool)bool {
 		r := image.Rectangle{start, end}.Canon()
 		if !finished {
 			ww.getMouseState(end).rectSelect = &r
 			ww.changed(SCALE, r)
 		} else {
+			if !(addToSel || G.kb.shift) {
+				for note, _ := range ww.notesel {
+					delete(ww.notesel, note)
+				}
+			}
 			var sn score.StaffNote
 			next := sc.Iter(ww.VisibleFrameRange())
 			for next != nil {

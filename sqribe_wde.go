@@ -85,6 +85,16 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				cur = G.ww.MouseMoved(e.Where)
 			}
 			win.SetCursor(cur)
+		case wde.KeyDownEvent:
+			switch e.Key {
+			case wde.KeyLeftShift, wde.KeyRightShift:
+				G.kb.shift = true
+			}
+		case wde.KeyUpEvent:
+			switch e.Key {
+			case wde.KeyLeftShift, wde.KeyRightShift:
+				G.kb.shift = false
+			}
 		case wde.KeyTypedEvent:
 			log.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch {

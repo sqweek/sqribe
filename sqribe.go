@@ -36,6 +36,9 @@ var G struct {
 	font struct {
 		luxi *Font
 	}
+	kb struct {
+		shift bool
+	}
 }
 
 func open(filename string) error {
