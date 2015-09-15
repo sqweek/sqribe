@@ -500,7 +500,9 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 
 func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
 	s := ww.getMouseState(ww.mouse.pos)
-	menu, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
+	if s.rectSelect != nil {
+		return // dragging to select notes
+	}
 	if s.ndelta != nil {
 		for _, sn := range ww.SelectedNotes() {
 			if sn.Staff != staff {
@@ -523,6 +525,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 			ww.drawNote(dst, r, mid, n)
 		}
 	} else if s.note != nil && s.note.staff == staff {
+		menu, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 		var dur big.Rat
 		dur.SetString(menu)
 		n := ww.mkNote(s.note, &dur)
