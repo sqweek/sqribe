@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"sqweek.net/sqribe/audio"
@@ -212,6 +213,7 @@ func play(rng TimeRange) {
 	scorechan := make(chan PlayChange)
 	G.plumb.score.Sub(&playState, coalesced(scorechan))
 
+	var mpeak, wpeak float64 = 0, 0
 	audio.Play(rng.MinFrame())
 	/* synth & sample feeding thread */
 	go func() {
@@ -294,15 +296,29 @@ func play(rng TimeRange) {
 
 			Synth.WriteFrames(mbuf)
 			α, β := 0.0, 0.0
-			bias := Mixer.Bias.Value()
-			if !Mixer.MuteWave {
-				α = 0.5 + bias
+			if !Mixer.Wave.Muted {
+				α = Mixer.Wave.Gain
 			}
-			if !Mixer.MuteMidi {
-				β = 0.5 - bias
+			if !Mixer.Midi.Muted {
+				β = Mixer.Midi.Gain
 			}
+			γ := Mixer.Master.Gain
+			agc := 1.0
 			for j := 0; j < bufsiz; j++ {
-				mbuf[j] = int16(α * float64(buf[j]) + β * float64(mbuf[j]))
+				w, m := γ * α * float64(buf[j]), γ * β * float64(mbuf[j])
+				wpeak = math.Max(wpeak, math.Abs(w))
+				mpeak = math.Max(mpeak, math.Abs(m))
+				if math.Abs(agc*(w + m)) > 32700 {
+					f := math.Abs(w + m) / 32700
+					for k := j - 1; k >= 0; k-- {
+						mbuf[k] = int16(float64(mbuf[k]) / f)
+					}
+					agc /= f
+				}
+				mbuf[j] = int16(agc*(w + m))
+			}
+			if agc != 1.0 {
+				Mixer.Master.Gain = γ * agc
 			}
 			audio.Append(mbuf)
 		}
@@ -333,6 +349,9 @@ func play(rng TimeRange) {
 				break
 			}
 			G.ww.SetCursorByFrame(f)
+			m, w := mpeak, wpeak
+			mpeak, wpeak = 0, 0
+			G.mixw.Levels(m/32700, w/32700)
 			time.Sleep(66 * time.Millisecond)
 		}
 	}()

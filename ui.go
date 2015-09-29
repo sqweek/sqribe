@@ -5,11 +5,10 @@ import (
 	"image/draw"
 	"image/color"
 	"image"
+	"sort"
 	"time"
 
 	"github.com/skelterjohn/go.wde"
-
-	. "sqweek.net/sqribe/core/data"
 )
 
 type DragFn func(pos image.Point, finished, moved bool) bool
@@ -128,61 +127,42 @@ func (w *WidgetCore) publish(ev interface{}) {
 	}
 }
 
-type SliderWidget struct {
-	WidgetCore
-	data *BoundFloat
-	vertical bool
-}
-
-type SliderMoved struct {
-	Slider *SliderWidget
-}
-
-func NewSlider(data *BoundFloat, vert bool, refresh chan Widget) *SliderWidget {
-	changes := make(chan interface{})
-	slider := SliderWidget{WidgetCore{refresh: refresh}, data, vert}
-	data.Port().Sub(&slider, changes)
-	go func() {
-		for _ = range changes {
-			refresh <- &slider
-		}
-	}()
-	return &slider
-}
-
-func (s *SliderWidget) LeftClick(mouse image.Point) {
-	s.data.Shunt(-0.05)
-}
-
-func (s *SliderWidget) RightClick(mouse image.Point) {
-	s.data.Shunt(0.05)
-}
-
-func (s *SliderWidget) Draw(dst draw.Image, r image.Rectangle) {
-	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
-	fg := color.RGBA{0x00, 0x00, 0x00, 255}
-	s.r = r
-	posn := s.data.Posn()
-	if s.vertical {
-		drawVertSlider(dst, r, bg, fg, posn)
-	} else {
-		drawHorzSlider(dst, r, bg, fg, posn)
-	}
-}
-
-func drawHorzSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
+func drawHorzSlider(dst draw.Image, r image.Rectangle, fg color.Color, posn float64) {
 	mid := r.Min.Y + r.Dy() / 2
-	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)
 	x := int(float64(r.Min.X) + posn * float64(r.Dx()) + 0.5)
 	draw.Draw(dst, image.Rect(x - 1, r.Min.Y + 1, x + 2, r.Max.Y - 2), &image.Uniform{fg}, image.ZP, draw.Over)
 }
 
-func drawVertSlider(dst draw.Image, r image.Rectangle, bg, fg color.Color, posn float64) {
+func drawVertSlider(dst draw.Image, r image.Rectangle, fg color.Color, posn float64) {
 	mid := r.Min.X + r.Dx() / 2
-	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Over)
 	draw.Draw(dst, image.Rect(mid, r.Min.Y, mid + 1, r.Max.Y), &image.Uniform{fg}, image.ZP, draw.Over)
 	y := int(float64(r.Max.Y) - posn * float64(r.Dy()) + 0.5)
 	x := r.Dx() / 2 - 1
 	draw.Draw(dst, image.Rect(mid - x, y - 1, mid + x + 1, y + 2), &image.Uniform{fg}, image.ZP, draw.Over)
+}
+
+type ColourBar struct {
+	pts []ColourPoint
+}
+
+type ColourPoint struct {
+	x float64
+	col color.Color
+}
+
+func (cb ColourBar) At(x float64) color.Color {
+	i := sort.Search(len(cb.pts), func(i int)bool { return x <= cb.pts[i].x })
+	if i >= len(cb.pts) {
+		return cb.pts[len(cb.pts)-1].col
+	} else if i == 0 {
+		return cb.pts[i].col
+	}
+	α := (x - cb.pts[i-1].x) / (cb.pts[i].x - cb.pts[i-1].x)
+	r0, g0, b0, a0 := cb.pts[i-1].col.RGBA()
+	r1, g1, b1, a1 := cb.pts[i].col.RGBA()
+	f0, f1 := a0/255, a1/255
+	θ := func(a, b uint32)uint8 { return uint8((1-α)*float64(a/f0) + α*float64(b/f1)) }
+	c := color.RGBA{θ(r0, r1), θ(g0, g1), θ(b0, b1), θ(a0, a1)}
+	return c
 }

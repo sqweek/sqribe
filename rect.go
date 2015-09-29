@@ -37,7 +37,7 @@ func rightH(src, container image.Rectangle) image.Rectangle {
 
 func leftH(src, container image.Rectangle) image.Rectangle {
 	delta := container.Min.X - src.Min.X
-	return src.Sub(image.Point{delta, 0})
+	return src.Add(image.Point{delta, 0})
 }
 
 func leftRect(src image.Rectangle, width int) image.Rectangle {

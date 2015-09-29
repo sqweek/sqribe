@@ -64,14 +64,14 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case wde.LeftButton:
 				if e.Where.In(G.ww.Rect()) {
 					G.ww.LeftClick(e.Where)
-				} else if e.Where.In(G.waveBias.Rect()) {
-					G.waveBias.LeftClick(e.Where)
+				} else if e.Where.In(G.mixw.Rect()) {
+					G.mixw.LeftClick(e.Where)
 				}
 			case wde.RightButton:
 				if e.Where.In(G.ww.Rect()) {
 					G.ww.RightClick(e.Where)
-				} else if e.Where.In(G.waveBias.Rect()) {
-					G.waveBias.RightClick(e.Where)
+				} else if e.Where.In(G.mixw.Rect()) {
+					G.mixw.RightClick(e.Where)
 				}
 			}
 		case wde.MouseDraggedEvent:
@@ -111,6 +111,10 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Chord == "control+c":
 				G.ww.Snarf()
 				G.ww.SetPasteMode(true)
+			case e.Chord == "shift+prior":
+				G.mixw.AdjustGain(&Mixer.Midi.Gain, 0.1)
+			case e.Chord == "shift+next":
+				G.mixw.AdjustGain(&Mixer.Midi.Gain, -0.1)
 			case e.Key == wde.KeyEscape:
 				G.ww.SetPasteMode(false)
 			case e.Key == wde.KeyLeftArrow:
@@ -126,9 +130,9 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Key == wde.KeyF3:
 				G.score.KeyChange(1)
 			case e.Key == wde.KeyPrior:
-				Mixer.Bias.Shunt(0.1)
+				G.mixw.AdjustGain(&Mixer.Wave.Gain, 0.1)
 			case e.Key == wde.KeyNext:
-				Mixer.Bias.Shunt(-0.1)
+				G.mixw.AdjustGain(&Mixer.Wave.Gain, -0.1)
 			case e.Key == wde.KeySpace:
 				playToggle()
 			case e.Key == wde.KeyReturn:
@@ -140,11 +144,11 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Key == wde.KeyS:
 				SaveState(G.audiofile)
 			case e.Key == wde.KeyT:
-				toggle(&Mixer.MuteMetronome)
+				G.mixw.Toggle(&Mixer.MuteMetronome)
 			case e.Key == wde.KeyA:
-				toggle(&Mixer.MuteWave)
+				G.mixw.Toggle(&Mixer.Wave.Muted)
 			case e.Key == wde.KeyM:
-				toggle(&Mixer.MuteMidi)
+				G.mixw.Toggle(&Mixer.Midi.Muted)
 			case e.Key == wde.KeyQ:
 				go G.score.QuantizeBeats()
 			case e.Key == wde.KeyX:
@@ -232,11 +236,11 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				width, height := w.Size()
 				r := image.Rect(0, 0, width, height)
 				img := image.NewRGBA(r)
-				wvR := image.Rect(0, 30, width, height - 20)
+				wvR := image.Rect(0, 50, width, height - 20)
 				G.ww.Draw(img, wvR)
 
-				mixR := image.Rect(width - 50, wvR.Min.Y - 15, width, wvR.Min.Y)
-				G.waveBias.Draw(img, mixR)
+				mixR := image.Rect(width - 90, wvR.Min.Y - 50, width, wvR.Min.Y)
+				G.mixw.Draw(img, mixR)
 
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
 				drawstatus(img, statusR)
@@ -272,8 +276,6 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 	wg.Add(1)
 
 	done := make(chan bool)
-
-	G.waveBias = NewSlider(Mixer.Bias, false, redraw)
 
 	go drawstuff(dw, redraw, done)
 	go event(dw, redraw, done, &wg)

@@ -12,8 +12,6 @@ import (
 	"sqweek.net/sqribe/plumb"
 	"sqweek.net/sqribe/score"
 	"sqweek.net/sqribe/wave"
-
-	. "sqweek.net/sqribe/core/data"
 )
 
 var G struct {
@@ -30,9 +28,9 @@ var G struct {
 
 	/* ui stuff */
 	ww *WaveWidget
+	mixw *MixWidget
 	instMenu MenuWidget
 	noteMenu MenuWidget
-	waveBias *SliderWidget
 	font struct {
 		luxi *Font
 	}
@@ -74,8 +72,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	Mixer.Bias = MkBoundFloat(0, -0.5, 0.5, nil)
-
 	G.plumb.selection = plumb.MkPort()
 	G.plumb.score = plumb.MkPort()
 
@@ -94,6 +90,7 @@ func main() {
 	redraw := make(chan Widget, 10)
 
 	G.ww = NewWaveWidget(redraw)
+	G.mixw = NewMixWidget(redraw)
 
 	wg := InitWde(redraw)
 

@@ -372,7 +372,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 
 //	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
 //	drawBorders(dst, restR, border, bg)
-	drawVertSlider(dst, layout.volS, bg, fg, float64(mix.Velocity) / 127.0)
+	drawVertSlider(dst, layout.volS, fg, float64(mix.Velocity) / 127.0)
 }
 
 type DisplayNote struct {

@@ -40,7 +40,9 @@ type stateV1 struct {
 	Filename string
 	Beats []FrameN
 	Staves []SavedStaff
-	MixWeight float64
+	MasterGain float64 `json:",omitempty"`
+	WaveGain float64 `json:",omitempty"`
+	MidiGain float64 `json:",omitempty"`
 	MetronomeOff bool `json:",omitempty"`
 	WaveOff bool `json:",omitempty"`
 	MidiOff bool `json:",omitempty"`
@@ -106,19 +108,23 @@ func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
-	s.MixWeight = Mixer.Bias.Value()
+	s.MasterGain = Mixer.Master.Gain - 1.0
+	s.WaveGain = Mixer.Wave.Gain - 1.0
+	s.MidiGain = Mixer.Midi.Gain - 1.0
 	s.MetronomeOff = Mixer.MuteMetronome
-	s.WaveOff = Mixer.MuteWave
-	s.MidiOff = Mixer.MuteMidi
+	s.WaveOff = Mixer.Wave.Muted
+	s.MidiOff = Mixer.Midi.Muted
 }
 
 func (s *stateV1) Restore() {
 	G.score.LoadBeats(s.Beats)
 	loadStaves(&G.score, s.Staves, s.Beats)
-	Mixer.Bias.Set(s.MixWeight)
+	Mixer.Master.Gain = s.MasterGain + 1.0
+	Mixer.Wave.Gain = s.WaveGain + 1.0
+	Mixer.Midi.Gain = s.MidiGain + 1.0
 	Mixer.MuteMetronome = s.MetronomeOff
-	Mixer.MuteWave = s.WaveOff
-	Mixer.MuteMidi = s.MidiOff
+	Mixer.Wave.Muted = s.WaveOff
+	Mixer.Midi.Muted = s.MidiOff
 }
 
 type VersionHeader struct {
