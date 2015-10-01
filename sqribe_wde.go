@@ -247,7 +247,9 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				G.mixw.Draw(screen, mixR)
 
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
-				drawstatus(screen, statusR)
+				statusI := image.NewRGBA(statusR)
+				drawstatus(statusI, statusR)
+				screen.CopyRGBA(statusI, statusR)
 
 				if !G.noteMenu.Rect().Empty() {
 					G.noteMenu.Draw(screen, G.noteMenu.Rect())
