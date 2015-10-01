@@ -78,6 +78,8 @@ type WaveWidget struct {
 		img *image.RGBA
 		waveRulers *image.RGBA
 		changed changeMask
+		cursor *image.RGBA
+		cursorPrevX int
 	}
 	mouse struct {
 		pos image.Point
@@ -471,6 +473,7 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 					id, ok := item.(int)
 					if item != nil && ok {
 						Mixer.For(staff).Voice = id
+						ww.changed(MIXER, ww)
 					}
 				}()
 				return G.instMenu.Drag
@@ -480,6 +483,7 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 						α := float64(pos.Y - layout.volS.Min.Y) / float64(layout.volS.Dy())
 						vel := 127 - int(127.0 * α + 0.5)
 						Mixer.For(staff).Velocity = vel
+						ww.changed(MIXER, ww)
 						return true
 					}
 					return false
@@ -519,6 +523,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 		if mouse.In(layout.r) {
 			if mouse.In(layout.muteB) {
 				toggle(&Mixer.For(staff).Muted)
+				ww.changed(MIXER, ww)
 			} else if mouse.In(layout.minmaxB) {
 				toggle(&layout.Minimised)
 				ww.changed(LAYOUT, &layout.Minimised)

@@ -118,12 +118,23 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		/* our widget size has chaged, relayout & redraw everything */
 		change |= EVERYTHING
 		ww.renderstate.waveRulers = nil
+		ww.renderstate.img = nil
+		ww.renderstate.cursor = nil
 	}
 	if change != 0 {
 		if change & LAYOUT != 0 {
 			ww.rect.layout(r, ww.score)
 		}
-		ww.renderstate.img = image.NewRGBA(ww.Rect())
+		if ww.renderstate.cursor == nil {
+			curcol := color.RGBA{0, 0xdd, 0, 255}
+			img := image.NewRGBA(vrect(r, 0))
+			draw.Draw(img, img.Rect, &image.Uniform{curcol}, image.ZP, draw.Src)
+			ww.renderstate.cursor = img
+		}
+		if ww.renderstate.img == nil {
+			ww.renderstate.img = image.NewRGBA(ww.Rect())
+			change |= EVERYTHING
+		}
 		if ww.renderstate.waveRulers == nil {
 			ww.renderstate.waveRulers = image.NewRGBA(ww.rect.waveRulers)
 			change |= WAV | BEATS | VIEWPOS
@@ -137,15 +148,40 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		if change & VIEWPOS != 0 {
 			ww.drawTimeAxis(ww.renderstate.waveRulers, ww.rect.timeAxis)
 		}
-		draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
-		ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
-		ww.drawMixer(ww.renderstate.img, ww.rect.mixer.Dx())
-		ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx())
+		switch {
+		case change & (WAV | BEATS | VIEWPOS) != 0:
+			change |= SELXN | SCALE | CURSOR
+			fallthrough
+		case change & (SELXN | SCALE) != 0:
+			draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
+		}
+		if change & (SELXN | SCALE | BEATS) != 0 {
+			ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
+			ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx())
+			img := ww.renderstate.img.SubImage(ww.rect.waveRulers).(*image.RGBA)
+			screen.CopyRGBA(img, ww.rect.waveRulers)
+			ww.drawCursor(screen, r, ww.cursorX, false)
+		} else if change & CURSOR != 0 {
+			ww.drawCursor(screen, r, ww.cursorX, true)
+		}
 
-		curcol := color.RGBA{0, 0xdd, 0, 255}
-		draw.Draw(ww.renderstate.img, image.Rect(ww.cursorX, r.Min.Y, ww.cursorX+1, r.Max.Y), &image.Uniform{curcol}, r.Min, draw.Src)
+		if change & (MIXER | LAYOUT) != 0 {
+			ww.drawMixer(ww.renderstate.img, ww.rect.mixer.Dx())
+			img := ww.renderstate.img.SubImage(ww.rect.mixer).(*image.RGBA)
+			screen.CopyRGBA(img, ww.rect.mixer)
+		}
 	}
-	screen.CopyRGBA(ww.renderstate.img, r)
+}
+
+func (ww *WaveWidget) drawCursor(screen wde.Image, r image.Rectangle, x int, restore bool) {
+	if restore {
+			prevR := vrect(r, ww.renderstate.cursorPrevX)
+			screen.CopyRGBA(ww.renderstate.img.SubImage(prevR).(*image.RGBA), prevR)
+	}
+	ww.renderstate.cursor.Rect.Min.X = x
+	ww.renderstate.cursor.Rect.Max.X = x+1
+	screen.CopyRGBA(ww.renderstate.cursor, ww.renderstate.cursor.Rect)
+	ww.renderstate.cursorPrevX = x
 }
 
 func colourFor(offset *big.Rat, α uint8) color.NRGBA {
