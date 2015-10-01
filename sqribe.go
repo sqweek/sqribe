@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/pprof"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
@@ -64,9 +65,19 @@ func mustMkFont(filename string, size int) *Font {
 	return font
 }
 
+var profile = flag.String("prof", "", "write cpu profile to file")
+
 func main() {
 	flag.Parse()
 
+	if *profile != "" {
+		f, err := os.Create(*profile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	err := audio.Open()
 	if err != nil {
 		log.Fatal(err)

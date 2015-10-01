@@ -5,6 +5,8 @@ import (
 	"image/draw"
 	"image"
 
+	"github.com/skelterjohn/go.wde"
+
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 )
@@ -62,7 +64,7 @@ func (v *VolLayout) layout(r image.Rectangle) {
 }
 
 type MixWidget struct {
-	WidgetCore
+	ImageWidget
 	mLevel, wLevel float64
 	layout struct {
 		master, midi, wave VolLayout
@@ -78,17 +80,17 @@ func NewMixWidget(refresh chan Widget) *MixWidget {
 func (m *MixWidget) Levels(mid, wav float64) {
 	m.mLevel = mid
 	m.wLevel = wav
-	m.publish(m)
+	m.refresh <- m
 }
 
 func (m *MixWidget) Toggle(mute *bool) {
 	toggle(mute)
-	m.publish(mute)
+	m.refresh <- m
 }
 
 func (m *MixWidget) AdjustGain(gain *float64, δ float64) {
 	(*gain) += δ
-	m.publish(gain)
+	m.refresh <- m
 }
 
 
@@ -111,9 +113,9 @@ func (m *MixWidget) click(mouse image.Point, δ float64) {
 }
 
 
-func (m *MixWidget) Draw(dst draw.Image, r image.Rectangle) {
-	if !r.Eq(m.r) {
-		m.r = r
+func (m *MixWidget) Draw(screen wde.Image, r image.Rectangle) {
+	dst, changed := m.Img(r)
+	if changed {
 		hbox := leftH(box(r.Dx(), (r.Dy() - 2) / 3), r)
 		m.layout.master.layout(topV(hbox, r))
 		m.layout.midi.layout(centerV(hbox, r))
@@ -122,6 +124,7 @@ func (m *MixWidget) Draw(dst draw.Image, r image.Rectangle) {
 	drawvol(dst, m.layout.master, Mixer.Master, IconVol, 0)
 	drawvol(dst, m.layout.midi, Mixer.Midi, IconMidi, m.mLevel)
 	drawvol(dst, m.layout.wave, Mixer.Wave, IconWave, m.wLevel)
+	screen.CopyRGBA(dst, r)
 }
 
 func drawvol(dst draw.Image, layout VolLayout, vol MixVolume, icon *image.Alpha, level float64) {

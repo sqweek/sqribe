@@ -217,9 +217,13 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 	lastframe := time.Now().Add(-rate)
 	var refresh func()
 	merged := 0
+	stale := make(map[Widget]struct{})
 	for {
 		select {
 		case widget := <-redraw:
+			if widget != nil {
+				stale[widget] = struct{}{}
+			}
 			now := time.Now()
 			nextframe := lastframe.Add(rate)
 			if refresh != nil || now.Before(nextframe) {
@@ -233,29 +237,31 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				}
 			} else {
 				lastframe = now
-				width, height := w.Size()
-				r := image.Rect(0, 0, width, height)
-				img := image.NewRGBA(r)
-				wvR := image.Rect(0, 50, width, height - 20)
-				G.ww.Draw(img, wvR)
+				screen := w.Screen()
+				r := screen.Bounds()
+				width, height := r.Dx(), r.Dy()
+				wvR := image.Rect(r.Min.X, r.Min.Y + 50, r.Max.X, r.Max.Y - 20)
+				G.ww.Draw(screen, wvR)
 
 				mixR := image.Rect(width - 90, wvR.Min.Y - 50, width, wvR.Min.Y)
-				G.mixw.Draw(img, mixR)
+				G.mixw.Draw(screen, mixR)
 
 				statusR := image.Rect(0, wvR.Max.Y, width, height)
-				drawstatus(img, statusR)
+				drawstatus(screen, statusR)
 
 				if !G.noteMenu.Rect().Empty() {
-					G.noteMenu.Draw(img, G.noteMenu.Rect())
+					G.noteMenu.Draw(screen, G.noteMenu.Rect())
 				}
 				if !G.instMenu.Rect().Empty() {
-					G.instMenu.Draw(img, G.instMenu.Rect())
+					G.instMenu.Draw(screen, G.instMenu.Rect())
 				}
-				w.Screen().CopyRGBA(img, r)
 				w.FlushImage()
 				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
 				merged = 0
 				lastframe = time.Now()
+				for k, _ := range stale {
+					delete(stale, k)
+				}
 			}
 		case <-done:
 			return

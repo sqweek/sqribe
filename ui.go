@@ -14,7 +14,12 @@ import (
 type DragFn func(pos image.Point, finished, moved bool) bool
 
 type Widget interface {
+	Drawable
+}
+
+type Drawable interface {
 	Rect() image.Rectangle
+	Draw(wde.Image, image.Rectangle)
 }
 
 type Hoverable interface {
@@ -35,11 +40,6 @@ type LeftClickable interface {
 
 type RightClickable interface {
 	RightClick(image.Point)
-}
-
-type Drawable interface {
-	Rect() image.Rectangle
-	Draw(draw.Image, image.Rectangle)
 }
 
 type BpmTracker struct {
@@ -87,7 +87,7 @@ func (bw *BpmWidget) Rect() image.Rectangle {
 	return bw.area
 }
 
-func (bw *BpmWidget) Draw(dst draw.Image, r image.Rectangle) {
+func (bw *BpmWidget) Draw(dst wde.Image, r image.Rectangle) {
 	bw.area = r
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
@@ -113,18 +113,27 @@ func (bw *BpmWidget) SetBpm(bpm float64) {
 }
 
 type WidgetCore struct {
-	r image.Rectangle
 	refresh chan Widget
 }
 
-func (w *WidgetCore) Rect() image.Rectangle {
-	return w.r
+type ImageWidget struct {
+	WidgetCore
+	img *image.RGBA
 }
 
-func (w *WidgetCore) publish(ev interface{}) {
-	if w.refresh != nil {
-		w.refresh <- w
+func (w *ImageWidget) Rect() image.Rectangle {
+	if w.img == nil {
+		return image.ZR
 	}
+	return w.img.Bounds()
+}
+
+func (w *ImageWidget) Img(r image.Rectangle) (dst *image.RGBA, resized bool) {
+	resized = !r.Eq(w.Rect())
+	if resized {
+		w.img = image.NewRGBA(r)
+	}
+	return w.img, resized
 }
 
 func drawHorzSlider(dst draw.Image, r image.Rectangle, fg color.Color, posn float64) {

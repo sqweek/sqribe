@@ -9,6 +9,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/skelterjohn/go.wde"
+
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 	"sqweek.net/sqribe/wave"
@@ -17,6 +19,7 @@ import (
 )
 
 type WaveLayout struct {
+	image.Rectangle	// rect of entire widget
 	wave image.Rectangle	// rect of the waveform display
 	waveRulers image.Rectangle	// waveform + rulers
 
@@ -50,6 +53,7 @@ func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 }
 
 func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
+	rect.Rectangle = r
 	axish := 20
 	infow := 100
 	rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
@@ -102,21 +106,24 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
 	}
 }
 
+func (ww *WaveWidget) Rect() image.Rectangle {
+	return ww.rect.Rectangle
+}
+
 // dst.Bounds() is the entire window, r is the area this widget is responsible for
-func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
 	ww.renderstate.changed = 0
-	if !r.Eq(ww.r) {
+	if !ww.rect.Eq(r) {
 		/* our widget size has chaged, relayout & redraw everything */
 		change |= EVERYTHING
 		ww.renderstate.waveRulers = nil
-		ww.r = r
 	}
 	if change != 0 {
 		if change & LAYOUT != 0 {
 			ww.rect.layout(r, ww.score)
 		}
-		ww.renderstate.img = image.NewRGBA(ww.r)
+		ww.renderstate.img = image.NewRGBA(ww.Rect())
 		if ww.renderstate.waveRulers == nil {
 			ww.renderstate.waveRulers = image.NewRGBA(ww.rect.waveRulers)
 			change |= WAV | BEATS | VIEWPOS
@@ -138,7 +145,7 @@ func (ww *WaveWidget) Draw(dst draw.Image, r image.Rectangle) {
 		curcol := color.RGBA{0, 0xdd, 0, 255}
 		draw.Draw(ww.renderstate.img, image.Rect(ww.cursorX, r.Min.Y, ww.cursorX+1, r.Max.Y), &image.Uniform{curcol}, r.Min, draw.Src)
 	}
-	draw.Draw(dst, r, ww.renderstate.img, r.Min, draw.Src)
+	screen.CopyRGBA(ww.renderstate.img, r)
 }
 
 func colourFor(offset *big.Rat, α uint8) color.NRGBA {

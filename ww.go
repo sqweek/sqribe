@@ -102,7 +102,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 
 func (ww *WaveWidget) changed(mask changeMask, ev interface{}) {
 	ww.renderstate.changed |= mask
-	ww.publish(ev)
+	ww.refresh <- ww
 }
 
 func (ww *WaveWidget) SelectAudio(sel TimeRange) {
@@ -348,12 +348,13 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	beath := 8
 	grabw := 2
 	sc := ww.score
+	r := ww.Rect()
 	bAxis, tAxis := mouse.In(ww.rect.beatAxis), mouse.In(ww.rect.timeAxis)
 	snap := bAxis && sc != nil && sc.HasBeats()
-	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
+	if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
 		return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
 	}
-	if mouse.In(padRect(vrect(ww.r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
+	if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
 		return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
 	}
 	if bAxis || tAxis {
@@ -455,7 +456,8 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 }
 
 func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
-	indent := ww.rect.wave.Min.X - ww.r.Min.X
+	r := ww.Rect()
+	indent := ww.rect.wave.Min.X - r.Min.X
 	for staff, rect := range ww.rect.staves {
 		r := leftRect(rect, indent)
 		if mouse.In(r) {
@@ -463,7 +465,7 @@ func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
 			layout.calc(yspacing, r)
 			if mouse.In(layout.instC) {
 				G.instMenu.SetDefault(Mixer.For(staff).Voice)
-				reply := G.instMenu.Popup(ww.r, ww.refresh, mouse)
+				reply := G.instMenu.Popup(r, ww.refresh, mouse)
 				go func() {
 					item := <-reply
 					id, ok := item.(int)
@@ -533,7 +535,7 @@ func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
 		return nil
 	}
 	note := s.note
-	reply := G.noteMenu.Popup(ww.r, ww.refresh, mouse)
+	reply := G.noteMenu.Popup(ww.Rect(), ww.refresh, mouse)
 	go func() {
 		item := <-reply
 		str, ok := item.(string)
@@ -604,7 +606,7 @@ func (ww *WaveWidget) Scroll(amount float64) int {
 }
 
 func (ww *WaveWidget) ScrollPixels(dx int) int {
-	if ww.r.Empty() || ww.wav == nil {
+	if ww.Rect().Empty() || ww.wav == nil {
 		return 0
 	}
 	original := ww.first_frame
