@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"time"
 
 	. "sqweek.net/sqribe/core/types"
 )
@@ -54,7 +55,15 @@ func Open() error {
 	}
 	dev := host.DefaultOutputDevice
 	params := portaudio.LowLatencyParameters(nil, dev)
-	params.SampleRate = 44100
+	l := params.Output.Latency
+	/* pulseaudio (via ALSA) uses heaps of CPU at the default low latency (~8ms) */
+	for params.Output.Latency < 30 * time.Millisecond {
+		if params.Output.Latency + l > dev.DefaultHighOutputLatency {
+			params.Output.Latency = dev.DefaultHighOutputLatency
+			break
+		}
+		params.Output.Latency += l
+	}
 	if *useCallback {
 		ops = cbOps()
 	} else {
@@ -72,7 +81,7 @@ func Open() error {
 	if (*useCallback) {
 		impl = "callback"
 	}
-	log.Printf("audio %s stream %s:'%s' (%d channels @ %d Hz)\n", impl, host.Name, dev.Name, Channels, SampleRate)
+	log.Printf("audio %s stream %s:'%s' (%d channels @ %d Hz) w/ latency %v\n", impl, host.Name, dev.Name, Channels, SampleRate, params.Output.Latency)
 
 	return nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"math/big"
 	"io"
 	"io/ioutil"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"os"
 
+	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/score"
 
@@ -38,6 +40,7 @@ type state interface {
 
 type stateV1 struct {
 	Filename string
+	FrameRate int
 	Beats []FrameN
 	Staves []SavedStaff
 	MasterGain float64 `json:",omitempty"`
@@ -104,8 +107,25 @@ func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 	sc.SetStaves(staves)
 }
 
+func round(x float64) float64 {
+	return math.Floor(x + 0.5)
+}
+
+func convertFrames(f []FrameN, from, to int) {
+	if from == 0 {
+		from = 44100
+	}
+	if from == to {
+		return
+	}
+	for i, _ := range f {
+		f[i] = FrameN(round(float64(f[i])/float64(from) * float64(to)))
+	}
+}
+
 func (s *stateV1) Capture() {
 	s.Filename = G.audiofile
+	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
 	s.MasterGain = Mixer.Master.Gain - 1.0
@@ -117,6 +137,7 @@ func (s *stateV1) Capture() {
 }
 
 func (s *stateV1) Restore() {
+	convertFrames(s.Beats, s.FrameRate, audio.SampleRate)
 	G.score.LoadBeats(s.Beats)
 	loadStaves(&G.score, s.Staves, s.Beats)
 	Mixer.Master.Gain = s.MasterGain + 1.0
