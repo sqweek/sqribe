@@ -178,6 +178,9 @@ func (ww *WaveWidget) drawCursor(screen wde.Image, r image.Rectangle, x int, res
 			prevR := vrect(r, ww.renderstate.cursorPrevX)
 			screen.CopyRGBA(ww.renderstate.img.SubImage(prevR).(*image.RGBA), prevR)
 	}
+	if x < ww.rect.waveRulers.Min.X || x >= ww.rect.waveRulers.Max.X {
+		return
+	}
 	ww.renderstate.cursor.Rect.Min.X = x
 	ww.renderstate.cursor.Rect.Max.X = x+1
 	screen.CopyRGBA(ww.renderstate.cursor, ww.renderstate.cursor.Rect)
