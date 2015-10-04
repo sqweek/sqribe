@@ -179,6 +179,9 @@ func playToggle() {
 }
 
 func play(rng TimeRange) {
+	if rng.MinFrame() < 0 {
+		rng = FrameRange{0, rng.MaxFrame()}
+	}
 	fmt.Println("starting playback", rng.MinFrame(), rng.MaxFrame())
 
 	/* wave sample prefetch thread */
