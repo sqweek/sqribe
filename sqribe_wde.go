@@ -19,44 +19,54 @@ func toggle(flag *bool) {
 	*flag = !*flag
 }
 
+type DragState struct {
+	fn DragFn
+	moved bool
+	button wde.Button
+}
+
 func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
 	events := win.EventChan()
 	defer func() {
 		done <- true
 		wg.Done()
 	}()
-	var drag DragFn = nil
-	var dragged bool = false
+	var drag DragState
 	var refreshTimer *time.Timer
 	for ei := range events {
 		switch e := ei.(type) {
 		case wde.MouseDownEvent:
-			dragged = false
-			switch (e.Which) {
-			case wde.LeftButton:
-				if e.Where.In(G.ww.Rect()) {
-					drag = G.ww.LeftButtonDown(e.Where)
+			if drag.button == 0 {
+				drag.button = e.Which
+				drag.moved = false
+			}
+			if e.Where.In(G.ww.Rect()) {
+				if drag.fn == nil {
+					drag.fn = G.ww.ButtonDown(e)
+				} else {
+					// hacky. wouldn't be necessary with a more sophisticated
+					// API to start a drag action...
+					switch (e.Which) {
+					case wde.WheelUpButton:
+						G.ww.Zoom(0.75)
+					case wde.WheelDownButton:
+						G.ww.Zoom(1.50)
+					}
 				}
-			case wde.RightButton:
-				if e.Where.In(G.ww.Rect()) {
-					drag = G.ww.RightButtonDown(e.Where)
-				}
-			case wde.MiddleButton:
-				if e.Where.In(G.ww.Rect()) {
-					drag = G.ww.MiddleButtonDown(e.Where)
-				}
-			case wde.WheelUpButton:
-				G.ww.Zoom(0.75)
-			case wde.WheelDownButton:
-				G.ww.Zoom(1.50)
 			}
 		case wde.MouseUpEvent:
-			if drag != nil {
-				drag(e.Where, true, dragged)
-				drag = nil
+			done := e.Which == drag.button
+			if done {
+				drag.button = 0
+			}
+			if drag.fn != nil {
+				drag.fn(e.Where, done, drag.moved)
+				if done {
+					drag.fn = nil
+				}
 				continue
 			}
-			if dragged {
+			if drag.moved {
 				/* prevent drags from being interpreted as a regular click */
 				continue
 			}
@@ -75,9 +85,9 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				}
 			}
 		case wde.MouseDraggedEvent:
-			dragged = true
-			if drag != nil {
-				drag(e.Where, false, true)
+			drag.moved = true
+			if drag.fn != nil {
+				drag.fn(e.Where, false, true)
 			}
 		case wde.MouseMovedEvent:
 			var cur wde.Cursor = wde.NormalCursor

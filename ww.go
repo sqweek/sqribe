@@ -457,44 +457,6 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	return state
 }
 
-func (ww *WaveWidget) LeftButtonDown(mouse image.Point) DragFn {
-	r := ww.Rect()
-	indent := ww.rect.wave.Min.X - r.Min.X
-	for staff, rect := range ww.rect.staves {
-		r := leftRect(rect, indent)
-		if mouse.In(r) {
-			layout := MixerLayout{}
-			layout.calc(yspacing, r)
-			if mouse.In(layout.instC) {
-				G.instMenu.SetDefault(Mixer.For(staff).Voice)
-				reply := G.instMenu.Popup(r, ww.refresh, mouse)
-				go func() {
-					item := <-reply
-					id, ok := item.(int)
-					if item != nil && ok {
-						Mixer.For(staff).Voice = id
-						ww.changed(MIXER, ww)
-					}
-				}()
-				return G.instMenu.Drag
-			} else if mouse.In(layout.volS) {
-				return func(pos image.Point, finished bool, moved bool)bool {
-					if (moved || finished) && pos.In(layout.volS) {
-						α := float64(pos.Y - layout.volS.Min.Y) / float64(layout.volS.Dy())
-						vel := 127 - int(127.0 * α + 0.5)
-						Mixer.For(staff).Velocity = vel
-						ww.changed(MIXER, ww)
-						return true
-					}
-					return false
-				}
-			}
-		}
-	}
-	s := ww.getMouseState(mouse)
-	return s.dragFn
-}
-
 func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
 	orig := ww.mouse.state
 	s := ww.getMouseState(mousePos)
@@ -530,29 +492,6 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 			}
 		}
 	}
-}
-
-func (ww *WaveWidget) RightButtonDown(mouse image.Point) DragFn {
-	s := ww.getMouseState(mouse)
-	// XXX no way to exit pasteMode without pasting...
-	sc := ww.score
-	if s.note == nil || sc == nil || (ww.pasteMode && len(ww.snarf[s.note.staff]) > 0) {
-		return nil
-	}
-	note := s.note
-	reply := G.noteMenu.Popup(ww.Rect(), ww.refresh, mouse)
-	go func() {
-		item := <-reply
-		str, ok := item.(string)
-		if item != nil && ok {
-			var dur *big.Rat = new(big.Rat)
-			dur.SetString(str)
-			newNote := ww.mkNote(note, dur)
-			sc.AddNotes(note.staff, newNote)
-			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)
-		}
-	}()
-	return G.noteMenu.Drag
 }
 
 func (ww *WaveWidget) RightClick(mouse image.Point) {
@@ -592,17 +531,6 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 			}
 			ww.pasteMode = false
 		}
-	}
-}
-
-func (ww *WaveWidget) MiddleButtonDown(mouse image.Point) DragFn {
-	prevX := mouse.X
-	return func(pos image.Point, finished bool, moved bool)bool {
-		if moved {
-			ww.ScrollPixels(prevX - pos.X)
-			prevX = pos.X
-		}
-		return true
 	}
 }
 
