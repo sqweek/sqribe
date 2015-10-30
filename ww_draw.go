@@ -120,6 +120,7 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		ww.renderstate.waveRulers = nil
 		ww.renderstate.img = nil
 		ww.renderstate.cursor = nil
+		ww.Zoom(1.0) // to prevent wider resize blowing wave cache
 	}
 	if change != 0 {
 		if change & LAYOUT != 0 {

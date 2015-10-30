@@ -560,15 +560,22 @@ func (ww *WaveWidget) ScrollPixels(dx int) int {
 }
 
 func (ww *WaveWidget) Zoom(factor float64) float64 {
-	/* XXX should probably only account for cursor when mouse is over widget */
-	x := ww.mouse.pos.X
-	frameAtMouse := ww.FrameAtPixel(x)
 	fpp := int(float64(ww.frames_per_pixel) * factor)
 	if fpp < 1 {
 		fpp = 1
 	}
+	if wav := ww.wav; wav != nil && ww.rect.wave.Dx() > 0 {
+		max_frames := (12*1024*1024 / 10 / 2 / 2) * 9
+		max_fpp := int(max_frames / ww.rect.wave.Dx())
+		if fpp > max_fpp {
+			fpp = max_fpp
+		}
+	}
 	delta := float64(fpp) / float64(ww.frames_per_pixel)
 	if delta != 1.0 {
+		/* XXX should probably only account for cursor when mouse is over widget */
+		x := ww.mouse.pos.X
+		frameAtMouse := ww.FrameAtPixel(x)
 		dx := x - ww.rect.wave.Min.X
 		ww.first_frame = frameAtMouse - FrameN(dx * fpp)
 		ww.frames_per_pixel = fpp

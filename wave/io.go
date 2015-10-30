@@ -39,6 +39,10 @@ func mkcache(blocksz, sampsz uint, file string) *cache {
 	return &cache
 }
 
+func (c *cache) MaxSize() uint64 {
+	return uint64(c.blocksz) * uint64(c.lru.max)
+}
+
 func (c *cache) Write(readfn func() ([]int16, error)) error {
 	f, err := os.Create(c.file)
 	if err != nil {

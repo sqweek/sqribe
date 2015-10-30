@@ -213,3 +213,7 @@ func (wav *Waveform) CacheListen() <-chan *Chunk {
 func (wav *Waveform) CacheIgnore(listener <-chan *Chunk) {
 	wav.cache.ignore(listener)
 }
+
+func (wav *Waveform) CacheSize() uint64 {
+	return wav.cache.MaxSize()
+}
