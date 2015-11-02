@@ -69,7 +69,7 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
 		nstaves := 0 // counts number of non-minimised staves
 		spaceY := rect.wave.Dy()
 		staves := score.Staves()
-		for staff, _ := range rect.staves {
+		for _, staff := range staves {
 			// XXX need to drop old staves
 			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
 				spaceY -= minimisedH

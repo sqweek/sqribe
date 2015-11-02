@@ -170,8 +170,9 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 		ww.score.Sub(ww, events)
 		go func() {
 			for ev := range events {
+				change := SCALE
 				if _, ok := ev.(score.BeatChanged); ok {
-					ww.renderstate.changed |= BEATS
+					change |= BEATS
 				}
 				if ev, ok := ev.(score.StaffChanged); ok {
 					for note, staff := range ww.notesel {
@@ -183,9 +184,12 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 							delete(ww.notesel, note)
 						}
 					}
+					if len(sc.Staves()) != len(ww.rect.staves) {
+						change |= LAYOUT
+					}
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
-				ww.changed(SCALE, ev)
+				ww.changed(change, ev)
 			}
 		}()
 		selxn := make(chan interface{})
@@ -478,7 +482,6 @@ func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
 		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
-		ww.changed(LAYOUT, &score.TrebleClef)
 		return
 	}
 	for staff, layout := range ww.rect.mixers {
@@ -488,7 +491,7 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 				ww.changed(MIXER, ww)
 			} else if mouse.In(layout.minmaxB) {
 				toggle(&layout.Minimised)
-				ww.changed(LAYOUT, &layout.Minimised)
+				ww.changed(LAYOUT | SCALE, &layout.Minimised)
 			}
 		}
 	}
@@ -498,7 +501,6 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if mouse.In(ww.rect.mixer) {
 		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
 			ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
-			ww.changed(LAYOUT, &score.BassClef)
 			return
 		}
 		for staff, _ := range ww.rect.staves {
@@ -510,7 +512,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 						layout2.Minimised = true
 					}
 				}
-				ww.changed(LAYOUT, &layout.Minimised)
+				ww.changed(LAYOUT | SCALE, &layout.Minimised)
 				return
 			}
 		}
