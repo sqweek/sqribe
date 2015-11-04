@@ -3,8 +3,15 @@ package fs
 import (
 	"fmt"
 	"os"
-	"strings"
-	"github.com/Allendang/w32"
+	"path/filepath"
+	"syscall"
+	"unicode/utf16"
+	"unsafe"
+)
+
+var (
+	kernel = syscall.MustLoadDLL("kernel32.dll")
+	getModuleFileName = kernel.MustFindProc("GetModuleFileNameW")
 )
 
 var cacheDir string
@@ -55,8 +62,16 @@ func ReplaceFile(src, dst string) error {
 	return err
 }
 
+func exeFileName() string {
+	buf := make([]uint16, syscall.MAX_PATH)
+	r, _, err := getModuleFileName.Call(0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if r == 0 {
+		fmt.Println("error: GetModuleFileNameW: ", err)
+		return ""
+	}
+	return string(utf16.Decode(buf[0:uint32(r)]))
+}
+
 func ExeDir() string {
-	path := w32.GetModuleFileName(nil)
-	dirs := strings.Split(path, "\\")
-	return strings.Join(dirs[:len(dirs)-1], "\\")
+	return filepath.Dir(exeFileName())
 }
