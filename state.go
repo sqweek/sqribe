@@ -1,13 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
-	"math"
-	"math/big"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
+	"math/big"
 	"strings"
-	"fmt"
 	"os"
 
 	"sqweek.net/sqribe/audio"
@@ -40,8 +41,8 @@ type state interface {
 
 type stateV1 struct {
 	Filename string
-	FrameRate int
 	Beats []FrameN
+	FrameRate int
 	Staves []SavedStaff
 	MasterGain float64 `json:",omitempty"`
 	WaveGain float64 `json:",omitempty"`
@@ -197,32 +198,50 @@ func LoadState(filename string) error {
 	return nil
 }
 
-func SaveState(filename string) error {
+func SaveState(filename string) (err error) {
 	k := key(filename)
 	tmpfile, err := ioutil.TempFile(fs.SaveDir(), k)
-	if err != nil {
-		return err
-	}
-	err = WriteState(tmpfile)
-	if err != nil {
-		return err
-	}
-	err = fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k)
-	if err != nil {
-		return err
-	}
+	defer mustRecover(&err)
+	must(err)
+	must(writeState(tmpfile))
+	must(tmpfile.Close())
+	must(fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k))
 	return nil
 }
 
-func WriteState(tmpfile io.WriteCloser) error {
-	defer tmpfile.Close()
-	j := json.NewEncoder(tmpfile)
-	j.Encode(&currentVersion)
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func mustRecover(err *error) {
+	if r := recover(); r != nil {
+		*err = r.(error)
+	}
+}
+
+// panics on error
+func writeState(tmpfile io.Writer) error {
+	must(marshal(false, tmpfile, &currentVersion))
+	_, err := tmpfile.Write([]byte{'\n'})
+	must(err)
 	s := stateV(currentVersion)
 	s.Capture()
-	err := j.Encode(s)
-	if err != nil {
-		return err
+	must(marshal(true, tmpfile, s))
+	return nil
+}
+
+// panics on error
+func marshal(indent bool, tmpfile io.Writer, data interface{}) (err error) {
+	var buf []byte
+	if indent {
+		buf, err = json.MarshalIndent(data, "", "\t")
+	} else {
+		buf, err = json.Marshal(data)
 	}
+	must(err)
+	_, err = io.CopyN(tmpfile, bytes.NewReader(buf), int64(len(buf)))
+	must(err)
 	return nil
 }
