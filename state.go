@@ -35,12 +35,12 @@ type SavedNote struct {
 }
 
 type state interface {
-	Capture() // captures current memory model state
+	Capture(h *Headers) // captures current memory model state
 	Restore() // restores this objects state to the memory model
 }
 
-type stateV1 struct {
-	Filename string
+type stateV2 struct {
+	Filename string `json:"-"` // written as header since V2
 	Beats []FrameN
 	FrameRate int
 	Staves []SavedStaff
@@ -124,8 +124,8 @@ func convertFrames(f []FrameN, from, to int) {
 	}
 }
 
-func (s *stateV1) Capture() {
-	s.Filename = G.audiofile
+func (s *stateV2) Capture(h *Headers) {
+	h.Extra["Filename"] = G.audiofile
 	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
@@ -137,7 +137,7 @@ func (s *stateV1) Capture() {
 	s.MidiOff = Mixer.Midi.Muted
 }
 
-func (s *stateV1) Restore() {
+func (s *stateV2) Restore() {
 	convertFrames(s.Beats, s.FrameRate, audio.SampleRate)
 	G.score.LoadBeats(s.Beats)
 	loadStaves(&G.score, s.Staves, s.Beats)
@@ -149,18 +149,58 @@ func (s *stateV1) Restore() {
 	Mixer.Midi.Muted = s.MidiOff
 }
 
-type VersionHeader struct {
+type Headers struct {
 	Version int
+	Extra map[string]interface{}
 }
 
-var currentVersion = VersionHeader{1}
+func mkHeaders() *Headers {
+	return &Headers{currentVersion, make(map[string]interface{})}
+}
 
-func stateV(hdr VersionHeader) state {
-	switch (hdr.Version) {
-	case 1:
-		return &stateV1{}
+func (h Headers) MarshalJSON() ([]byte, error) {
+	var s string = fmt.Sprintf("{\"Version\": %d", h.Version)
+	for k, v := range h.Extra {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		s += fmt.Sprintf(",\n\"%s\": %s", k, b)
 	}
-	panic(fmt.Sprintf("unknown version %d", hdr.Version))
+	s += "}\n"
+	return []byte(s), nil
+}
+
+func (h *Headers) UnmarshalJSON(buf []byte) (err error) {
+	var m map[string]interface{}
+	err = json.Unmarshal(buf, &m)
+	if err != nil {
+		return err
+	}
+	h.Version = -1
+	if i, ok := m["Version"]; ok {
+		switch v := i.(type) {
+		case float64:
+			h.Version = int(v)
+		}
+		delete(m, "Version")
+	}
+	h.Extra = m
+	if h.Version == -1 {
+		return fmt.Errorf("missing required Version header. Have: %v", m)
+	}
+	return nil
+}
+
+var currentVersion = 2
+// v2: moved Filename from data to header
+
+func stateV(version int) state {
+	switch version {
+	case 1,2:
+		return &stateV2{}
+	}
+	panic(fmt.Errorf("unknown file version %d", version))
 }
 
 func flatpath(r rune) rune {
@@ -174,28 +214,22 @@ func key(filename string) string {
 	return strings.TrimLeft(strings.Map(flatpath, filename) + ".sqs", "_")
 }
 
-func LoadState(filename string) error {
+func LoadState(filename string) (err error) {
 	stateFile := fs.SaveDir() + "/" + key(filename)
-	if _, err := os.Stat(stateFile); err == nil {
-		f, err := os.Open(stateFile)
-		if err != nil {
-			return err
-		}
+	if _, err = os.Stat(stateFile); err == nil {
+		var f *os.File
+		f, err = os.Open(stateFile)
+		defer mustRecover(&err)
+		must(err)
 		defer f.Close()
 		j := json.NewDecoder(f)
-		var version VersionHeader
-		err = j.Decode(&version)
-		if err != nil {
-			return err
-		}
-		s := stateV(version)
-		err = j.Decode(&s)
-		if err != nil {
-			return err
-		}
+		var h Headers
+		must(j.Decode(&h))
+		s := stateV(h.Version)
+		must(j.Decode(&s))
 		s.Restore()
 	}
-	return nil
+	return
 }
 
 func SaveState(filename string) (err error) {
@@ -203,10 +237,33 @@ func SaveState(filename string) (err error) {
 	tmpfile, err := ioutil.TempFile(fs.SaveDir(), k)
 	defer mustRecover(&err)
 	must(err)
-	must(writeState(tmpfile))
+	writeState(tmpfile)
 	must(tmpfile.Close())
 	must(fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k))
 	return nil
+}
+
+// panics on error
+func writeState(tmpfile io.Writer) {
+	s := stateV(currentVersion)
+	h := mkHeaders()
+	s.Capture(h)
+	mustWrite(writeSlice(tmpfile, mustMarshal(h.MarshalJSON())))
+	mustWrite(writeSlice(tmpfile, mustMarshal(json.MarshalIndent(s, "", "\t"))))
+}
+
+func writeSlice(w io.Writer, buf []byte) (int64, error) {
+	return io.CopyN(w, bytes.NewReader(buf), int64(len(buf)))
+}
+
+func mustMarshal(buf []byte, err error) []byte {
+	must(err)
+	return buf
+}
+
+func mustWrite(n int64, err error) int64 {
+	must(err)
+	return n
 }
 
 func must(err error) {
@@ -217,31 +274,10 @@ func must(err error) {
 
 func mustRecover(err *error) {
 	if r := recover(); r != nil {
-		*err = r.(error)
+		if e, ok := r.(error); ok {
+			*err = e
+		}
+		panic(r)
 	}
 }
 
-// panics on error
-func writeState(tmpfile io.Writer) error {
-	must(marshal(false, tmpfile, &currentVersion))
-	_, err := tmpfile.Write([]byte{'\n'})
-	must(err)
-	s := stateV(currentVersion)
-	s.Capture()
-	must(marshal(true, tmpfile, s))
-	return nil
-}
-
-// panics on error
-func marshal(indent bool, tmpfile io.Writer, data interface{}) (err error) {
-	var buf []byte
-	if indent {
-		buf, err = json.MarshalIndent(data, "", "\t")
-	} else {
-		buf, err = json.Marshal(data)
-	}
-	must(err)
-	_, err = io.CopyN(tmpfile, bytes.NewReader(buf), int64(len(buf)))
-	must(err)
-	return nil
-}
