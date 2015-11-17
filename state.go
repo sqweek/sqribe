@@ -13,6 +13,7 @@ import (
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 
 	. "sqweek.net/sqribe/core/types"
@@ -25,7 +26,8 @@ type SavedStaff struct {
 	Origin uint8
 	Nsharps int
 	Muted bool `json:",omitempty"`
-	Notes []SavedNote
+	Notes []SavedNote `json:",omitempty"` // use Notestr since V3
+	Notestr []string
 }
 
 type SavedNote struct {
@@ -39,8 +41,8 @@ type state interface {
 	Restore() // restores this objects state to the memory model
 }
 
-type stateV2 struct {
-	Filename string `json:"-"` // written as header since V2
+type stateV3 struct {
+	Filename string `json:",omitempty"` // written as header since V2
 	Beats []FrameN
 	FrameRate int
 	Staves []SavedStaff
@@ -52,9 +54,9 @@ type stateV2 struct {
 	MidiOff bool `json:",omitempty"`
 }
 
-func savedNotes(staff *score.Staff, beats []FrameN) []SavedNote {
+func savedNotes(staff *score.Staff, beats []FrameN) []string {
 	notes := staff.Notes()
-	saved := make([]SavedNote, 0, len(notes))
+	saved := make([]string, 0, len(notes))
 	i := 0
 	for _, note := range notes {
 		for beats[i] < note.Beat.Frame() {
@@ -62,22 +64,27 @@ func savedNotes(staff *score.Staff, beats []FrameN) []SavedNote {
 		}
 		b := big.NewRat(int64(i), 1)
 		b.Add(b, note.Offset)
-		saved = append(saved, SavedNote{note.Pitch, note.Duration, b})
+		saved = append(saved, fmt.Sprintf("%s %v %v", midi.PitchName(note.Pitch), note.Duration, b))
 	}
 	return saved
 }
 
-func loadNotes(sc *score.Score, staff *score.Staff, saved []SavedNote, beats []FrameN) []*score.Note {
-	notes := make([]*score.Note, 0, len(saved))
+func loadNotes(sc *score.Score, staff *score.Staff, n int, notefn noteFunc, beats []FrameN) []*score.Note {
+	notes := make([]*score.Note, 0, n)
 	beat := sc.Head
-	for _, sv := range saved {
-		beatf, _ := sv.Offset.Float64()
-		i := int(beatf)
-		for beat.Frame() < beats[i] {
+	for i := 0; i < n; i++ {
+		pitch, duration, offset, err := notefn(i)
+		if err != nil {
+			fmt.Printf("error loading note %d: %v\n", i, err)
+			continue
+		}
+		beatf, _ := offset.Float64()
+		bi := int(beatf)
+		for beat.Frame() < beats[bi] {
 			beat = beat.Next()
 		}
-		sv.Offset.Sub(sv.Offset, big.NewRat(int64(i), 1))
-		notes = append(notes, &score.Note{sv.Pitch, sv.Duration, beat, sv.Offset})
+		offset.Sub(offset, big.NewRat(int64(bi), 1))
+		notes = append(notes, &score.Note{pitch, duration, beat, offset})
 	}
 	return notes
 }
@@ -88,10 +95,39 @@ func savedStaves(score *score.Score, beats []FrameN) []SavedStaff {
 	for _, staff := range staves {
 		notes := savedNotes(staff, beats)
 		mix := Mixer.For(staff)
-		saved = append(saved, SavedStaff{staff.Name(), mix.Voice, mix.Velocity - 100, staff.Clef().Origin, int(staff.Key()), mix.Muted, notes})
+		saved = append(saved, SavedStaff{staff.Name(), mix.Voice, mix.Velocity - 100, staff.Clef().Origin, int(staff.Key()), mix.Muted, nil, notes})
 	}
 	return saved
 }
+
+type noteFunc func(int)(uint8, *big.Rat, *big.Rat, error)
+
+func noteFnFromStrings(notes []string) noteFunc {
+	return func(i int)(pitch uint8, dur, off *big.Rat, err error) {
+		f := strings.Split(notes[i], " ")
+		dur = big.NewRat(-1, 1)
+		off = big.NewRat(-1, 1)
+		if pitch, err = midi.ParsePitch(f[0]); err == nil {
+			if _, ok := dur.SetString(f[1]); ok {
+				if _, ok := off.SetString(f[2]); !ok {
+					err = fmt.Errorf("note '%s': bad offset", notes[i])
+				}
+				return
+			} else {
+				err = fmt.Errorf("note '%s': bad duration", notes[i])
+			}
+		}
+		return
+	}
+}
+
+func noteFnFromStructs(notes []SavedNote) noteFunc {
+	return func(i int)(pitch uint8, dur, off *big.Rat, err error) {
+		n := notes[i]
+		return n.Pitch, n.Duration, n.Offset, nil
+	}
+}
+
 
 func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 	staves := make([]*score.Staff, 0, len(saved))
@@ -101,7 +137,16 @@ func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 			clef = &score.TrebleClef
 		}
 		staff := score.MkStaff(sv.Name, clef, score.KeySig(sv.Nsharps))
-		sc.AddNotes(staff, loadNotes(sc, staff, sv.Notes, beats)...)
+		var n int
+		var notefn noteFunc
+		if len(sv.Notestr) > 0 {
+			n = len(sv.Notestr)
+			notefn = noteFnFromStrings(sv.Notestr)
+		} else {
+			n = len(sv.Notes)
+			notefn = noteFnFromStructs(sv.Notes)
+		}
+		sc.AddNotes(staff, loadNotes(sc, staff, n, notefn, beats)...)
 		staves = append(staves, staff)
 		Mixer.LoadStaff(staff, sv)
 	}
@@ -124,7 +169,7 @@ func convertFrames(f []FrameN, from, to int) {
 	}
 }
 
-func (s *stateV2) Capture(h *Headers) {
+func (s *stateV3) Capture(h *Headers) {
 	h.Extra["Filename"] = G.audiofile
 	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
@@ -137,7 +182,7 @@ func (s *stateV2) Capture(h *Headers) {
 	s.MidiOff = Mixer.Midi.Muted
 }
 
-func (s *stateV2) Restore() {
+func (s *stateV3) Restore() {
 	convertFrames(s.Beats, s.FrameRate, audio.SampleRate)
 	G.score.LoadBeats(s.Beats)
 	loadStaves(&G.score, s.Staves, s.Beats)
@@ -192,13 +237,14 @@ func (h *Headers) UnmarshalJSON(buf []byte) (err error) {
 	return nil
 }
 
-var currentVersion = 2
+var currentVersion = 3
 // v2: moved Filename from data to header
+// v3: save notes as strings not structs
 
 func stateV(version int) state {
 	switch version {
-	case 1,2:
-		return &stateV2{}
+	case 1, 2, 3:
+		return &stateV3{}
 	}
 	panic(fmt.Errorf("unknown file version %d", version))
 }

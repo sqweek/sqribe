@@ -2,6 +2,8 @@ package midi
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -23,11 +25,52 @@ const (
 )
 
 var degreeNames []string = []string{"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"}
+var degreeNums map[string]int = map[string]int{"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 func PitchName(pitch uint8) string {
 	degree := pitch % 12
 	octave := pitch / 12
 	return fmt.Sprintf("%s%d", degreeNames[degree], octave)
+}
+
+func eatAccidental(txt string) (int, string) {
+	r := strings.SplitN(txt, "", 2)[0]
+	switch r {
+	case "b", "♭":
+		return -1, txt[len(r):]
+	case "#", "♯":
+		return 1, txt[len(r):]
+	}
+	return 0, txt
+}
+
+type PitchError struct {
+	name string
+	msg string
+}
+
+func (e PitchError) Error() string {
+	return fmt.Sprintf("invalid pitch: %s: %s", e.name, e.msg)
+}
+
+func ParsePitch(name string) (uint8, error) {
+	if len(name) < 2 {
+		return 255, &PitchError{name, "too short"}
+	}
+	degree, ok := degreeNums[name[0:1]]
+	if !ok {
+		return 255, &PitchError{name, "bad note"}
+	}
+	a, rest := eatAccidental(name[1:])
+	octave, err := strconv.ParseUint(rest, 10, 8)
+	if err != nil {
+		return 255, &PitchError{name, fmt.Sprint("bad octave:", err)}
+	}
+	p := int(octave) * 12 + degree + a
+	if p < 0 || p >= 128 {
+		return 255, &PitchError{name, fmt.Sprintf("%d is outside midi range", p)}
+	}
+	return uint8(p), nil
 }
 
 var instNames map[int]string
