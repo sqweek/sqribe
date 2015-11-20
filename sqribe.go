@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -41,19 +42,29 @@ var G struct {
 }
 
 func open(filename string) error {
-	var err error
-	if G.wav != nil {
-		SaveState(G.audiofile)
-	}
-	G.wav, err = wave.NewWaveform(filename)
+	wav, err := wave.NewWaveform(filename)
 	if err != nil {
 		return err
 	}
-	G.audiofile = filename
-	err = LoadState(filename)
-	if err != nil {
-		log.Println(err)
+	f, err := os.Open(StateFile(filename))
+	exists := !os.IsNotExist(err)
+	if err != nil && exists {
+		return err
 	}
+	if exists {
+		h, s, err := ReadState(f)
+		if err != nil {
+			return err
+		}
+		// check we have the right state file
+		if sfile, ok := h.Extra["Filename"]; ok && sfile != filename {
+			return fmt.Errorf("found state (%s) for wrong audio file (got %s; wanted %s)", StateFile(filename), sfile, filename)
+		}
+		s.Restore()
+		f.Close()
+	}
+	G.audiofile = filename
+	G.wav = wav
 	return nil
 }
 

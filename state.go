@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 	"math"
 	"math/big"
-	"strings"
 	"os"
+	"strings"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
@@ -36,7 +36,7 @@ type SavedNote struct {
 	Offset *big.Rat
 }
 
-type state interface {
+type State interface {
 	Capture(h *Headers) // captures current memory model state
 	Restore() // restores this objects state to the memory model
 }
@@ -241,7 +241,7 @@ var currentVersion = 3
 // v2: moved Filename from data to header
 // v3: save notes as strings not structs
 
-func stateV(version int) state {
+func stateV(version int) State {
 	switch version {
 	case 1, 2, 3:
 		return &stateV3{}
@@ -256,46 +256,47 @@ func flatpath(r rune) rune {
 	return r
 }
 
-func key(filename string) string {
-	return strings.TrimLeft(strings.Map(flatpath, filename) + ".sqs", "_")
+func stateKey(audiofile string) string {
+	return strings.TrimLeft(strings.Map(flatpath, audiofile) + ".sqs", "_")
 }
 
-func LoadState(filename string) (err error) {
-	stateFile := fs.SaveDir() + "/" + key(filename)
-	if _, err = os.Stat(stateFile); err == nil {
-		var f *os.File
-		f, err = os.Open(stateFile)
-		defer mustRecover(&err)
-		must(err)
-		defer f.Close()
-		j := json.NewDecoder(f)
-		var h Headers
-		must(j.Decode(&h))
-		s := stateV(h.Version)
-		must(j.Decode(&s))
-		s.Restore()
-	}
+func StateFile(audiofile string) string {
+	return fs.SaveDir() + "/" + stateKey(audiofile)
+}
+
+func ReadState(f io.Reader) (h Headers, s State, err error) {
+	defer mustRecover(&err)
+	j := json.NewDecoder(f)
+	must(j.Decode(&h))
+	s = stateV(h.Version)
+	must(j.Decode(&s))
 	return
 }
 
 func SaveState(filename string) (err error) {
-	k := key(filename)
-	tmpfile, err := ioutil.TempFile(fs.SaveDir(), k)
-	defer mustRecover(&err)
-	must(err)
-	writeState(tmpfile)
-	must(tmpfile.Close())
-	must(fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k))
-	return nil
+	var tmpfile *os.File
+	k := stateKey(filename)
+	if tmpfile, err = ioutil.TempFile(fs.SaveDir(), k); err == nil {
+		s := stateV(currentVersion)
+		h := mkHeaders()
+		s.Capture(h)
+		err = WriteState(tmpfile, h, s)
+		tmpfile.Close()
+		if err == nil {
+			err = fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k)
+		} else {
+			os.Remove(tmpfile.Name())
+		}
+	}
+	return
 }
 
-// panics on error
-func writeState(tmpfile io.Writer) {
-	s := stateV(currentVersion)
-	h := mkHeaders()
-	s.Capture(h)
+func WriteState(tmpfile io.Writer, h *Headers, s State) (err error) {
+	defer mustRecover(&err)
+	// explicitly calling Headers.MarshalJSON to preserve whitespace (json.Marshal would collapse it)
 	mustWrite(writeSlice(tmpfile, mustMarshal(h.MarshalJSON())))
 	mustWrite(writeSlice(tmpfile, mustMarshal(json.MarshalIndent(s, "", "\t"))))
+	return
 }
 
 func writeSlice(w io.Writer, buf []byte) (int64, error) {
