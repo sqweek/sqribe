@@ -357,13 +357,12 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	r := ww.Rect()
 	bAxis, tAxis := mouse.In(ww.rect.beatAxis), mouse.In(ww.rect.timeAxis)
 	snap := bAxis && sc != nil && sc.HasBeats()
-	if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
-		return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
-	}
-	if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
-		return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
-	}
 	if bAxis || tAxis {
+		if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
+			return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
+		} else if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
+			return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
+		}
 		return ww.timeSelectDrag(ww.FrameAtPixel(mouse.X), snap), wde.IBeamCursor
 	}
 
