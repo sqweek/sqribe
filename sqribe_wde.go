@@ -152,7 +152,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Key == wde.KeyDelete:
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
 			case e.Key == wde.KeyS:
-				SaveState(G.audiofile)
+				save()
 			case e.Key == wde.KeyT:
 				G.mixw.Toggle(&Mixer.MuteMetronome)
 			case e.Key == wde.KeyA:

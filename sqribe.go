@@ -52,12 +52,12 @@ func open(filename string) error {
 		return err
 	}
 	if exists {
-		h, s, err := ReadState(f)
+		s, err := ReadState(f)
 		if err != nil {
 			return err
 		}
 		// check we have the right state file
-		if sfile, ok := h.Extra["Filename"]; ok && sfile != filename {
+		if sfile, ok := s.Headers().Extra["Filename"]; ok && sfile != filename {
 			return fmt.Errorf("found state (%s) for wrong audio file (got %s; wanted %s)", StateFile(filename), sfile, filename)
 		}
 		s.Restore()
@@ -66,6 +66,11 @@ func open(filename string) error {
 	G.audiofile = filename
 	G.wav = wav
 	return nil
+}
+
+func save() error {
+	s := CaptureState()
+	return SaveState(G.audiofile, s)
 }
 
 func mustMkFont(filename string, size int) *Font {
@@ -144,7 +149,7 @@ func main() {
 
 	audio.Shutdown()
 	//XXX should avoid closing GUI if SaveState fails
-	err = SaveState(G.audiofile)
+	err = save()
 	if err != nil {
 		log.Println(err)
 	}

@@ -5,14 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/big"
-	"os"
 	"strings"
 
 	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 
@@ -37,11 +34,15 @@ type SavedNote struct {
 }
 
 type State interface {
-	Capture(h *Headers) // captures current memory model state
+	Headers() *Headers
 	Restore() // restores this objects state to the memory model
+
+	Write(io.Writer) error
 }
 
 type stateV3 struct {
+	h *Headers `json:"-"` // serialised separately
+
 	Filename string `json:",omitempty"` // written as header since V2
 	Beats []FrameN
 	FrameRate int
@@ -128,7 +129,6 @@ func noteFnFromStructs(notes []SavedNote) noteFunc {
 	}
 }
 
-
 func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 	staves := make([]*score.Staff, 0, len(saved))
 	for _, sv := range saved {
@@ -169,8 +169,10 @@ func convertFrames(f []FrameN, from, to int) {
 	}
 }
 
-func (s *stateV3) Capture(h *Headers) {
-	h.Extra["Filename"] = G.audiofile
+// captures current memory model state
+func CaptureState() State {
+	s := stateV(mkHeaders())
+	s.h.Extra["Filename"] = G.audiofile
 	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
@@ -180,6 +182,11 @@ func (s *stateV3) Capture(h *Headers) {
 	s.MetronomeOff = Mixer.MuteMetronome
 	s.WaveOff = Mixer.Wave.Muted
 	s.MidiOff = Mixer.Midi.Muted
+	return s
+}
+
+func (s *stateV3) Headers() *Headers {
+	return s.h
 }
 
 func (s *stateV3) Restore() {
@@ -241,60 +248,28 @@ var currentVersion = 3
 // v2: moved Filename from data to header
 // v3: save notes as strings not structs
 
-func stateV(version int) State {
-	switch version {
+func stateV(h *Headers) *stateV3 {
+	switch h.Version {
 	case 1, 2, 3:
-		return &stateV3{}
+		return &stateV3{h: h}
 	}
-	panic(fmt.Errorf("unknown file version %d", version))
+	panic(fmt.Errorf("unknown file version %d", h.Version))
 }
 
-func flatpath(r rune) rune {
-	if r < 26 || strings.ContainsRune(" /:\\", r) {
-		return '_'
-	}
-	return r
-}
-
-func stateKey(audiofile string) string {
-	return strings.TrimLeft(strings.Map(flatpath, audiofile) + ".sqs", "_")
-}
-
-func StateFile(audiofile string) string {
-	return fs.SaveDir() + "/" + stateKey(audiofile)
-}
-
-func ReadState(f io.Reader) (h Headers, s State, err error) {
+func ReadState(f io.Reader) (s State, err error) {
 	defer mustRecover(&err)
 	j := json.NewDecoder(f)
+	var h Headers
 	must(j.Decode(&h))
-	s = stateV(h.Version)
+	s = stateV(&h)
 	must(j.Decode(&s))
 	return
 }
 
-func SaveState(filename string) (err error) {
-	var tmpfile *os.File
-	k := stateKey(filename)
-	if tmpfile, err = ioutil.TempFile(fs.SaveDir(), k); err == nil {
-		s := stateV(currentVersion)
-		h := mkHeaders()
-		s.Capture(h)
-		err = WriteState(tmpfile, h, s)
-		tmpfile.Close()
-		if err == nil {
-			err = fs.ReplaceFile(tmpfile.Name(), fs.SaveDir() + "/" + k)
-		} else {
-			os.Remove(tmpfile.Name())
-		}
-	}
-	return
-}
-
-func WriteState(tmpfile io.Writer, h *Headers, s State) (err error) {
+func (s *stateV3) Write(tmpfile io.Writer) (err error) {
 	defer mustRecover(&err)
 	// explicitly calling Headers.MarshalJSON to preserve whitespace (json.Marshal would collapse it)
-	mustWrite(writeSlice(tmpfile, mustMarshal(h.MarshalJSON())))
+	mustWrite(writeSlice(tmpfile, mustMarshal(s.h.MarshalJSON())))
 	mustWrite(writeSlice(tmpfile, mustMarshal(json.MarshalIndent(s, "", "\t"))))
 	return
 }
