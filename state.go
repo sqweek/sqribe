@@ -172,7 +172,7 @@ func convertFrames(f []FrameN, from, to int) {
 // captures current memory model state
 func CaptureState() State {
 	s := stateV(mkHeaders())
-	s.h.Extra["Filename"] = G.audiofile
+	s.h.Extra["Filename"] = G.files.Audio
 	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
@@ -183,6 +183,10 @@ func CaptureState() State {
 	s.WaveOff = Mixer.Wave.Muted
 	s.MidiOff = Mixer.Midi.Muted
 	return s
+}
+
+func EmptyState() State {
+	return stateV(mkHeaders())
 }
 
 func (s *stateV3) Headers() *Headers {
@@ -208,6 +212,15 @@ type Headers struct {
 
 func mkHeaders() *Headers {
 	return &Headers{currentVersion, make(map[string]interface{})}
+}
+
+func (h Headers) String(key string) string {
+	if v, ok := h.Extra[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func (h Headers) MarshalJSON() ([]byte, error) {
@@ -261,8 +274,13 @@ func ReadState(f io.Reader) (s State, err error) {
 	j := json.NewDecoder(f)
 	var h Headers
 	must(j.Decode(&h))
-	s = stateV(&h)
-	must(j.Decode(&s))
+	sv := stateV(&h)
+	must(j.Decode(&sv))
+	if _, ok := h.Extra["Filename"]; !ok {
+		// v1 didn't have Filename in Headers
+		h.Extra["Filename"] = sv.Filename
+	}
+	s = sv
 	return
 }
 

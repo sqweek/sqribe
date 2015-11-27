@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"time"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
@@ -18,7 +19,7 @@ import (
 
 var G struct {
 	/* global state */
-	audiofile string
+	files FileContext
 	score score.Score
 	wav *wave.Waveform
 
@@ -41,36 +42,49 @@ var G struct {
 	}
 }
 
+var ZeroTime time.Time
+
 func open(filename string) error {
-	wav, err := wave.NewWaveform(filename)
+	files, s, err := Open(filename)
+	if !files.Timestamp.IsZero() {
+		// sanity check for correct state file
+		hfile := s.Headers().String("Filename")
+		if hfile != "" && hfile != files.Audio {
+			return fmt.Errorf("found state (%s) for wrong audio file (got %s; wanted %s)", files.State, hfile, files.Audio)
+		}
+	}
+
+	wav, err := wave.NewWaveform(files.Audio)
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(StateFile(filename))
-	exists := !os.IsNotExist(err)
-	if err != nil && exists {
-		return err
-	}
-	if exists {
-		s, err := ReadState(f)
-		if err != nil {
-			return err
-		}
-		// check we have the right state file
-		if sfile, ok := s.Headers().Extra["Filename"]; ok && sfile != filename {
-			return fmt.Errorf("found state (%s) for wrong audio file (got %s; wanted %s)", StateFile(filename), sfile, filename)
-		}
-		s.Restore()
-		f.Close()
-	}
-	G.audiofile = filename
+	s.Restore()
+	G.files = files
 	G.wav = wav
 	return nil
 }
 
 func save() error {
+	if !G.files.Timestamp.IsZero() {
+		// user needs to be able to recover from these errors
+		st, err := os.Stat(G.files.State)
+		if err != nil && !os.IsNotExist(err) {
+			return err // not a very clear error...
+		}
+		if st.ModTime() != G.files.Timestamp {
+			return fmt.Errorf("file has changed since loading")
+		}
+	}
 	s := CaptureState()
-	return SaveState(G.audiofile, s)
+	if err := SaveState(G.files.State, s); err != nil {
+		return err
+	}
+	if st, err := os.Stat(G.files.State); err != nil {
+		G.files.Timestamp = st.ModTime()
+	} else {
+		G.files.Timestamp = ZeroTime
+	}
+	return nil
 }
 
 func mustMkFont(filename string, size int) *Font {
