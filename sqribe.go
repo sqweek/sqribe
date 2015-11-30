@@ -54,6 +54,7 @@ func open(filename string) error {
 		}
 	}
 
+	// TODO allow user to locate audio if it doesn't exist (eg. been moved)
 	wav, err := wave.NewWaveform(files.Audio)
 	if err != nil {
 		return err
@@ -76,12 +77,13 @@ func save() error {
 		}
 	}
 	s := CaptureState()
-	if err := SaveState(G.files.State, s); err != nil {
+	if err := SaveState(G.files, s); err != nil {
 		return err
 	}
-	if st, err := os.Stat(G.files.State); err != nil {
+	if st, err := os.Stat(G.files.State); err == nil {
 		G.files.Timestamp = st.ModTime()
 	} else {
+		fmt.Println("fs error retreiving timestamp:", err)
 		G.files.Timestamp = ZeroTime
 	}
 	return nil
@@ -162,7 +164,7 @@ func main() {
 	wg.Wait()
 
 	audio.Shutdown()
-	//XXX should avoid closing GUI if SaveState fails
+	//XXX should avoid closing GUI if save fails
 	err = save()
 	if err != nil {
 		log.Println(err)
