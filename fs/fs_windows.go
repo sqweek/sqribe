@@ -46,20 +46,18 @@ func ReplaceFile(src, dst string) error {
 			/* rename succeeded or 'dst' doesn't exist yet; we can proceed */
 			break
 		} else if os.IsExist(err) {
-			err = os.Remove(bak)
-			if err != nil {
-				return err
+			if err = os.Remove(bak); err == nil {
+				continue /* old backup is gone, rename should work now */
 			}
-		} else {
-			return err
 		}
+		return err
 	}
-	err := os.Rename(src, dst)
-	if err == nil {
+	if err := os.Rename(src, dst); err == nil {
 		os.Remove(bak)
 		return nil
+	} else {
+		return err
 	}
-	return err
 }
 
 func exeFileName() string {
