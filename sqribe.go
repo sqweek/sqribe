@@ -77,7 +77,7 @@ func save() error {
 		}
 	}
 	s := CaptureState()
-	if err := SaveState(G.files, s); err != nil {
+	if err := SaveState(&G.files, s); err != nil {
 		return err
 	}
 	if st, err := os.Stat(G.files.State); err == nil {

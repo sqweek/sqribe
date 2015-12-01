@@ -18,11 +18,16 @@ type FileContext struct {
 	Audio string
 	State string
 	Timestamp time.Time // last modified time when state was read. 0 => fresh state (file didn't exist)
+	Version int // version of loaded state file
 }
 
 // file can be either a .sqs file or audio file
 func Open(file string) (files FileContext, s State, err error) {
 	if IsStateFilename(file) {
+		// if a state file is named, it must exist
+		if _, err = os.Stat(file); err != nil {
+			return
+		}
 		files.State = file
 		if s, files.Timestamp, err = LoadState(file); err != nil {
 			return
@@ -35,6 +40,7 @@ func Open(file string) (files FileContext, s State, err error) {
 		if files.Audio == "" {
 			files.Audio = s.Headers().String("Filename")
 		}
+		files.Version = s.Headers().Version
 	} else {
 		files.Audio = file
 		states, dberr := filesDB.StateFiles(file)
@@ -55,6 +61,9 @@ func Open(file string) (files FileContext, s State, err error) {
 		}
 		if s, files.Timestamp, err = LoadState(files.State); err != nil {
 			return
+		}
+		if !files.Timestamp.IsZero() {
+			files.Version = s.Headers().Version
 		}
 	}
 	return
@@ -94,13 +103,21 @@ func LoadState(statefile string) (s State, modTime time.Time, err error) {
 	return s, stat.ModTime(), nil
 }
 
-func SaveState(files FileContext, s State) (err error) {
+func SaveState(files *FileContext, s State) (err error) {
 	var tmpfile *os.File
 	d, f := filepath.Split(files.State)
 	if tmpfile, err = ioutil.TempFile(d, f); err == nil {
 		err = s.Write(tmpfile)
 		tmpfile.Close()
 		if err == nil {
+			if files.Version != 0 && files.Version != currentVersion {
+				bak := fmt.Sprintf("%s.v%d.bak", files.State, files.Version)
+				if fserr := os.Rename(files.State, bak); fserr != nil {
+					fmt.Printf("fs error: backing up %s: %v\n", bak, err)
+				} else {
+					files.Version = currentVersion
+				}
+			}
 			if err = fs.ReplaceFile(tmpfile.Name(), files.State); err == nil {
 				if dberr := filesDB.Associate(files.State, files.Audio); dberr != nil {
 					fmt.Printf("db error: associating %s -> %s: %v\n", files.State, files.Audio, dberr)
