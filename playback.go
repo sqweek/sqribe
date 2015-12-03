@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"time"
 
 	"sqweek.net/sqribe/audio"
+	"sqweek.net/sqribe/log"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 
@@ -162,7 +162,7 @@ var playState int = STOPPED
 func playToggle() {
 	switch playState {
 	case PLAYING:
-		fmt.Println("stopping playback")
+		log.AU.Println("stopping playback")
 		playState = STOPPING
 		return
 	case STOPPING:
@@ -182,7 +182,7 @@ func play(rng TimeRange) {
 	if rng.MinFrame() < 0 {
 		rng = FrameRange{0, rng.MaxFrame()}
 	}
-	fmt.Println("starting playback", rng.MinFrame(), rng.MaxFrame())
+	log.AU.Println("starting loop", rng.MinFrame(), rng.MaxFrame())
 
 	/* wave sample prefetch thread */
 	sampch := make(chan Samples, 25)
@@ -235,7 +235,7 @@ func play(rng TimeRange) {
 				prevframe := in.frame
 				in = <-sampch
 				if len(in.buf) < bufsiz || len(in.buf) % bufsiz != 0 {
-					fmt.Println("prefetch samples sent in non-64 frame multiple", len(in.buf))
+					log.AU.Println("stopping: prefetch samples sent in non-64 frame multiple", len(in.buf))
 					playState = STOPPING
 					break
 				}
@@ -332,10 +332,8 @@ func play(rng TimeRange) {
 			// drain channel
 		}
 		G.plumb.score.Unsub(&playState)
-		fmt.Println("notifying portaudio")
 		audio.Stop()
 		playState = STOPPED
-		fmt.Println("playback all stopped")
 	}()
 	//TODO wait for ring buffer to fill up a bit before kicking off audio
 	/* gui feedback thread */
@@ -346,7 +344,7 @@ func play(rng TimeRange) {
 				if playState == PLAYING && f != 0 {
 					/* we think we're playing, but the audio callback hasn't
 					 * run for awhile. just stop. */
-					fmt.Println("lost audio callback, stopping")
+					log.AU.Println("stopping: lost audio callback")
 					playState = STOPPING
 				}
 				break

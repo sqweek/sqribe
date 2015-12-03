@@ -1,9 +1,10 @@
 package fs
 
 import (
-	"fmt"
 	"os"
 	"strings"
+
+	"sqweek.net/sqribe/log"
 )
 
 func Join(dirs... string) string {
@@ -27,12 +28,12 @@ func find(filename string, paths... string) (string, error) {
 func MustFind(filename string, paths... string) string {
 	f, err := Find(filename, paths...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: couldn't find", filename, " - search path:")
+		log.FS.Println("error: couldn't find", filename, " - search path:")
 		for _, path := range paths {
-			fmt.Fprintln(os.Stderr, " *", path)
+			log.FS.Println(" *", path)
 		}
-		fmt.Fprintln(os.Stderr, "*", ExeDir())
-		fmt.Fprintln(os.Stderr, "*", ".")
+		log.FS.Println(" *", ExeDir())
+		log.FS.Println(" *", ".")
 		os.Exit(1)
 	}
 	return f

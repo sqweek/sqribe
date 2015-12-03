@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"time"
 	"sync"
-	."fmt"
 	"io"
 	"os"
 
+	"sqweek.net/sqribe/log"
 	. "sqweek.net/sqribe/core/types"
 )
 
@@ -65,7 +65,7 @@ func (c *cache) Write(readfn func() ([]int16, error)) error {
 	c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
 	c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
 	c.bytesWritten = -1
-	Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
+	log.WAV.Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
 	return nil
 }
 
@@ -118,7 +118,7 @@ func (c *cache) fetcher() *Chunk {
 		filename, offset := c.pos(id)
 		if offset == -1 {
 			/* block not written yet - back on the queue */
-			Printf("fetcher: requeing block %d\n", id)
+			log.WAV.Printf("fetcher: requeing block %d\n", id)
 			go func() { time.Sleep(500 * time.Millisecond); c.iochan <- id }()
 			continue
 		}
@@ -129,16 +129,16 @@ func (c *cache) fetcher() *Chunk {
 		}
 		file, err := os.Open(filename)
 		if err != nil {
-			Printf("fetcher: %v\n", err)
+			log.WAV.Printf("fetcher: %v\n", err)
 			continue
 		}
 		chunk, err := c.readchunk(id, file, offset)
 		file.Close()
 		if err != nil {
-			Printf("fetcher: chunk %d: %v\n", id, err)
+			log.WAV.Printf("fetcher: chunk %d: %v\n", id, err)
 			continue
 		}
-		Printf("fetcher: read chunk %d: i0=%d len=%d\n", id, chunk.I0, len(chunk.Data))
+		log.WAV.Printf("fetcher: read chunk %d: i0=%d len=%d\n", id, chunk.I0, len(chunk.Data))
 		c.add(id, chunk)
 	}
 }

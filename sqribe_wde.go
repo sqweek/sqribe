@@ -5,13 +5,13 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/skelterjohn/go.wde"
 	_ "github.com/skelterjohn/go.wde/init"
 	"sqweek.net/sqribe/audio"
+	"sqweek.net/sqribe/log"
 	"sqweek.net/sqribe/score"
 )
 
@@ -106,7 +106,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				G.kb.shift = false
 			}
 		case wde.KeyTypedEvent:
-			log.Println("typed", e.Key, e.Glyph, e.Chord)
+			log.UI.Println("typed", e.Key, e.Glyph, e.Chord)
 			switch {
 			case e.Chord == "shift+left_arrow":
 				G.ww.ShuntSel(-1)
@@ -164,7 +164,7 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Key == wde.KeyX:
 				err := ExportMXML("export.xml")
 				if err != nil {
-					log.Println("MXML export", err)
+					log.FS.Println("MXML export failed:", err)
 				}
 			case e.Glyph == "#":
 				G.score.MvNotes(1, &rZero, G.ww.SelectedNotes()...)
@@ -268,7 +268,6 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 					G.instMenu.Draw(screen, G.instMenu.Rect())
 				}
 				w.FlushImage()
-				//log.Println("redraw took ", time.Now().Sub(lastframe), "  merged: ", merged)
 				merged = 0
 				lastframe = time.Now()
 				for k, _ := range stale {

@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
+
+	"sqweek.net/sqribe/log"
 )
 
 var (
@@ -64,7 +66,7 @@ func exeFileName() string {
 	buf := make([]uint16, syscall.MAX_PATH)
 	r, _, err := getModuleFileName.Call(0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if r == 0 {
-		fmt.Println("error: GetModuleFileNameW: ", err)
+		log.FS.Println("warning: GetModuleFileNameW: ", err)
 		return ""
 	}
 	return string(utf16.Decode(buf[0:uint32(r)]))

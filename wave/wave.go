@@ -1,12 +1,12 @@
 package wave
 
 import (
-	"fmt"
 	"time"
 	"github.com/sqweek/ffau"
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/log"
 	. "sqweek.net/sqribe/core/types"
 )
 
@@ -31,13 +31,13 @@ func NewWaveform(file string) (*Waveform, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("raw audiostream format", raw.Format())
+	log.WAV.Println("raw audiostream format", raw.Format())
 	desired := ffau.AudioFormat{wave.rate, ffau.PackedS16s, ffau.DefaultLayout(wave.Channels)}
 	converted, err := ffau.Resample(raw, desired)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("converted audiostream format", converted.Format())
+	log.WAV.Println("converted audiostream format", converted.Format())
 	reader, err := ffau.NewPackedS16Stream(converted)
 	if err != nil {
 		return nil, err
@@ -63,12 +63,10 @@ func NewWaveform(file string) (*Waveform, error) {
 		}
 		err := wave.cache.Write(decode)
 		if err != nil {
-			fmt.Println("error decoding", file, "-", err)
+			log.WAV.Println("error decoding", file, "-", err)
 		}
-		fmt.Println("closing AVCodec handles")
 		converted.Close()
 		ctx.Close()
-		fmt.Println("AVCodec closed")
 	}()
 
 	return wave, nil

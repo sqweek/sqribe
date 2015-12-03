@@ -12,6 +12,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/log"
 )
 
 type FileContext struct {
@@ -34,7 +35,7 @@ func Open(file string) (files FileContext, s State, err error) {
 		}
 		a, dberr := filesDB.AudioFile(file)
 		if dberr != nil {
-			fmt.Printf("db error: retrieving linked audio file: %s: %v\n", file, dberr)
+			log.DB.Printf("error retrieving linked audio file: %s: %v\n", file, dberr)
 		}
 		files.Audio = a
 		if files.Audio == "" {
@@ -45,7 +46,7 @@ func Open(file string) (files FileContext, s State, err error) {
 		files.Audio = file
 		states, dberr := filesDB.StateFiles(file)
 		if dberr != nil {
-			fmt.Printf("db error: retrieving linked state file: %s: %v\n", file, dberr)
+			log.DB.Printf("error retrieving linked state file: %s: %v\n", file, dberr)
 		}
 		if len(states) == 0 {
 			files.State = fs.SaveDir() + "/" + stateKey(file)
@@ -53,9 +54,9 @@ func Open(file string) (files FileContext, s State, err error) {
 			files.State = states[0]
 			if len(states) > 1 {
 				// XXX should allow user to choose which state to load
-				fmt.Printf("multiple states available for audio %s; using first\n", file)
+				log.DB.Printf("multiple states available for audio %s; using first\n", file)
 				for _, f := range states {
-					fmt.Printf("	%s\n", f)
+					log.DB.Printf("	%s\n", f)
 				}
 			}
 		}
@@ -113,14 +114,14 @@ func SaveState(files *FileContext, s State) (err error) {
 			if files.Version != 0 && files.Version != currentVersion {
 				bak := fmt.Sprintf("%s.v%d.bak", files.State, files.Version)
 				if fserr := os.Rename(files.State, bak); fserr != nil {
-					fmt.Printf("fs error: backing up %s: %v\n", bak, err)
+					log.FS.Printf("error backing up %s: %v\n", bak, err)
 				} else {
 					files.Version = currentVersion
 				}
 			}
 			if err = fs.ReplaceFile(tmpfile.Name(), files.State); err == nil {
 				if dberr := filesDB.Associate(files.State, files.Audio); dberr != nil {
-					fmt.Printf("db error: associating %s -> %s: %v\n", files.State, files.Audio, dberr)
+					log.DB.Printf("error associating %s -> %s: %v\n", files.State, files.Audio, dberr)
 				}
 			}
 		} else {

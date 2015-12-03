@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -11,6 +10,7 @@ import (
 
 	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/fs"
+	"sqweek.net/sqribe/log"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/plumb"
 	"sqweek.net/sqribe/score"
@@ -83,7 +83,7 @@ func save() error {
 	if st, err := os.Stat(G.files.State); err == nil {
 		G.files.Timestamp = st.ModTime()
 	} else {
-		fmt.Println("fs error retreiving timestamp:", err)
+		log.FS.Println("warning: couldn't retreive timestamp:", err)
 		G.files.Timestamp = ZeroTime
 	}
 	return nil
@@ -92,7 +92,7 @@ func save() error {
 func mustMkFont(filename string, size int) *Font {
 	font, err := NewFont(filename, size)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	return font
 }
@@ -101,6 +101,7 @@ var profile = flag.String("prof", "", "write cpu profile to file")
 
 func main() {
 	flag.Parse()
+	log.Printf("sqribe version unknown")
 
 	if *profile != "" {
 		f, err := os.Create(*profile)
@@ -167,7 +168,7 @@ func main() {
 	//XXX should avoid closing GUI if save fails
 	err = save()
 	if err != nil {
-		log.Println(err)
+		log.FS.Println(err)
 	}
 	os.Remove(fs.CacheFile())
 }

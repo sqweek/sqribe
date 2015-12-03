@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"sqweek.net/sqribe/audio"
+	"sqweek.net/sqribe/log"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/score"
 
@@ -76,7 +77,7 @@ func loadNotes(sc *score.Score, staff *score.Staff, n int, notefn noteFunc, beat
 	for i := 0; i < n; i++ {
 		pitch, duration, offset, err := notefn(i)
 		if err != nil {
-			fmt.Printf("error loading note %d: %v\n", i, err)
+			log.FS.Printf("error loading note %d: %v\n", i, err)
 			continue
 		}
 		beatf, _ := offset.Float64()

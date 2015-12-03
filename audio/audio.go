@@ -4,8 +4,9 @@ import (
 	"code.google.com/p/portaudio-go/portaudio"
 	"errors"
 	"flag"
-	"log"
 	"time"
+
+	"sqweek.net/sqribe/log"
 
 	. "sqweek.net/sqribe/core/types"
 )
@@ -33,7 +34,7 @@ func HostApi() *portaudio.HostApiInfo {
 		if err == nil {
 			return hostApi
 		}
-		log.Println(err)
+		log.AU.Println(err)
 	}
 	return nil
 }
@@ -81,7 +82,7 @@ func Open() error {
 	if (*useCallback) {
 		impl = "callback"
 	}
-	log.Printf("audio %s stream %s:'%s' (%d channels @ %d Hz) w/ latency %v\n", impl, host.Name, dev.Name, Channels, SampleRate, params.Output.Latency)
+	log.AU.Printf("%s stream %s:'%s' (%d channels @ %d Hz) w/ latency %v\n", impl, host.Name, dev.Name, Channels, SampleRate, params.Output.Latency)
 
 	return nil
 }
