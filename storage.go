@@ -174,10 +174,13 @@ func (f *filesSqlite) createSchema(db *sql.DB) (err error) {
 	var tx *sql.Tx
 	if tx, err = db.Begin(); err == nil {
 		var vers int
-		defer commitUnlessErr(tx, &err)
+		defer tx.Rollback()
 		row := tx.QueryRow("PRAGMA schema_version;")
 		if err = row.Scan(&vers); err == nil && vers == 0 {
 			_, err = tx.Exec("CREATE TABLE paths (state TEXT NOT NULL PRIMARY KEY, audio TEXT NOT NULL, CHECK(length(state) > 0 AND length(audio) > 0));")
+			if err == nil {
+				err = tx.Commit()
+			}
 		}
 	}
 	return
@@ -213,23 +216,17 @@ func (f *filesSqlite) Associate(statefile, audiofile string) error {
 		if tx, err = db.Begin(); err != nil {
 			return
 		}
-		defer commitUnlessErr(tx, &err)
+		defer tx.Rollback()
 		row := tx.QueryRow("SELECT audio FROM paths WHERE state = ?", statefile)
 		var audio string
 		if err = row.Scan(&audio); err == sql.ErrNoRows {
 			_, err = tx.Exec("INSERT INTO paths VALUES (?, ?)", statefile, audiofile)
+			if err == nil {
+				err = tx.Commit()
+			}
 		} else if err == nil && audio != audiofile {
 			err = &AssociationConflict{statefile, audiofile, audio}
 		}
 		return
 	})
-}
-
-func commitUnlessErr(tx *sql.Tx, err *error) {
-	if *err == nil {
-		*err = tx.Commit()
-	}
-	if *err != nil {
-		tx.Rollback()
-	}
 }
