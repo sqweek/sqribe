@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -126,8 +127,17 @@ func main_parent() {
 	for i := 1; i < len(os.Args); i++ {
 		cmd.Args[i+1] = os.Args[i]
 	}
-	// TODO capture output to file
-	cachefile := filepath.Join(fs.CacheDir(), cachename)
+	logpath := filepath.Join(fs.CacheDir(), fmt.Sprintf("%s.%d.log", host, os.Getpid()))
+	logfile, err := os.Create(logpath)
+	var logger io.Writer
+	if err != nil {
+		log.Println("error creating log file: ", err)
+		logger = os.Stderr
+	} else {
+		logger = io.MultiWriter(os.Stderr, logfile)
+	}
+	cmd.Stdout = logger
+	cmd.Stderr = logger
 	status := 0
 	err = cmd.Start()
 	if err != nil {
@@ -148,7 +158,11 @@ func main_parent() {
 	if state != nil && !state.Success() {
 		status = 1
 	}
-	os.Remove(cachefile)
+	os.Remove(filepath.Join(fs.CacheDir(), cachename))
+	if status == 0 && logfile != nil {
+		logfile.Close()
+		os.Remove(logpath)
+	}
 	os.Exit(status)
 }
 
