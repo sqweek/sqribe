@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"time"
@@ -55,7 +58,7 @@ func open(filename string) error {
 	}
 
 	// TODO allow user to locate audio if it doesn't exist (eg. been moved)
-	wav, err := wave.NewWaveform(files.Audio)
+	wav, err := wave.NewWaveform(files.Audio, filepath.Join(fs.CacheDir(), *cachefile))
 	if err != nil {
 		return err
 	}
@@ -98,10 +101,59 @@ func mustMkFont(filename string, size int) *Font {
 }
 
 var profile = flag.String("prof", "", "write cpu profile to file")
+var cachefile = flag.String("cache", "", "cache file name")
 
 func main() {
 	flag.Parse()
-	log.Printf("sqribe version unknown")
+	if *cachefile == "" {
+		main_parent()
+	} else {
+		main_child()
+	}
+}
+
+func main_parent() {
+	host, err := os.Hostname()
+	if err != nil {
+		log.Println("os.Hostname failed:", err)
+		host = "localhost"
+	}
+	cachename := fmt.Sprintf("%s.%d", host, os.Getpid())
+	cmd := exec.Command(os.Args[0])
+	cmd.Args = make([]string, len(os.Args) + 1)
+	cmd.Args[0] = os.Args[0]
+	cmd.Args[1] = fmt.Sprintf("-cache=%s", cachename)
+	for i := 1; i < len(os.Args); i++ {
+		cmd.Args[i+1] = os.Args[i]
+	}
+	// TODO capture output to file
+	cachefile := filepath.Join(fs.CacheDir(), cachename)
+	status := 0
+	err = cmd.Start()
+	if err != nil {
+		log.Fatal("launch error:", err)
+	}
+	sigs := make(chan os.Signal)
+	signal.Notify(sigs)
+	go func() {
+		for sig := range sigs {
+			// propagate signal to child process. we'll die when it dies.
+			cmd.Process.Signal(sig)
+		}
+	}()
+	state, err := cmd.Process.Wait()
+	if err != nil {
+		log.Println("wait error:", err)
+	}
+	if state != nil && !state.Success() {
+		status = 1
+	}
+	os.Remove(cachefile)
+	os.Exit(status)
+}
+
+func main_child() {
+	log.Println("sqribe version unknown")
 
 	if *profile != "" {
 		f, err := os.Create(*profile)
@@ -111,7 +163,12 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
-	err := audio.Open()
+	err := fs.MkDirs()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = audio.Open()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,5 +227,4 @@ func main() {
 	if err != nil {
 		log.FS.Println(err)
 	}
-	os.Remove(fs.CacheFile())
 }

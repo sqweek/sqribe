@@ -46,11 +46,11 @@ func (l LogContext) Printf(format string, args... interface{}) {
 	log(l.Prefix, fmt.Sprintf(format, args...))
 }
 
-var DB LogContext = LogContext{"   DB "}
-var FS LogContext = LogContext{"FILES "}
-var AU LogContext = LogContext{"AUDIO "}
-var WAV LogContext = LogContext{" WAVE "}
-var UI LogContext = LogContext{"   UI "}
+var DB = LogContext{"   DB "}
+var FS = LogContext{"FILES "}
+var AU = LogContext{"AUDIO "}
+var WAV = LogContext{" WAVE "}
+var UI = LogContext{"   UI "}
 
 func Fatal(args... interface{}) {
 	log("FATAL ", fmt.Sprint(args...))

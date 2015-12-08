@@ -16,28 +16,12 @@ var (
 	getModuleFileName = kernel.MustFindProc("GetModuleFileNameW")
 )
 
-var cacheDir string
-var saveDir string
-
-func init() {
-	cacheDir = os.Getenv("TEMP") + "\\sqribe"
-	saveDir = os.Getenv("APPDATA") + "\\sqribe"
-	err := os.MkdirAll(cacheDir, 0755)
-	if err != nil {
-		panic(err)
-	}
-	err = os.MkdirAll(saveDir, 0755)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func CacheFile() string {
-	return fmt.Sprintf("%s/%d", cacheDir, os.Getpid())
+func CacheDir() string {
+	return os.Getenv("TEMP") + "\\sqribe"
 }
 
 func SaveDir() string {
-	return saveDir
+	return os.Getenv("APPDATA") + "\\sqribe"
 }
 
 func ReplaceFile(src, dst string) error {

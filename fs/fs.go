@@ -2,13 +2,16 @@ package fs
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
 
 	"sqweek.net/sqribe/log"
 )
 
-func Join(dirs... string) string {
-	return strings.Join(dirs, string(os.PathSeparator))
+func MkDirs() (err error) {
+	if err = os.MkdirAll(CacheDir(), 0755); err != nil {
+		err = os.MkdirAll(SaveDir(), 0755)
+	}
+	return
 }
 
 func Find(filename string, paths... string) (string, error) {
@@ -17,7 +20,7 @@ func Find(filename string, paths... string) (string, error) {
 
 func find(filename string, paths... string) (string, error) {
 	for _, path := range paths {
-		f := Join(path, filename)
+		f := filepath.Join(path, filename)
 		if _, err := os.Stat(f); !os.IsNotExist(err) {
 			return f, nil
 		}
@@ -38,3 +41,9 @@ func MustFind(filename string, paths... string) string {
 	}
 	return f
 }
+
+// platform-specific functions:
+// func CacheDir() string
+// func SaveDir() string
+// func ExeDir() string
+// func ReplaceFile(src, dst string) error

@@ -5,7 +5,6 @@ import (
 	"github.com/sqweek/ffau"
 
 	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/log"
 	. "sqweek.net/sqribe/core/types"
 )
@@ -19,9 +18,9 @@ type Waveform struct {
 	cache *cache
 }
 
-func NewWaveform(file string) (*Waveform, error) {
+func NewWaveform(file, cachefile string) (*Waveform, error) {
 	wave := &Waveform{rate: audio.SampleRate, Channels: audio.Channels, NSamples: 0}
-	wave.cache = mkcache(1024*1024, 2, fs.CacheFile())
+	wave.cache = mkcache(1024*1024, 2, cachefile)
 	wave.Max = make([]int16, wave.Channels)
 	ctx, err := ffau.OpenFile(file)
 	if err != nil {
