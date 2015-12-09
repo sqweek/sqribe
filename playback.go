@@ -195,7 +195,7 @@ func play(rng TimeRange) {
 			s.f0, s.fN = rng.MinFrame(), rng.MaxFrame()
 			if s.frame + bufsiz > s.fN {
 				// pad to nearest 64th frame, minimum 20 frames
-				nfPad := 19 + (64 - ((s.fN - s.f0 + 1) + 19) % 64)
+				nfPad := 19 + (64 - ((s.fN - s.frame + 1) + 19) % 64)
 				wave := G.wav.Frames(s.frame, s.fN)
 				frame0 := G.wav.Frames(s.f0, s.f0)
 				s.buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
