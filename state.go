@@ -48,6 +48,7 @@ type stateV3 struct {
 	Beats []FrameN
 	FrameRate int
 	Staves []SavedStaff
+	Tuning float64 `json:",omitempty"`
 	MasterGain float64 `json:",omitempty"`
 	WaveGain float64 `json:",omitempty"`
 	MidiGain float64 `json:",omitempty"`
@@ -177,6 +178,7 @@ func CaptureState() State {
 	s.FrameRate = audio.SampleRate
 	s.Beats = G.score.BeatFrames()
 	s.Staves = savedStaves(&G.score, s.Beats)
+	s.Tuning = Synth.Tuning()
 	s.MasterGain = Mixer.Master.Gain - 1.0
 	s.WaveGain = Mixer.Wave.Gain - 1.0
 	s.MidiGain = Mixer.Midi.Gain - 1.0
@@ -198,6 +200,7 @@ func (s *stateV3) Restore() {
 	convertFrames(s.Beats, s.FrameRate, audio.SampleRate)
 	G.score.LoadBeats(s.Beats)
 	loadStaves(&G.score, s.Staves, s.Beats)
+	Synth.SetTuning(s.Tuning)
 	Mixer.Master.Gain = s.MasterGain + 1.0
 	Mixer.Wave.Gain = s.WaveGain + 1.0
 	Mixer.Midi.Gain = s.MidiGain + 1.0

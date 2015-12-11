@@ -4,12 +4,16 @@ import (
 	"time"
 
 	"github.com/sqweek/fluidsynth"
+
+	"sqweek.net/sqribe/midi"
 )
 
 type Synthesizer struct {
 	fluid *fluidsynth.Synth
 	chans map[uint8]uint8 // midi instrument -> channel allocations
 	schedule chan ScheduledEvent
+	tuning float64
+	freq float64
 }
 
 var Synth *Synthesizer
@@ -41,8 +45,35 @@ func (s *Synthesizer) Inst(inst uint8) uint8 {
 		c = uint8(len(s.chans))
 		s.chans[inst] = c
 		s.fluid.ProgramChange(c, inst)
+		if s.tuning != 0 {
+			s.fluid.TuningChange(c, 0)
+		}
 	}
 	return c
+}
+
+func (s *Synthesizer) Tuning() float64 {
+	return s.tuning
+}
+
+func (s *Synthesizer) TuningFreq() float64 {
+	return s.freq
+}
+
+func (s *Synthesizer) AdjustTuning(Δcents float64) float64 {
+	return s.SetTuning(s.tuning + Δcents)
+}
+
+func (s *Synthesizer) SetTuning(newTuning float64) (freq float64) {
+	s.tuning = newTuning
+	tuning := fluidsynth.ShiftedTuning(newTuning)
+	s.fluid.InstallTuning(0, "sqribe", tuning)
+	for _, ch := range s.chans {
+		s.fluid.TuningChange(ch, 0)
+	}
+	freq = tuning.Freq(midi.PitchA4)
+	s.freq = freq
+	return
 }
 
 type SynthEvent interface {

@@ -139,6 +139,10 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				G.score.KeyChange(-1)
 			case e.Key == wde.KeyF3:
 				G.score.KeyChange(1)
+			case e.Key == wde.KeyF5:
+				Synth.AdjustTuning(-10)
+			case e.Key == wde.KeyF6:
+				Synth.AdjustTuning(10)
 			case e.Key == wde.KeyPrior:
 				G.mixw.AdjustGain(&Mixer.Wave.Gain, 0.1)
 			case e.Key == wde.KeyNext:
@@ -216,10 +220,15 @@ func quantizeStr() string {
 	return fmt.Sprintf("%.1fbpm ±%v", bpm, niceDur(errd))
 }
 
+func tuningStr() string {
+	freq := Synth.TuningFreq()
+	return fmt.Sprintf("A4=%6.4gHz", freq)
+}
+
 func drawstatus(dst draw.Image, r image.Rectangle) {
 	bg := color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
 	draw.Draw(dst, r, &image.Uniform{bg}, image.ZP, draw.Src)
-	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s  %v", G.ww.Status(), quantizeStr()))
+	G.font.luxi.Draw(dst, color.Black, r, fmt.Sprintf("%s  %v  %v", G.ww.Status(), quantizeStr(), tuningStr()))
 }
 
 func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
