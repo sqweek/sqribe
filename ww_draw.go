@@ -486,7 +486,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		for d := 0.5; d >= n.duration; d /= 2 {
 			var c image.Point
 			if n.downBeam {
-				c = image.Pt(beamEnd.X, beamEnd.Y - i * 3)
+				c = image.Pt(beamEnd.X - 1, beamEnd.Y - i * 3 - 1)
 			} else {
 				c = image.Pt(beamEnd.X, beamEnd.Y + i * 3)
 			}
