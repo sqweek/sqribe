@@ -40,6 +40,7 @@ func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 
 func (cb *callbackOps) Start() {
 	cb.index = 0
+	cb.timing.CurrentTime = 0
 	cb.buf.Clear()
 }
 

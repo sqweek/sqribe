@@ -18,7 +18,7 @@ type audioOps interface {
 	Index() (idx FrameN, ok bool)
 }
 
-var useCallback = flag.Bool("cb", false, "use callback")
+var useCallback = flag.Bool("cb", true, "use callback")
 
 var ops audioOps
 var stream *portaudio.Stream

@@ -241,12 +241,14 @@ func play(rng TimeRange) {
 				}
 				select {
 				case changed := <-scorechan:
+					start := time.Now()
 					if changed.beat {
 						bhead, bev = beatlst(in.f0, in.fN, in.frame)
 					}
 					if changed.note || changed.beat {
 						evhead, mev = midilst(in.f0, in.fN, in.frame)
 					}
+					log.AU.Printf("playback change processed in %v (beats:%t notes:%t)", time.Now().Sub(start), changed.beat, changed.note)
 				default:
 				}
 				if prevframe > in.frame {
