@@ -171,10 +171,12 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 		go func() {
 			for ev := range events {
 				change := SCALE
-				if _, ok := ev.(score.BeatChanged); ok {
+				switch ev := ev.(type) {
+				case score.BeatChanged:
 					change |= BEATS
-				}
-				if ev, ok := ev.(score.StaffChanged); ok {
+				case score.KeyChanged:
+					change |= MIXER
+				case score.StaffChanged:
 					for note, staff := range ww.notesel {
 						if _, ok := ev.Staves[staff]; !ok {
 							continue

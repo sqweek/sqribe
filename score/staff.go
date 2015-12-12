@@ -25,6 +25,8 @@ type StaffChanged struct {
 	Staves map[*Staff]struct{}
 }
 
+type KeyChanged StaffChanged
+
 func staffChanged(staves... *Staff) StaffChanged {
 	c := StaffChanged{make(map[*Staff]struct{})}
 	for _, staff := range staves {
@@ -64,7 +66,7 @@ func (score *Score) KeyChange(dsharps int) {
 			staff.nsharps += 12
 		}
 	}
-	score.plumb.C <- staffChanged(score.staves...)
+	score.plumb.C <- KeyChanged(staffChanged(score.staves...))
 }
 
 func (score *Score) Staves() []*Staff {
