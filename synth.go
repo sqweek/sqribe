@@ -4,8 +4,6 @@ import (
 	"time"
 
 	"github.com/sqweek/fluidsynth"
-
-	"sqweek.net/sqribe/midi"
 )
 
 type Synthesizer struct {
@@ -71,7 +69,7 @@ func (s *Synthesizer) SetTuning(newTuning float64) (freq float64) {
 	for _, ch := range s.chans {
 		s.fluid.TuningChange(ch, 0)
 	}
-	freq = tuning.Freq(midi.PitchA4)
+	freq = tuning.Freq(69) // 69 is "midi A5" aka "scientific pitch notation A4"
 	s.freq = freq
 	return
 }

@@ -222,7 +222,7 @@ func quantizeStr() string {
 
 func tuningStr() string {
 	freq := Synth.TuningFreq()
-	return fmt.Sprintf("A4=%6.4gHz", freq)
+	return fmt.Sprintf("A=%.4gHz", freq)
 }
 
 func drawstatus(dst draw.Image, r image.Rectangle) {
