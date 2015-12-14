@@ -213,11 +213,15 @@ func play(rng TimeRange) {
 		}
 		close(sampch)
 	}()
+	if err := audio.Play(rng.MinFrame()); err != nil {
+		log.AU.Println("couldn't start stream:", err)
+		playState = STOPPED
+		return
+	}
 	scorechan := make(chan PlayChange)
 	G.plumb.score.Sub(&playState, coalesced(scorechan))
 
 	var mpeak, wpeak float64 = 0, 0
-	audio.Play(rng.MinFrame())
 	/* synth & sample feeding thread */
 	go func() {
 		var in Samples
