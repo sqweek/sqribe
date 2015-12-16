@@ -21,6 +21,7 @@ func SynthInit(srate int, sfont string) (*Synthesizer, error) {
 	settings["audio.period-size"] = srate
 	settings["audio.sample-format"] = "16bits"
 	settings["synth.gain"] = 0.6
+	settings["synth.sample-rate"] = float64(srate)
 	synth := &Synthesizer{
 		fluid: fluidsynth.NewSynth(settings),
 		chans: make(map[uint8]uint8),
