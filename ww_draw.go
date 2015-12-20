@@ -143,10 +143,10 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		if change & WAV != 0 {
 			ww.drawWave(ww.renderstate.waveRulers, ww.rect.wave)
 		}
-		if change & BEATS != 0 || change & VIEWPOS != 0 {
+		if change & (BEATS | VIEWPOS | SELXN) != 0 {
 			ww.drawBeatAxis(ww.renderstate.waveRulers, ww.rect.beatAxis)
 		}
-		if change & VIEWPOS != 0 {
+		if change & (VIEWPOS | SELXN) != 0 {
 			ww.drawTimeAxis(ww.renderstate.waveRulers, ww.rect.timeAxis)
 		}
 		switch {
@@ -157,7 +157,7 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 			draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
 		}
 		if change & (SELXN | SCALE | BEATS) != 0 {
-			ww.drawSelxn(ww.renderstate.img, ww.rect.wave)
+			ww.drawSelxn(ww.renderstate.img, ww.rect.waveRulers)
 			ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx())
 			img := ww.renderstate.img.SubImage(ww.rect.waveRulers).(*image.RGBA)
 			screen.CopyRGBA(img, ww.rect.waveRulers)
