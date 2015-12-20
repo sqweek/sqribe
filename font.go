@@ -79,11 +79,13 @@ func (font *Font) PixelHeight() int {
 }
 
 func (font *Font) Draw(dst draw.Image, colour color.Color, r image.Rectangle, str string) {
+	b := font.font.Bounds(font.fontscale)
+	h := font.PixelHeight()
+	baseline := (r.Min.Y + r.Max.Y) / 2 + h / 2 + roundFix(b.YMin, 6)
 	font.fc.SetDst(dst)
 	font.fc.SetSrc(&image.Uniform{colour})
 	font.fc.SetClip(r)
-	// TODO use actual baseline etc. instead of +10
-	font.fc.DrawString(str, freetype.Pt(r.Min.X + 10, r.Min.Y + 10))
+	font.fc.DrawString(str, freetype.Pt(r.Min.X + 1, baseline))
 }
 
 /* Renders a string centered at point 'pt' */
