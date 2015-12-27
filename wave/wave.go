@@ -107,6 +107,9 @@ func (chunk *Chunk) copy(samples []int16, i0 SampleN) {
 
 /* Blocks until frames from f0 to fN (inclusive) have been read from disk */
 func (wav *Waveform) Frames(f0, fN FrameN) []int16 {
+	if fN < f0 {
+		fN = f0
+	}
 	s0, sN := wav.SampleRange(f0, fN)
 	chunk0, chunkN := wav.cache.Bounds(s0, sN)
 	if chunk0 == chunkN {
