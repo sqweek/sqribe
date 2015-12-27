@@ -35,7 +35,11 @@ func (block *blockingOps) Append(wav []int16) int {
 	return len(wav)
 }
 
-func (block *blockingOps) Start() {
+func (block *blockingOps) Prepare() {
+	block.pos = 0
+}
+
+func (block *blockingOps) Started() {
 	block.playbackStart = monotonicTime()
 }
 

@@ -14,7 +14,8 @@ import (
 type audioOps interface {
 	Open(params portaudio.StreamParameters) (*portaudio.Stream, error)
 	Append(samples []int16) int
-	Start()
+	Prepare()
+	Started()
 	Index() (idx FrameN, ok bool)
 }
 
@@ -100,10 +101,11 @@ func Append(wav []int16) int {
 func Play(f0 FrameN) error {
 	if stopped {
 		baseIndex = 0
-		ops.Start()
+		ops.Prepare()
 		if err := stream.Start(); err != nil {
 			return err
 		}
+		ops.Started()
 		stopped = false
 	} else {
 		prevfr, prevBase = fr, baseIndex

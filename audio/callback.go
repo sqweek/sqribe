@@ -38,10 +38,13 @@ func paCallback(out []int16, time portaudio.StreamCallbackTimeInfo) {
 	cb.timing = time
 }
 
-func (cb *callbackOps) Start() {
-	cb.index = 0
+func (cb *callbackOps) Prepare() {
 	cb.timing.CurrentTime = 0
 	cb.buf.Clear()
+	cb.index = 0
+}
+
+func (cb *callbackOps) Started() {
 }
 
 func (cb *callbackOps) Index() (FrameN, bool) {
