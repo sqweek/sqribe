@@ -52,11 +52,6 @@ var AU = LogContext{"AUDIO "}
 var WAV = LogContext{" WAVE "}
 var UI = LogContext{"   UI "}
 
-func Fatal(args... interface{}) {
-	log("FATAL ", fmt.Sprint(args...))
-	os.Exit(1)
-}
-
 func Printf(format string, args... interface{}) {
 	LogContext{}.Printf(format, args...)
 }

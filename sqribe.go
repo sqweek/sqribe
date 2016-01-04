@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/sqweek/dialog"
 	"io"
 	"os"
 	"os/exec"
@@ -104,6 +105,13 @@ func mustMkFont(filename string, size int) *Font {
 var profile = flag.String("prof", "", "write cpu profile to file")
 var cachefile = flag.String("cache", "", "cache file name")
 
+func fatal(args... interface{}) {
+	msg := fmt.Sprint(args...)
+	log.Printf("FATAL %s", msg)
+	dialog.Message("%s", msg).Title("sqribe - fatal error").Error()
+	os.Exit(0)
+}
+
 func main() {
 	flag.Parse()
 	if *cachefile == "" {
@@ -141,7 +149,7 @@ func main_parent() {
 	status := 0
 	err = cmd.Start()
 	if err != nil {
-		log.Fatal("launch error:", err)
+		fatal("launch error:", err)
 	}
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs)
@@ -172,19 +180,19 @@ func main_child() {
 	if *profile != "" {
 		f, err := os.Create(*profile)
 		if err != nil {
-			log.Fatal(err)
+			fatal(err)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
 	err := fs.MkDirs()
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 
 	err = audio.Open()
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 
 	G.plumb.selection = plumb.MkPort()
@@ -199,7 +207,7 @@ func main_child() {
 
 	Synth, err = SynthInit(audio.SampleRate, fs.MustFind("FluidR3_GM.sf2"))
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 
 	redraw := make(chan Widget, 10)
@@ -224,7 +232,7 @@ func main_child() {
 	if len(audioFile) > 0 {
 		err = open(audioFile)
 		if err != nil {
-			log.Fatal(err)
+			fatal(err)
 		}
 	}
 

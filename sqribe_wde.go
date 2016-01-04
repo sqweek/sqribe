@@ -292,7 +292,7 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 func InitWde(redraw chan Widget) *sync.WaitGroup {
 	dw, err := wde.NewWindow(800, 400)
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 	dw.SetTitle("Sqribe")
 	dw.SetSize(800, 400)
