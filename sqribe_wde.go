@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/sqweek/dialog"
 	"image"
 	"image/color"
 	"image/draw"
@@ -26,6 +27,8 @@ type DragState struct {
 }
 
 func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
+	openDlg := dialog.File().Title("sqribe - Open").Filter("Audio Files", "mp3", "ogg", "m4a", "wma", "mov", "mp4", "flv", "wmv").Filter("Sqribe Save", "sqs")
+	exportDlg := dialog.File().Title("sqribe - Export to MusicXML").Filter("MXML Files", "xml", "mxl")
 	events := win.EventChan()
 	defer func() {
 		done <- true
@@ -118,6 +121,30 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				G.ww.Snarf()
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
 				G.ww.SetPasteMode(true)
+			case e.Chord == "control+o":
+				if playState == STOPPED {
+					var err error
+					var f string
+					if err = save(); err == nil {
+						// TODO should block rather than buffer input events during dialog
+						if f, err = openDlg.Load(); err == nil {
+							err = open(f)
+						}
+					}
+					if err != nil && err != dialog.Cancelled {
+						alert("%v", err)
+					}
+				}
+			case e.Chord == "control+e":
+				go func() {
+					f, err := exportDlg.Save()
+					if err == nil {
+						err = ExportMXML(f)
+					}
+					if err != nil && err != dialog.Cancelled {
+						alert("MXML export failed: %v", err)
+					}
+				}()
 			case e.Chord == "control+c":
 				G.ww.Snarf()
 				G.ww.SetPasteMode(true)
@@ -165,11 +192,6 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				G.mixw.Toggle(&Mixer.Midi.Muted)
 			case e.Key == wde.KeyQ:
 				go G.score.QuantizeBeats()
-			case e.Key == wde.KeyX:
-				err := ExportMXML("export.xml")
-				if err != nil {
-					log.FS.Println("MXML export failed:", err)
-				}
 			case e.Glyph == "#":
 				G.score.MvNotes(1, &rZero, G.ww.SelectedNotes()...)
 			case e.Glyph == "@":

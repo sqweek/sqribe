@@ -52,7 +52,7 @@ func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	return layout
 }
 
-func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
+func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score, reset bool) {
 	rect.Rectangle = r
 	axish := 20
 	infow := 100
@@ -64,13 +64,18 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score) {
 	rect.aboveMixer = leftH(topV(box(rect.mixer.Dx(), axish), rect.mixer), rect.mixer)
 	rect.belowMixer = leftH(botV(box(rect.mixer.Dx(), axish), rect.mixer), rect.mixer)
 	rect.newStaffB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
+	if reset {
+		for staff, _ := range rect.staves {
+			delete(rect.staves, staff)
+			delete(rect.mixers, staff)
+		}
+	}
 	if score != nil && len(score.Staves()) > 0 {
 		minimisedH := 18
 		nstaves := 0 // counts number of non-minimised staves
 		spaceY := rect.wave.Dy()
 		staves := score.Staves()
 		for _, staff := range staves {
-			// XXX need to drop old staves
 			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
 				spaceY -= minimisedH
 			} else {
@@ -123,8 +128,8 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		ww.Zoom(1.0) // to prevent wider resize blowing wave cache
 	}
 	if change != 0 {
-		if change & LAYOUT != 0 {
-			ww.rect.layout(r, ww.score)
+		if change & (LAYOUT | RESET) != 0 {
+			ww.rect.layout(r, ww.score, change & RESET != 0)
 		}
 		if ww.renderstate.cursor == nil {
 			curcol := color.RGBA{0, 0xdd, 0, 255}
@@ -166,7 +171,7 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 			ww.drawCursor(screen, r, ww.cursorX, true)
 		}
 
-		if change & (MIXER | LAYOUT) != 0 {
+		if change & (MIXER | LAYOUT | RESET) != 0 {
 			ww.drawMixer(ww.renderstate.img, ww.rect.mixer.Dx())
 			img := ww.renderstate.img.SubImage(ww.rect.mixer).(*image.RGBA)
 			screen.CopyRGBA(img, ww.rect.mixer)

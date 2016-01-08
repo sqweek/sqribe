@@ -84,7 +84,7 @@ func mxmlIdent(wr *XMLWriter) {
 }
 
 func mxmlParts(wr *XMLWriter) {
-	staves := savedStaves(&G.score, G.score.BeatFrames())
+	staves := savedStaves(G.score, G.score.BeatFrames())
 	list := wr.Tag("part-list")
 	for i, staff := range staves {
 		instName := midi.InstName(staff.Voice)

@@ -57,15 +57,26 @@ type Measure struct {
 	notes []Note /* sorted temporally */
 }
 
-func (score *Score) Init(plumb *plumb.Port) {
-	score.beatLen = big.NewRat(1, 4)
-	score.plumb = plumb
-	score.updates = make(chan request)
+func MkScore(plumb *plumb.Port) *Score {
+	score := Score {
+		beatLen: big.NewRat(1, 4),
+		plumb: plumb,
+		updates: make(chan request),
+	}
 	go func() {
 		for req := range score.updates {
-			req.result <- req.op.apply(score)
+			req.result <- req.op.apply(&score)
 		}
 	}()
+	return &score
+}
+
+func (score *Score) Close() {
+	close(score.updates)
+}
+
+func (score *Score) IsEmpty() bool {
+	return len(score.staves) == 0 && score.Head == nil
 }
 
 func (score *Score) Sub(origin interface{}, c chan interface{}) {

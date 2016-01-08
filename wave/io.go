@@ -39,6 +39,10 @@ func mkcache(blocksz, sampsz uint, file string) *cache {
 	return &cache
 }
 
+func (c *cache) Close() {
+	close(c.iochan)
+}
+
 func (c *cache) MaxSize() uint64 {
 	return uint64(c.blocksz) * uint64(c.lru.max)
 }
@@ -107,9 +111,8 @@ func (c *cache) Wait(id uint64) *Chunk {
 	return chunk
 }
 
-func (c *cache) fetcher() *Chunk {
-	for {
-		id := <-c.iochan
+func (c *cache) fetcher() {
+	for id := range c.iochan {
 		if chunk, ok := c.chunks[id]; ok {
 			/* chunk already in cache, no i/o necessary just bump the lru */
 			c.lru.touch(chunk)

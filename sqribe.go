@@ -25,7 +25,7 @@ import (
 var G struct {
 	/* global state */
 	files FileContext
-	score score.Score
+	score *score.Score
 	wav *wave.Waveform
 
 	/* plumbing */
@@ -64,13 +64,22 @@ func open(filename string) error {
 	if err != nil {
 		return err
 	}
+
+	// point of no return; nothing errors after this and we transition to the new file
 	s.Restore()
 	G.files = files
 	G.wav = wav
+	old := G.ww.SetWaveform(wav)
+	if old != nil {
+		go old.Close()
+	}
 	return nil
 }
 
 func save() error {
+	if G.files.Audio == "" {
+		return nil // save with no audio loaded is a no-op
+	}
 	if !G.files.Timestamp.IsZero() {
 		// user needs to be able to recover from these errors
 		st, err := os.Stat(G.files.State)
@@ -104,6 +113,12 @@ func mustMkFont(filename string, size int) *Font {
 
 var profile = flag.String("prof", "", "write cpu profile to file")
 var cachefile = flag.String("cache", "", "cache file name")
+
+func alert(format string, args... interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Printf("ERROR %s", msg)
+	dialog.Message("%s", msg).Title("sqribe - error").Error()
+}
 
 func fatal(args... interface{}) {
 	msg := fmt.Sprint(args...)
@@ -198,7 +213,7 @@ func main_child() {
 	G.plumb.selection = plumb.MkPort()
 	G.plumb.score = plumb.MkPort()
 
-	G.score.Init(G.plumb.score)
+	G.score = score.MkScore(G.plumb.score)
 
 	G.font.luxi = mustMkFont(fs.MustFind("luxisr.ttf"), 10)
 	G.noteMenu = mkMenu(StringMenuOps{}, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
@@ -213,6 +228,8 @@ func main_child() {
 	redraw := make(chan Widget, 10)
 
 	G.ww = NewWaveWidget(redraw)
+	G.ww.SetScore(G.score)
+
 	G.mixw = NewMixWidget(redraw)
 
 	wg := InitWde(redraw)
@@ -232,12 +249,9 @@ func main_child() {
 	if len(audioFile) > 0 {
 		err = open(audioFile)
 		if err != nil {
-			fatal(err)
+			alert("%v", err)
 		}
 	}
-
-	G.ww.SetWaveform(G.wav)
-	G.ww.SetScore(&G.score)
 
 	redraw <- nil
 

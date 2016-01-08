@@ -27,6 +27,8 @@ type StaffChanged struct {
 
 type KeyChanged StaffChanged
 
+type ResetStaves StaffChanged
+
 func staffChanged(staves... *Staff) StaffChanged {
 	c := StaffChanged{make(map[*Staff]struct{})}
 	for _, staff := range staves {
@@ -77,10 +79,22 @@ func MkStaff(name string, clef *Clef, key KeySig) *Staff {
 	return &Staff{name: name, clef: clef, nsharps: key}
 }
 
-/* XXX should probably be an Op but only used during startup for now */
 func (score *Score) SetStaves(staves []*Staff) {
-	score.staves = staves
-	score.plumb.C <- staffChanged(staves...)
+	score.update(&SetStavesOp{staves})
+	score.plumb.C <- ResetStaves(staffChanged(staves...))
+}
+
+type SetStavesOp struct {
+	staves []*Staff
+}
+
+func (op *SetStavesOp) apply(score *Score) bool {
+	score.staves = op.staves
+	return true
+}
+
+func (op *SetStavesOp) undo(score *Score) {
+	// can't be undone
 }
 
 type AddStaffOp struct {

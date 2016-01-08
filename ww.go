@@ -27,6 +27,7 @@ const (
 	BEATS
 	VIEWPOS
 	LAYOUT
+	RESET // clears layout state
 	MAXBIT
 	EVERYTHING changeMask = MAXBIT - 1
 )
@@ -135,13 +136,14 @@ func (ww *WaveWidget) SelectedTimeRange() TimeRange {
 	return ww.selection
 }
 
-func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
-	if ww.wav != nil {
-		ww.wav.CacheIgnore(ww.iolisten)
+func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) *wave.Waveform {
+	old := ww.wav
+	if old != nil {
+		old.CacheIgnore(ww.iolisten)
 	}
 	ww.wav = wav
-	if ww.wav != nil {
-		iolisten := ww.wav.CacheListen()
+	if wav != nil {
+		iolisten := wav.CacheListen()
 		ww.iolisten = iolisten
 		go func() {
 			for {
@@ -150,7 +152,7 @@ func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
 					return
 				}
 				frng:= ww.VisibleFrameRange()
-				s0, sN := ww.wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
+				s0, sN := wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
 				if chunk.Intersects(s0, sN) {
 					ww.changed(WAV, chunk)
 				}
@@ -158,11 +160,13 @@ func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) {
 		}()
 	}
 	ww.changed(WAV | VIEWPOS, wav)
+	return old
 }
 
-func (ww *WaveWidget) SetScore(sc *score.Score) {
-	if ww.score != nil {
-		ww.score.Unsub(ww)
+func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
+	old := ww.score
+	if old != nil {
+		old.Unsub(ww)
 	}
 	ww.score = sc
 	if sc != nil {
@@ -189,6 +193,11 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 					if len(sc.Staves()) != len(ww.rect.staves) {
 						change |= LAYOUT
 					}
+				case score.ResetStaves:
+					for note, _ := range ww.notesel {
+						delete(ww.notesel, note)
+					}
+					change |= RESET
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
 				ww.changed(change, ev)
@@ -199,6 +208,7 @@ func (ww *WaveWidget) SetScore(sc *score.Score) {
 		sc.InitQuantizer(selxn)
 	}
 	ww.changed(SCALE | LAYOUT, sc)
+	return old
 }
 
 func (ww *WaveWidget) SelectedNotes() []score.StaffNote {

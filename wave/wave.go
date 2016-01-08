@@ -71,6 +71,14 @@ func NewWaveform(file, cachefile string) (*Waveform, error) {
 	return wave, nil
 }
 
+func (wav *Waveform) Close() {
+	// wait for decoder to finish, if it hasn't already
+	for wav.cache.bytesWritten != -1 {
+		time.Sleep(100 * time.Millisecond)
+	}
+	wav.cache.Close()
+}
+
 func (wav *Waveform) ChannelExtents(samples []int16) []int16 {
 	minMax := make([]int16, wav.Channels * 2)
 	for i := 0; i < len(samples); i += wav.Channels {
