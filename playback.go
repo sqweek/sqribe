@@ -169,6 +169,9 @@ func playToggle() {
 		return /* in transition; do nothing */
 	}
 
+	if G.wav == nil {
+		return
+	}
 	playState = PLAYING
 	rng := G.ww.SelectedTimeRange()
 	if rng.MinFrame() == rng.MaxFrame() {
