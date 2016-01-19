@@ -23,7 +23,7 @@ type WaveLayout struct {
 	wave image.Rectangle	// rect of the waveform display
 	waveRulers image.Rectangle	// waveform + rulers
 
-	beatAxis, timeAxis, mixer, aboveMixer, belowMixer, newStaffB image.Rectangle
+	beatAxis, timeAxis, mixRulers, mixer, aboveMixer, belowMixer, newStaffB image.Rectangle
 	staves map[*score.Staff] image.Rectangle
 	mixers map[*score.Staff] *MixerLayout
 }
@@ -60,9 +60,10 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score, reset bool
 	rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 	rect.beatAxis = aboveRect(rect.wave, axish)
 	rect.timeAxis = belowRect(rect.wave, axish)
-	rect.mixer = leftRect(rect.waveRulers, infow)
-	rect.aboveMixer = leftH(topV(box(rect.mixer.Dx(), axish), rect.mixer), rect.mixer)
-	rect.belowMixer = leftH(botV(box(rect.mixer.Dx(), axish), rect.mixer), rect.mixer)
+	rect.mixRulers = leftRect(rect.waveRulers, infow)
+	rect.mixer = leftRect(rect.wave, infow)
+	rect.aboveMixer = aboveRect(rect.mixer, axish)
+	rect.belowMixer = belowRect(rect.mixer, axish)
 	rect.newStaffB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
 	if reset {
 		for staff, _ := range rect.staves {
@@ -172,9 +173,9 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		}
 
 		if change & (MIXER | LAYOUT | RESET) != 0 {
-			ww.drawMixer(ww.renderstate.img, ww.rect.mixer.Dx())
-			img := ww.renderstate.img.SubImage(ww.rect.mixer).(*image.RGBA)
-			screen.CopyRGBA(img, ww.rect.mixer)
+			ww.drawMixer(ww.renderstate.img)
+			img := ww.renderstate.img.SubImage(ww.rect.mixRulers).(*image.RGBA)
+			screen.CopyRGBA(img, ww.rect.mixRulers)
 		}
 	}
 }
@@ -279,18 +280,20 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
 }
 
-func (ww *WaveWidget) drawMixer(dst draw.Image, infow int) {
-	if ww.score == nil {
-		return
-	}
+func (ww *WaveWidget) drawMixer(dst draw.Image) {
 	mixbg := color.RGBA{0x33, 0x22, 0x22, 0xff}
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
 	bg := color.NRGBA{0x55, 0x44, 0x44, 0xff}
 	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
-	drawBorders(dst, ww.rect.mixer, mixbg, mixbg)
-	for staff, _ := range ww.rect.staves {
-		ww.drawStaffCtl(dst, staff)
+	drawBorders(dst, ww.rect.mixRulers, mixbg, mixbg)
+	if ww.score == nil {
+		return
 	}
+	img := image.NewRGBA(ww.rect.mixer) // hack: new image to make clipping easy
+	for staff, _ := range ww.rect.staves {
+		ww.drawStaffCtl(img, staff)
+	}
+	draw.Draw(dst, ww.rect.mixer, img, ww.rect.mixer.Min, draw.Over)
 	drawBorders(dst, ww.rect.newStaffB, border, bg)
 	G.font.luxi.DrawC(dst, fg, ww.rect.newStaffB, "+", centerPt(ww.rect.newStaffB))
 }
