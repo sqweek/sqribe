@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/sqweek/dialog"
+	"github.com/sqweek/fs"
 	"io"
 	"os"
 	"os/exec"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/log"
 	"sqweek.net/sqribe/midi"
 	"sqweek.net/sqribe/plumb"
@@ -59,8 +59,11 @@ func open(filename string) error {
 		}
 	}
 
+	if err := os.MkdirAll(App.Cache, 0777); err != nil {
+		return err
+	}
 	// TODO allow user to locate audio if it doesn't exist (eg. been moved)
-	wav, err := wave.NewWaveform(files.Audio, filepath.Join(fs.CacheDir(), *cachefile))
+	wav, err := wave.NewWaveform(files.Audio, filepath.Join(App.Cache, *cachefile))
 	if err != nil {
 		return err
 	}
@@ -124,11 +127,14 @@ func fatal(args... interface{}) {
 	msg := fmt.Sprint(args...)
 	log.Printf("FATAL %s", msg)
 	dialog.Message("%s", msg).Title("sqribe - fatal error").Error()
-	os.Exit(0)
+	os.Exit(1)
 }
 
 func main() {
 	flag.Parse()
+	if err := fsinit("net.sqweek.sqribe", "sqribe"); err != nil {
+		fatal(err)
+	}
 	if *cachefile == "" {
 		main_parent()
 	} else {
@@ -150,8 +156,8 @@ func main_parent() {
 	for i := 1; i < len(os.Args); i++ {
 		cmd.Args[i+1] = os.Args[i]
 	}
-	logpath := filepath.Join(fs.CacheDir(), fmt.Sprintf("%s.%d.log", host, os.Getpid()))
-	logfile, err := os.Create(logpath)
+	logpath := filepath.Join(App.Cache, fmt.Sprintf("%s.%d.log", host, os.Getpid()))
+	logfile, err := fs.Create(logpath)
 	var logger io.Writer
 	if err != nil {
 		log.Println("error creating log file: ", err)
@@ -181,7 +187,7 @@ func main_parent() {
 	if state != nil && !state.Success() {
 		status = 1
 	}
-	os.Remove(filepath.Join(fs.CacheDir(), cachename))
+	os.Remove(filepath.Join(App.Cache, cachename))
 	if status == 0 && logfile != nil {
 		logfile.Close()
 		os.Remove(logpath)
@@ -190,6 +196,7 @@ func main_parent() {
 }
 
 func main_child() {
+	var err error
 	log.Println("sqribe version unknown")
 
 	if *profile != "" {
@@ -199,10 +206,6 @@ func main_child() {
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
-	}
-	err := fs.MkDirs()
-	if err != nil {
-		fatal(err)
 	}
 
 	err = audio.Open()
@@ -215,12 +218,12 @@ func main_child() {
 
 	G.score = score.MkScore(G.plumb.score)
 
-	G.font.luxi = mustMkFont(fs.MustFind("luxisr.ttf"), 10)
+	G.font.luxi = mustMkFont(MustFind("luxisr.ttf"), 10)
 	G.noteMenu = mkMenu(StringMenuOps{}, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 	G.noteMenu.SetDefault("1")
 	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstHarp, midi.InstVoice)
 
-	Synth, err = SynthInit(audio.SampleRate, fs.MustFind("FluidR3_GM.sf2"))
+	Synth, err = SynthInit(audio.SampleRate, MustFind("FluidR3_GM.sf2"))
 	if err != nil {
 		fatal(err)
 	}

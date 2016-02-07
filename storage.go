@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/sqweek/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
 
-	"sqweek.net/sqribe/fs"
 	"sqweek.net/sqribe/log"
 )
 
@@ -49,7 +49,7 @@ func Open(file string) (files FileContext, s State, err error) {
 			log.DB.Printf("error retrieving linked state file: %s: %v\n", file, dberr)
 		}
 		if len(states) == 0 {
-			files.State = fs.SaveDir() + "/" + stateKey(file)
+			files.State = filepath.Join(App.Data, stateKey(file))
 		} else {
 			files.State = states[0]
 			if len(states) > 1 {
@@ -156,7 +156,7 @@ var filesDB filesSqlite
 
 func (f *filesSqlite) withDB(fn func(db *sql.DB)error) (err error) {
 	if f.db == nil {
-		f.db, err = sql.Open("sqlite3", fs.SaveDir() + "/files.qps?_busy_timeout=3500")
+		f.db, err = sql.Open("sqlite3", filepath.Join(App.Data, "files.qps?_busy_timeout=3500"))
 		if err != nil {
 			return err
 		}
