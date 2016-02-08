@@ -78,7 +78,6 @@ func (c *cache) Bounds(sample0, sampleN SampleN) (uint64, uint64) {
 }
 
 func (c *cache) Containing(sample SampleN) uint64 {
-//	return uint64(math.Floor((float64(sample) * float64(c.sampsz)) / float64(c.blocksz)))
 	return uint64((sample * SampleN(c.sampsz)) / SampleN(c.blocksz))
 }
 
@@ -112,6 +111,7 @@ func (c *cache) Wait(id uint64) *Chunk {
 }
 
 func (c *cache) fetcher() {
+	var fd *os.File
 	for id := range c.iochan {
 		if chunk, ok := c.chunks[id]; ok {
 			/* chunk already in cache, no i/o necessary just bump the lru */
@@ -130,13 +130,15 @@ func (c *cache) fetcher() {
 			c.add(id, nil)
 			continue
 		}
-		file, err := os.Open(filename)
-		if err != nil {
-			log.WAV.Printf("fetcher: %v\n", err)
-			continue
+		if fd == nil {
+			var err error
+			if fd, err = os.Open(filename); err != nil {
+				log.WAV.Printf("fetcher: %v\n", err)
+				continue
+			}
+			defer fd.Close()
 		}
-		chunk, err := c.readchunk(id, file, offset)
-		file.Close()
+		chunk, err := c.readchunk(id, fd, offset)
 		if err != nil {
 			log.WAV.Printf("fetcher: chunk %d: %v\n", id, err)
 			continue
