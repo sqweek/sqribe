@@ -27,8 +27,8 @@ const (
 	BEATS
 	VIEWPOS
 	LAYOUT
-	RESET // clears layout state
 	MAXBIT
+	RESET // clears layout state - not included in EVERYTHING
 	EVERYTHING changeMask = MAXBIT - 1
 )
 
