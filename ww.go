@@ -194,9 +194,7 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 						change |= LAYOUT
 					}
 				case score.ResetStaves:
-					for note, _ := range ww.notesel {
-						delete(ww.notesel, note)
-					}
+					ww.clearNotesel()
 					change |= RESET
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
@@ -290,8 +288,15 @@ func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
+func (ww *WaveWidget) clearNotesel() {
+	for note, _ := range ww.notesel {
+		delete(ww.notesel, note)
+	}
+}
+
 func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	sc := ww.score
+	addToSel := G.kb.shift
 	return func(pos image.Point, finished bool, moved bool)bool {
 		prospect := ww.noteAtPixel(staff, pos)
 		if prospect == nil {
@@ -311,12 +316,10 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 				}
 			} else {
 				/* regular click */
-				_, selected := ww.notesel[note]
-				if !selected {
-					ww.notesel[note] = staff
-				} else {
-					delete(ww.notesel, note)
+				if !(addToSel || G.kb.shift) {
+					ww.clearNotesel()
 				}
+				ww.notesel[note] = staff
 				ww.changed(SCALE, ww.notesel)
 			}
 		} else {
@@ -342,9 +345,7 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 			ww.changed(SCALE, r)
 		} else {
 			if !(addToSel || G.kb.shift) {
-				for note, _ := range ww.notesel {
-					delete(ww.notesel, note)
-				}
+				ww.clearNotesel()
 			}
 			var sn score.StaffNote
 			next := sc.Iter(ww.VisibleFrameRange())
