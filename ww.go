@@ -194,7 +194,7 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 						change |= LAYOUT
 					}
 				case score.ResetStaves:
-					ww.clearNotesel()
+					ww.selectNotes(true) // clear selection
 					change |= RESET
 				}
 				// XXX could avoid redraw if the staff/beats aren't visible...
@@ -288,9 +288,28 @@ func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
-func (ww *WaveWidget) clearNotesel() {
-	for note, _ := range ww.notesel {
-		delete(ww.notesel, note)
+func (ww *WaveWidget) allAreSelected(notes... score.StaffNote) bool {
+	for _, sn := range notes {
+		if _, ok := ww.notesel[sn.Note]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (ww *WaveWidget) selectNotes(clear bool, notes... score.StaffNote) {
+	if clear {
+		for note, _ := range ww.notesel {
+			delete(ww.notesel, note)
+		}
+	}
+	allSelected := ww.allAreSelected(notes...)
+	for _, sn := range notes {
+		if allSelected {
+			delete(ww.notesel, sn.Note)
+		} else {
+			ww.notesel[sn.Note] = sn.Staff
+		}
 	}
 }
 
@@ -316,10 +335,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 				}
 			} else {
 				/* regular click */
-				if !(addToSel || G.kb.shift) {
-					ww.clearNotesel()
-				}
-				ww.notesel[note] = staff
+				ww.selectNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
 				ww.changed(SCALE, ww.notesel)
 			}
 		} else {
@@ -344,18 +360,17 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 			ww.getMouseState(end).rectSelect = &r
 			ww.changed(SCALE, r)
 		} else {
-			if !(addToSel || G.kb.shift) {
-				ww.clearNotesel()
-			}
+			notes := make([]score.StaffNote, 0, 8)
 			var sn score.StaffNote
 			next := sc.Iter(ww.VisibleFrameRange())
 			for next != nil {
 				sn, next = next()
 				dn := ww.dispNote(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
 				if dn.pt != nil && dn.pt.In(r) {
-					ww.notesel[sn.Note] = sn.Staff
+					notes = append(notes, sn)
 				}
 			}
+			ww.selectNotes(!(addToSel || G.kb.shift), notes...)
 			ww.getMouseState(end).rectSelect = nil
 			ww.changed(SCALE, &ww.notesel)
 		}
