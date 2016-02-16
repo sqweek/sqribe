@@ -20,6 +20,7 @@ type MixConfig struct {
 	Master, Midi, Wave MixVolume
 	MuteMetronome bool
 	Staff map[*score.Staff]*StaffMix
+	preSolo map[*score.Staff]bool // records Muted status of staves before entering solo
 }
 
 type StaffMix struct {
@@ -52,6 +53,36 @@ func (m *MixConfig) For(staff *score.Staff) *StaffMix {
 	return m.Staff[staff]
 }
 
+func (m *MixConfig) IsSolo(s *score.Staff) bool {
+	if m.For(s).Muted {
+		return false
+	}
+	for staff, mix := range m.Staff {
+		if staff != s && !mix.Muted {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *MixConfig) ToggleSolo(s *score.Staff) {
+	if m.IsSolo(s) {
+		for staff, mix := range m.Staff {
+			old := false
+			if m.preSolo != nil {
+				old, _ = m.preSolo[staff] // old remains false if staff not present in map
+			}
+			mix.Muted = old
+		}
+		m.preSolo = nil
+	} else {
+		m.preSolo = make(map[*score.Staff]bool)
+		for staff, mix := range m.Staff {
+			m.preSolo[staff] = mix.Muted
+			mix.Muted = (staff != s)
+		}
+	}
+}
 
 type VolLayout struct {
 	r, icon, slide image.Rectangle

@@ -62,6 +62,9 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 				}
 				ww.changed(LAYOUT | SCALE, &layout.Minimised)
 				return
+			} else if mouse.In(layout.muteB) {
+				Mixer.ToggleSolo(staff)
+				ww.changed(MIXER, ww)
 			}
 		}
 	}
