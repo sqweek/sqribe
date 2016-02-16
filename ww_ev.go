@@ -7,8 +7,82 @@ import (
 
 	"github.com/skelterjohn/go.wde"
 
+	"sqweek.net/sqribe/audio"
 	"sqweek.net/sqribe/midi"
+	"sqweek.net/sqribe/score"
+
+	. "sqweek.net/sqribe/core/types"
 )
+
+func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
+	orig := ww.mouse.state
+	s := ww.getMouseState(mousePos)
+	if s.note != nil && (orig == nil || orig.note == nil || !s.note.Eq(orig.note)) {
+		ww.changed(SCALE, mousePos)
+	}
+	if !audio.IsPlaying() && ww.cursorX != mousePos.X && mousePos.X > ww.rect.wave.Min.X {
+		ww.cursorX = mousePos.X
+		ww.changed(CURSOR, ww.cursorX)
+	}
+	return s.cursor
+}
+
+func (ww *WaveWidget) LeftClick(mouse image.Point) {
+	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
+		return
+	}
+	for staff, layout := range ww.rect.mixers {
+		if mouse.In(layout.r) {
+			if mouse.In(layout.muteB) {
+				toggle(&Mixer.For(staff).Muted)
+				ww.changed(MIXER, ww)
+			} else if mouse.In(layout.minmaxB) {
+				toggle(&layout.Minimised)
+				ww.changed(LAYOUT | SCALE, &layout.Minimised)
+			}
+		}
+	}
+}
+
+func (ww *WaveWidget) RightClick(mouse image.Point) {
+	if mouse.In(ww.rect.mixer) {
+		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+			ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
+			return
+		}
+		for staff, _ := range ww.rect.staves {
+			layout := ww.rect.mixers[staff]
+			if mouse.In(layout.minmaxB) {
+				layout.Minimised = false
+				for staff2, layout2 := range ww.rect.mixers {
+					if staff2 != staff {
+						layout2.Minimised = true
+					}
+				}
+				ww.changed(LAYOUT | SCALE, &layout.Minimised)
+				return
+			}
+		}
+	}
+	if ww.pasteMode {
+		sc := ww.score
+		if s := ww.getMouseState(mouse); s != nil && len(ww.snarf[s.note.staff]) > 0 {
+			anchor := ww.snarf[s.note.staff][0]
+			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
+			beat, offset := sc.Quantize(s.note.beatf)
+			Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
+			for staff, notes := range ww.snarf {
+				mv := make([]*score.Note, 0, len(notes))
+				for _, note := range notes {
+					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat))
+				}
+				sc.AddNotes(staff, mv...)
+			}
+			ww.pasteMode = false
+		}
+	}
+}
 
 func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 	if e.Where.In(ww.rect.waveRulers) {
@@ -91,3 +165,161 @@ func (ww *WaveWidget) scrollDrag(mouse image.Point) DragFn {
 	}
 }
 
+func (ww *WaveWidget) beatDrag(beat *score.BeatRef) DragFn {
+	prev, next := beat.Prev(), beat.Next()
+	min, max := FrameN(0), ww.NFrames()
+	if next != nil {
+		max = next.Frame()
+	}
+	if prev != nil {
+		min = prev.Frame()
+	}
+	return func(pos image.Point, finished bool, moved bool) bool {
+		f := ww.FrameAtPixel(pos.X)
+		if f <= min || f >= max || !moved {
+			return false
+		}
+		ww.score.MvBeat(beat, f)
+		return true
+	}
+}
+
+func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
+	return func(pos image.Point, finished bool, moved bool)bool {
+		if !moved {
+			return false
+		}
+		min := ww.FrameAtPixel(pos.X)
+		max := anchor
+		if max < min {
+			min, max = max, min
+		}
+		if snap {
+			ww.SelectAudioSnapToBeats(min, max)
+		} else {
+			ww.SelectAudio(FrameRange{min, max})
+		}
+		return true
+	}
+}
+
+func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
+	sc := ww.score
+	addToSel := G.kb.shift
+	return func(pos image.Point, finished bool, moved bool)bool {
+		prospect := ww.noteAtPixel(staff, pos)
+		if prospect == nil {
+			return false
+		}
+		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
+		beat, offset := sc.Quantize(prospect.beatf)
+		Δbeat := Δb(beat, offset, note.Beat, note.Offset)
+		_, selected := ww.notesel[note]
+		if finished {
+			ww.mouse.state = nil
+			if moved {
+				if selected {
+					sc.MvNotes(Δpitch, Δbeat, ww.SelectedNotes()...)
+				} else {
+					sc.MvNotes(Δpitch, Δbeat, score.StaffNote{staff, note})
+				}
+			} else {
+				/* regular click */
+				ww.selectNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
+				ww.changed(SCALE, ww.notesel)
+			}
+		} else {
+			if selected {
+				ww.getMouseState(pos).ndelta = &noteDrag{Δpitch, Δbeat}
+			} else {
+				ww.getMouseState(pos).note = prospect
+			}
+			ww.changed(SCALE, prospect)
+		}
+		return true
+	}
+}
+
+func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
+	// XXX funny interaction with scrolling because we hold on to pixel values
+	sc := ww.score
+	addToSel := G.kb.shift
+	return func(end image.Point, finished bool, moved bool)bool {
+		r := image.Rectangle{start, end}.Canon()
+		if !finished {
+			ww.getMouseState(end).rectSelect = &r
+			ww.changed(SCALE, r)
+		} else {
+			notes := make([]score.StaffNote, 0, 8)
+			var sn score.StaffNote
+			next := sc.Iter(ww.VisibleFrameRange())
+			for next != nil {
+				sn, next = next()
+				dn := ww.dispNote(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
+				if dn.pt != nil && dn.pt.In(r) {
+					notes = append(notes, sn)
+				}
+			}
+			ww.selectNotes(!(addToSel || G.kb.shift), notes...)
+			ww.getMouseState(end).rectSelect = nil
+			ww.changed(SCALE, &ww.notesel)
+		}
+		return true
+	}
+}
+
+func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
+	beath := 8
+	grabw := 2
+	sc := ww.score
+	r := ww.Rect()
+	bAxis, tAxis := mouse.In(ww.rect.beatAxis), mouse.In(ww.rect.timeAxis)
+	snap := bAxis && sc != nil && sc.HasBeats()
+	if bAxis || tAxis {
+		if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
+			return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
+		} else if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
+			return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
+		}
+		return ww.timeSelectDrag(ww.FrameAtPixel(mouse.X), snap), wde.IBeamCursor
+	}
+
+	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
+	for staff, rect := range ww.rect.staves {
+		if mix, ok := ww.rect.mixers[staff]; (ok && mix.Minimised) || !mouse.In(rect) {
+			continue
+		}
+		mid := rect.Min.Y + rect.Dy() / 2
+		next := sc.Iter(rng, staff)
+		var sn score.StaffNote
+		for next != nil {
+			sn, next = next()
+			frame, _ := sc.ToFrame(sc.Beatf(sn.Note))
+			x := ww.PixelAtFrame(frame)
+			delta, _ := staff.LineForPitch(sn.Note.Pitch)
+			y := mid - (yspacing / 2) * (delta)
+			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
+			// XXX would be good to target the closest note instead of the first
+			if mouse.In(r) {
+				return ww.noteDrag(staff, sn.Note), wde.GrabHoverCursor
+			}
+		}
+	}
+
+	// TODO ignore beat grabs when sufficiently zoomed out
+	if sc != nil && mouse.Y <= ww.rect.wave.Min.Y + beath {
+		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
+		if beat != nil {
+			x := ww.PixelAtFrame(beat.Frame())
+			if x - grabw <= mouse.X && mouse.X <= x + grabw {
+				return ww.beatDrag(beat), wde.ResizeEWCursor
+			}
+		}
+	}
+
+	if mouse.In(ww.rect.wave) {
+		return ww.noteSelectDrag(mouse), wde.NormalCursor
+	}
+
+	return nil, wde.NormalCursor
+}
