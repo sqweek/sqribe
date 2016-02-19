@@ -35,7 +35,7 @@ func HostApi() *portaudio.HostApiInfo {
 		if err == nil {
 			return hostApi
 		}
-		log.AU.Println(err)
+		log.AU.Printf("%v: %v", api, err)
 	}
 	return nil
 }
