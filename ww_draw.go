@@ -571,7 +571,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	} else if s.note != nil && ww.pasteMode && len(ww.snarf[staff]) > 0 && len(ww.snarf[s.note.staff]) > 0 {
 		sc := ww.score
 		anchor := ww.snarf[s.note.staff][0]
-		Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
+		Δpitch := s.note.Δpitch(anchor)
 		beat, offset := sc.Quantize(s.note.beatf)
 		Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 		for _, note := range ww.snarf[staff] {

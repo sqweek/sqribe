@@ -72,7 +72,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 		sc := ww.score
 		if s := ww.getMouseState(mouse); s != nil && len(ww.snarf[s.note.staff]) > 0 {
 			anchor := ww.snarf[s.note.staff][0]
-			Δpitch := int8(s.note.staff.PitchForLine(s.note.delta) - anchor.Pitch)
+			Δpitch := s.note.Δpitch(anchor)
 			beat, offset := sc.Quantize(s.note.beatf)
 			Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 			for staff, notes := range ww.snarf {
@@ -206,6 +206,14 @@ func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
 	}
 }
 
+func (p *noteProspect) Δpitch(note *score.Note) int8 {
+	nline, _ := p.staff.LineForPitch(note.Pitch)
+	if nline == p.delta {
+		return 0
+	}
+	return int8(p.staff.PitchForLine(p.delta) - note.Pitch)
+}
+
 func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	sc := ww.score
 	addToSel := G.kb.shift
@@ -214,7 +222,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		if prospect == nil {
 			return false
 		}
-		Δpitch := int8(staff.PitchForLine(prospect.delta) - note.Pitch)
+		Δpitch := prospect.Δpitch(note)
 		beat, offset := sc.Quantize(prospect.beatf)
 		Δbeat := Δb(beat, offset, note.Beat, note.Offset)
 		_, selected := ww.notesel[note]
