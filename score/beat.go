@@ -36,6 +36,7 @@ func (l *BeatList) Unlink(beat *BeatRef) {
 	beat.next, beat.prev = nil, nil
 }
 
+// BeatRange represents the range [First, Last)
 type BeatRange struct {
 	First, Last *BeatRef
 }
@@ -45,7 +46,7 @@ func (r BeatRange) MinFrame() FrameN {
 }
 
 func (r BeatRange) MaxFrame() FrameN {
-	return r.Last.frame
+	return r.Last.frame - 1
 }
 
 type BeatRef struct {
@@ -80,6 +81,19 @@ func (beat *BeatRef) LNext() *BeatRef {
 		return beat
 	}
 	return beat.next
+}
+
+func (beat *BeatRef) FrameAtRat(offset *big.Rat) FrameN {
+	f, _ := offset.Float64()
+	return beat.FrameAt(f)
+}
+
+func (beat *BeatRef) FrameAt(offset float64) FrameN {
+	next := beat.next
+	if next == nil {
+		return beat.frame
+	}
+	return FrameN(float64(beat.frame) * (1 - offset) + float64(next.frame) * (offset))
 }
 
 func (beat *BeatRef) Walk(Δbeat int) *BeatRef {

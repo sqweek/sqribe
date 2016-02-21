@@ -46,7 +46,7 @@ func midilst(f0, fN, fcur FrameN) (*MidiEv, *MidiEv) {
 		end, _ := G.score.ToFrame(G.score.EndBeatf(sn.Note))
 		if end <= f0 {
 			continue
-		} else if start >= fN {
+		} else if start > fN {
 			break
 		}
 		if start < f0 {

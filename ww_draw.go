@@ -18,6 +18,16 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
+type DisplayNote struct {
+	delta int
+	accidental *int
+	col color.NRGBA
+	duration float64
+	beatf score.BeatPoint
+	downBeam bool
+	pt *image.Point // centre of note head. nil if not visible
+}
+
 type WaveLayout struct {
 	image.Rectangle	// rect of entire widget
 	wave image.Rectangle	// rect of the waveform display
@@ -276,7 +286,7 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 	csel := color.NRGBA{0xbb, 0xbb, 0xee, 128}
 	rng := ww.SelectedTimeRange()
 	sel0, selN := rng.MinFrame(), rng.MaxFrame()
-	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN), r.Max.Y)
+	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN) + 1, r.Max.Y)
 	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
 }
 
@@ -430,16 +440,6 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	drawVertSlider(dst, layout.volS, fg, float64(mix.Velocity) / 127.0)
 }
 
-type DisplayNote struct {
-	delta int
-	accidental *int
-	col color.NRGBA
-	duration float64
-	beatf score.BeatPoint
-	downBeam bool
-	pt *image.Point // centre of note head. nil if not visible
-}
-
 func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int) *DisplayNote {
 	dn := DisplayNote{}
 	dn.beatf = ww.score.Beatf(note)
@@ -583,20 +583,19 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		menu, _ := G.noteMenu.options[G.noteMenu.lastSelected].(string)
 		var dur big.Rat
 		dur.SetString(menu)
-		n := ww.mkNote(s.note, &dur)
-		note := ww.dispNote(staff, n, mid)
-		// could avoid transitioning through staff.Note except for NoteAt
-		existingNote := staff.NoteAt(n)
-		if existingNote == nil {
-			note.col = colourFor(n.Offset, 0xbb)
+		note, exists := s.note.mkNote(ww.score, &dur)
+		dn := ww.dispNote(staff, note, mid)
+		if !exists {
+			dn.col = colourFor(note.Offset, 0xbb)
 		} else {
-			if _, selected := ww.notesel[existingNote]; selected {
-				note.col = color.NRGBA{0x88, 0x88, 0x88, 0x88}
+			dn.duration, _ = dur.Float64()
+			if _, selected := ww.notesel[note]; selected {
+				dn.col = color.NRGBA{0x88, 0x88, 0x88, 0x88}
 			} else {
-				note.col = color.NRGBA{0, 0, 0, 0x88}
+				dn.col = color.NRGBA{0, 0, 0, 0x88}
 			}
 		}
-		ww.drawNote(dst, r, mid, note)
+		ww.drawNote(dst, r, mid, dn)
 	}
 }
 

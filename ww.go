@@ -43,6 +43,31 @@ func (n *noteProspect) Eq(n2 *noteProspect) bool {
 	return n.staff == n2.staff && n.delta == n2.delta && n.beatf == n2.beatf
 }
 
+func (p *noteProspect) Δpitch(note *score.Note) int8 {
+	nline, _ := p.staff.LineForPitch(note.Pitch)
+	if nline == p.delta {
+		return 0
+	}
+	return int8(p.staff.PitchForLine(p.delta) - note.Pitch)
+}
+
+/* mkNote returns an existing note on the same staff line, if it exists (duration is ignored).
+ * Otherwise a new note is created with the given duration. */
+func (p *noteProspect) mkNote(sc *score.Score, duration *big.Rat) (*score.Note, bool) {
+	beat, offset := sc.Quantize(p.beatf)
+	f := beat.FrameAtRat(offset)
+	next := sc.Iter(FrameRange{f, f}, p.staff)
+	var sn score.StaffNote
+	for next != nil {
+		sn, next = next()
+		if p.Δpitch(sn.Note) == 0 {
+			return sn.Note, true
+		}
+	}
+	/* no existing note found */
+	return &score.Note{p.staff.PitchForLine(p.delta), duration, beat, offset}, false
+}
+
 type noteDrag struct {
 	Δpitch int8
 	Δbeat *big.Rat
@@ -326,11 +351,6 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	}
 
 	return state
-}
-
-func (ww *WaveWidget) mkNote(prospect *noteProspect, dur *big.Rat) *score.Note {
-	beat, offset := ww.score.Quantize(prospect.beatf)
-	return &score.Note{prospect.staff.PitchForLine(prospect.delta), dur, beat, offset}
 }
 
 func (ww *WaveWidget) Scroll(amount float64) int {

@@ -381,7 +381,7 @@ func (score *Score) Iter(rng TimeRange, staves... *Staff) NoteIter {
 	bestFn := func(idx []int, score *Score)int {
 		best := -1
 		for j, staff := range(staves) {
-			if idx[j] < len(staff.notes) && toFrame(staff.notes[idx[j]]) < rng.MaxFrame() {
+			if idx[j] < len(staff.notes) && toFrame(staff.notes[idx[j]]) <= rng.MaxFrame() {
 				if best == -1 || staff.notes[idx[j]].Cmp(staves[best].notes[idx[best]]) < 0 {
 					best = j
 				}

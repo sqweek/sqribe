@@ -149,9 +149,12 @@ func (ww *WaveWidget) placeNoteDrag(mouse image.Point) DragFn {
 		if item != nil && ok {
 			var dur *big.Rat = new(big.Rat)
 			dur.SetString(str)
-			newNote := ww.mkNote(note, dur)
-			sc.AddNotes(note.staff, newNote)
-			Synth.Note(Synth.Inst(midi.InstPiano), newNote.Pitch, 120, 100 * time.Millisecond)
+			n, exists := note.mkNote(sc, dur)
+			if exists {
+				n.Duration = dur
+			}
+			sc.AddNotes(note.staff, n)
+			Synth.Note(Synth.Inst(midi.InstPiano), n.Pitch, 120, 100 * time.Millisecond)
 		}
 	}()
 	return G.noteMenu.Drag
@@ -204,14 +207,6 @@ func (ww *WaveWidget) timeSelectDrag(anchor FrameN, snap bool) DragFn {
 		}
 		return true
 	}
-}
-
-func (p *noteProspect) Δpitch(note *score.Note) int8 {
-	nline, _ := p.staff.LineForPitch(note.Pitch)
-	if nline == p.delta {
-		return 0
-	}
-	return int8(p.staff.PitchForLine(p.delta) - note.Pitch)
 }
 
 func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
