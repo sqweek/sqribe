@@ -247,8 +247,13 @@ func (ww *WaveWidget) VisibleFrameRange() FrameRange {
 	return FrameRange{w0, wN}
 }
 
-func (ww *WaveWidget) SetCursorByFrame(frame FrameN) {
-	ww.cursorX = ww.PixelAtFrame(frame)
+func (ww *WaveWidget) SetCursorByFrame(frame FrameN, follow bool) {
+	x := ww.PixelAtFrame(frame)
+	if follow && (x < ww.rect.wave.Min.X || x > ww.rect.wave.Max.X) {
+		ww.ScrollPixels(x - ww.rect.wave.Min.X - int(0.05 * float64(ww.rect.wave.Dx())))
+		x = ww.PixelAtFrame(frame)
+	}
+	ww.cursorX = x
 	ww.changed(CURSOR, frame)
 }
 

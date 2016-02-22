@@ -358,7 +358,7 @@ func play(rng TimeRange) {
 				}
 				break
 			}
-			G.ww.SetCursorByFrame(f)
+			G.ww.SetCursorByFrame(f, true)
 			m, w := mpeak, wpeak
 			mpeak, wpeak = 0, 0
 			G.mixw.Levels(m/32700, w/32700)
