@@ -11,6 +11,8 @@ import (
 	. "sqweek.net/sqribe/core/types"
 )
 
+var failure = &Chunk{} // non-nil sentinel used to avoid deadlock on i/o failure
+
 type cache struct {
 	blocksz uint /* block size in bytes */
 	sampsz uint /* number of bytes to store one sample */
@@ -85,10 +87,9 @@ func (c *cache) Get(id uint64) *Chunk {
 	if c.bytesWritten == -1 && id > c.lastChunkId {
 		return nil
 	}
-	/* do I/O in background */
-	c.iochan <- id
-	chunk, ok := c.chunks[id]
-	if !ok {
+	c.iochan <- id /* signal to fetcher goroutine that this chunk is active */
+	chunk, ok := c.chunks[id] /* grab chunk if its already in cache */
+	if !ok || chunk == failure {
 		return nil
 	}
 	return chunk
@@ -106,6 +107,9 @@ func (c *cache) Wait(id uint64) *Chunk {
 	for !ok {
 		c.iodone.Wait()
 		chunk, ok = c.chunks[id]
+		if chunk == failure {
+			return nil
+		}
 	}
 	return chunk
 }
@@ -113,7 +117,7 @@ func (c *cache) Wait(id uint64) *Chunk {
 func (c *cache) fetcher() {
 	var fd *os.File
 	for id := range c.iochan {
-		if chunk, ok := c.chunks[id]; ok {
+		if chunk, ok := c.chunks[id]; ok && chunk != failure {
 			/* chunk already in cache, no i/o necessary just bump the lru */
 			c.lru.touch(chunk)
 			continue
@@ -126,7 +130,7 @@ func (c *cache) fetcher() {
 			continue
 		}
 		if c.bytesWritten == -1 && id > c.lastChunkId {
-			/* this chunk is past EOF; cache a nil chunk */
+			/* this chunk is past EOF; cache nil */
 			c.add(id, nil)
 			continue
 		}
@@ -141,6 +145,7 @@ func (c *cache) fetcher() {
 		chunk, err := c.readchunk(id, fd, offset)
 		if err != nil {
 			log.WAV.Printf("fetcher: chunk %d: %v\n", id, err)
+			c.add(id, failure)
 			continue
 		}
 		log.WAV.Printf("fetcher: read chunk %d: i0=%d len=%d\n", id, chunk.I0, len(chunk.Data))
@@ -161,8 +166,8 @@ func (c *cache) add(id uint64, chunk *Chunk) {
 	c.iodone.L.Lock()
 	c.iodone.Broadcast()
 	c.iodone.L.Unlock()
-	if chunk == nil {
-		return
+	if chunk == nil || chunk == failure {
+		return // don't add nil or failure to the LRU
 	}
 	c.broadcast(chunk)
 	gone := c.lru.add(chunk)
@@ -243,6 +248,9 @@ func (lru *ChunkList) promote(node *ChunkNode) {
 }
 
 func (lru *ChunkList) touch(chunk *Chunk) {
+	if chunk == nil {
+		return
+	}
 	/* having to walk the list is daft... */
 	for node := lru.head; node != nil; node = node.next {
 		if node.chunk == chunk {
