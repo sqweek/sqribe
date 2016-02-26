@@ -214,6 +214,24 @@ func (wav *Waveform) SampleRange(f0, fN FrameN) (s0, sN SampleN) {
 	return s0, sN
 }
 
+/* Clips f to the range [0, x] where x is unlimited if the cache is initialising, and
+ * otherwise the last frame of the waveform subtracted by inset. */
+func (wav *Waveform) Clip(f FrameN, inset FrameN) FrameN {
+	if f < 0 {
+		return 0
+	}
+	if wav.cache.bytesWritten == -1 {
+		max := wav.ToFrame(wav.NSamples)
+		if f + inset > max {
+			return max - inset
+		}
+	}
+	return f
+}
+
+/* CacheListen returns a channel on which a sample Chunk will be sent each time
+ * one is read from disk. As a special case, nil is transmitted on the channel once
+ * the cache is finished initialising (which signals that wav.NSamples is now stable). */
 func (wav *Waveform) CacheListen() <-chan *Chunk {
 	return wav.cache.listen()
 }

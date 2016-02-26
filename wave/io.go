@@ -72,6 +72,7 @@ func (c *cache) Write(readfn func() ([]int16, error)) error {
 	c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
 	c.bytesWritten = -1
 	log.WAV.Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
+	c.broadcast(nil)
 	return nil
 }
 
@@ -183,8 +184,8 @@ func (c *cache) broadcast(chunk *Chunk) {
 	}
 }
 
-/* TODO synchronize listen/ignore */
 func (c *cache) listen() <-chan *Chunk {
+	// TODO synchronize listen/ignore
 	listener := make(chan *Chunk)
 	c.listeners = append(c.listeners, listener)
 	return listener

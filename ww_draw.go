@@ -678,11 +678,8 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 		if t0 < 0 {
 			t0 = 0.0
 		}
-		tRight := ww.TimeAtCursor(r.Max.X)
-		tMax := wav.TimeAtFrame(ww.NFrames())
-		if tRight > tMax {
-			tRight = tMax
-		}
+		fRight := wav.Clip(ww.FrameAtPixel(r.Max.X), 0)
+		tRight := wav.TimeAtFrame(fRight)
 		tN := math.Ceil(tRight.Seconds())
 		for t := t0; t <= tN; t += 1.0 {
 			times = append(times, t)

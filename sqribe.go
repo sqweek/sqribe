@@ -114,6 +114,7 @@ func mustMkFont(filename string, size int) *Font {
 	return font
 }
 
+var initialTime = flag.Duration("time", 0, "position initial view at this time (eg 1m32s)")
 var profile = flag.String("prof", "", "write cpu profile to file")
 var cachefile = flag.String("cache", "", "cache file name")
 
@@ -250,9 +251,10 @@ func main_child() {
 
 	audioFile := flag.Arg(0)
 	if len(audioFile) > 0 {
-		err = open(audioFile)
-		if err != nil {
+		if err = open(audioFile); err != nil {
 			alert("%v", err)
+		} else if *initialTime != 0 && G.wav != nil {
+			G.ww.ScrollToFrame(G.wav.FrameAtTime(*initialTime))
 		}
 	}
 

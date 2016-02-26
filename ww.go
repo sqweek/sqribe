@@ -175,10 +175,14 @@ func (ww *WaveWidget) SetWaveform(wav *wave.Waveform) *wave.Waveform {
 				if !ok {
 					return
 				}
-				frng:= ww.VisibleFrameRange()
-				s0, sN := wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
-				if chunk.Intersects(s0, sN) {
-					ww.changed(WAV, chunk)
+				if chunk == nil {
+					ww.ScrollPixels(0)
+				} else {
+					frng:= ww.VisibleFrameRange()
+					s0, sN := wav.SampleRange(frng.MinFrame(), frng.MaxFrame())
+					if chunk.Intersects(s0, sN) {
+						ww.changed(WAV, chunk)
+					}
 				}
 			}
 		}()
@@ -250,7 +254,7 @@ func (ww *WaveWidget) VisibleFrameRange() FrameRange {
 func (ww *WaveWidget) SetCursorByFrame(frame FrameN, follow bool) {
 	x := ww.PixelAtFrame(frame)
 	if follow && (x < ww.rect.wave.Min.X || x > ww.rect.wave.Max.X) {
-		ww.ScrollPixels(x - ww.rect.wave.Min.X - int(0.05 * float64(ww.rect.wave.Dx())))
+		ww.ScrollToPixel(x)
 		x = ww.PixelAtFrame(frame)
 	}
 	ww.cursorX = x
@@ -358,6 +362,14 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	return state
 }
 
+func (ww *WaveWidget) ScrollToFrame(f FrameN) int {
+	return ww.ScrollToPixel(ww.PixelAtFrame(f))
+}
+
+func (ww *WaveWidget) ScrollToPixel(x int) int {
+	return ww.ScrollPixels(x - ww.rect.wave.Min.X - int(0.05 * float64(ww.rect.wave.Dx())))
+}
+
 func (ww *WaveWidget) Scroll(amount float64) int {
 	return ww.ScrollPixels(int(float64(ww.rect.wave.Dx()) * amount))
 }
@@ -366,21 +378,15 @@ func (ww *WaveWidget) ScrollPixels(dx int) int {
 	if ww.Rect().Empty() || ww.wav == nil {
 		return 0
 	}
-	original := ww.first_frame
 	shift := FrameN(dx * ww.frames_per_pixel)
-	rbound := ww.NFrames() - FrameN((ww.rect.wave.Dx() + 1) * ww.frames_per_pixel)
-	ww.first_frame += shift
-	if ww.first_frame < 0 || rbound < 0 {
-		ww.first_frame = 0
-	} else if ww.first_frame > rbound {
-		ww.first_frame = rbound
+	target := ww.wav.Clip(ww.first_frame + shift, FrameN((ww.rect.wave.Dx() + 1) * ww.frames_per_pixel))
+	if target == ww.first_frame {
+		return 0
 	}
-	diff := int(ww.first_frame - original)
-	if diff != 0 {
-		ww.mouse.state = nil
-		ww.changed(WAV | CURSOR | VIEWPOS, ww.first_frame)
-	}
-	return diff
+	ww.first_frame = target
+	ww.mouse.state = nil
+	ww.changed(WAV | CURSOR | VIEWPOS, ww.first_frame)
+	return int(target - ww.first_frame)
 }
 
 func (ww *WaveWidget) Zoom(factor float64) float64 {
