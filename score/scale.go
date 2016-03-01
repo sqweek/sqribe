@@ -1,7 +1,7 @@
 package score
 
 import (
-	"sqweek.net/sqribe/midi"
+	"github.com/sqweek/sqribe/midi"
 )
 
 type KeySig int

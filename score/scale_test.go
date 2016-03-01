@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"sqweek.net/sqribe/midi"
+	"github.com/sqweek/sqribe/midi"
 )
 
 var origin map[KeySig]uint8

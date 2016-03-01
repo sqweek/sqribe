@@ -11,9 +11,9 @@ import (
 
 	"github.com/skelterjohn/go.wde"
 	_ "github.com/skelterjohn/go.wde/init"
-	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/log"
-	"sqweek.net/sqribe/score"
+	"github.com/sqweek/sqribe/audio"
+	"github.com/sqweek/sqribe/log"
+	"github.com/sqweek/sqribe/score"
 )
 
 func toggle(flag *bool) {

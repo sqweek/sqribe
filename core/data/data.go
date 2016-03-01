@@ -1,7 +1,7 @@
 package data
 
 import (
-	"sqweek.net/sqribe/plumb"
+	"github.com/sqweek/sqribe/plumb"
 )
 
 type Plumbable interface {

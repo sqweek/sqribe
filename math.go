@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/big"
 
-	"sqweek.net/sqribe/score"
+	"github.com/sqweek/sqribe/score"
 )
 
 var rZero big.Rat

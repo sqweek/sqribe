@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
-	"sqweek.net/sqribe/log"
-	. "sqweek.net/sqribe/core/types"
+	"github.com/sqweek/sqribe/log"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 var failure = &Chunk{} // non-nil sentinel used to avoid deadlock on i/o failure

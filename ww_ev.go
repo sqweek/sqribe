@@ -7,11 +7,11 @@ import (
 
 	"github.com/skelterjohn/go.wde"
 
-	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/score"
+	"github.com/sqweek/sqribe/audio"
+	"github.com/sqweek/sqribe/midi"
+	"github.com/sqweek/sqribe/score"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {

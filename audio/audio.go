@@ -6,9 +6,9 @@ import (
 	"flag"
 	"time"
 
-	"sqweek.net/sqribe/log"
+	"github.com/sqweek/sqribe/log"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type audioOps interface {

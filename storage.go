@@ -12,7 +12,7 @@ import (
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
 
-	"sqweek.net/sqribe/log"
+	"github.com/sqweek/sqribe/log"
 )
 
 type FileContext struct {

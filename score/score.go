@@ -3,9 +3,9 @@ package score
 import (
 	"math/big"
 
-	"sqweek.net/sqribe/plumb"
+	"github.com/sqweek/sqribe/plumb"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type BeatPoint interface {

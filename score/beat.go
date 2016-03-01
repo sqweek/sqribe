@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/big"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type BeatList struct {

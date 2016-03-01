@@ -4,9 +4,9 @@ import (
 	"time"
 	"github.com/sqweek/ffau"
 
-	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/log"
-	. "sqweek.net/sqribe/core/types"
+	"github.com/sqweek/sqribe/audio"
+	"github.com/sqweek/sqribe/log"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type Waveform struct {

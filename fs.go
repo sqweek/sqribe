@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/sqweek/fs"
 
-	"sqweek.net/sqribe/log"
+	"github.com/sqweek/sqribe/log"
 )
 
 var Usr *fs.Dirs

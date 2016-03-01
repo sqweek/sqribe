@@ -14,12 +14,12 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/log"
-	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/plumb"
-	"sqweek.net/sqribe/score"
-	"sqweek.net/sqribe/wave"
+	"github.com/sqweek/sqribe/audio"
+	"github.com/sqweek/sqribe/log"
+	"github.com/sqweek/sqribe/midi"
+	"github.com/sqweek/sqribe/plumb"
+	"github.com/sqweek/sqribe/score"
+	"github.com/sqweek/sqribe/wave"
 )
 
 var G struct {

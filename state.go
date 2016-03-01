@@ -9,12 +9,12 @@ import (
 	"math/big"
 	"strings"
 
-	"sqweek.net/sqribe/audio"
-	"sqweek.net/sqribe/log"
-	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/score"
+	"github.com/sqweek/sqribe/audio"
+	"github.com/sqweek/sqribe/log"
+	"github.com/sqweek/sqribe/midi"
+	"github.com/sqweek/sqribe/score"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type SavedStaff struct {

@@ -4,7 +4,7 @@ import (
 	"code.google.com/p/portaudio-go/portaudio"
 	"time"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type callbackOps struct {

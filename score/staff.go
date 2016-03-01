@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"sort"
 
-	. "sqweek.net/sqribe/core/types"
+	. "github.com/sqweek/sqribe/core/types"
 )
 
 type Staff struct {

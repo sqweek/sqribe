@@ -7,8 +7,8 @@ import (
 
 	"github.com/skelterjohn/go.wde"
 
-	"sqweek.net/sqribe/midi"
-	"sqweek.net/sqribe/score"
+	"github.com/sqweek/sqribe/midi"
+	"github.com/sqweek/sqribe/score"
 )
 
 type MixVolume struct {

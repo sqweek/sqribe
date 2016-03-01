@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"sqweek.net/sqribe/midi"
+	"github.com/sqweek/sqribe/midi"
 )
 
 type XMLWriter struct {
