@@ -46,11 +46,11 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 }
 
 func (ww *WaveWidget) RightClick(mouse image.Point) {
+	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+		ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
+		return
+	}
 	if mouse.In(ww.rect.mixer) {
-		if mouse.In(ww.rect.newStaffB) && ww.score != nil {
-			ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
-			return
-		}
 		for staff, _ := range ww.rect.staves {
 			layout := ww.rect.mixers[staff]
 			if mouse.In(layout.minmaxB) {
