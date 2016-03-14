@@ -154,6 +154,29 @@ func main() {
 	}
 }
 
+type TeeLogger struct {
+	writers []io.Writer
+	errs int
+}
+
+func (t *TeeLogger) Write(buf []byte) (n int, err error) {
+	for i, w := range t.writers {
+		if w == nil {
+			continue
+		}
+		n, err = w.Write(buf)
+		if err != nil {
+			// ignore Writers that have errored. report last error only
+			t.errs++
+			t.writers[i] = nil
+			if t.errs == len(t.writers) {
+				return 0, err
+			}
+		}
+	}
+	return n, err
+}
+
 func main_parent() {
 	host, err := os.Hostname()
 	if err != nil {
@@ -175,7 +198,7 @@ func main_parent() {
 		log.Println("error creating log file: ", err)
 		logger = os.Stderr
 	} else {
-		logger = io.MultiWriter(os.Stderr, logfile)
+		logger = &TeeLogger{writers: []io.Writer{os.Stderr, logfile}}
 	}
 	cmd.Stdout = logger
 	cmd.Stderr = logger
