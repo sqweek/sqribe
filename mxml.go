@@ -90,7 +90,7 @@ func mxmlParts(wr *XMLWriter) {
 	for i, staff := range staves {
 		mix := Mixer.For(staff)
 		instName := midi.InstName(mix.Voice)
-		id := fmt.Sprintf("%d", i)
+		id := fmt.Sprintf("P%d", i)
 		xpart := wr.Tag("score-part", "id", id)
 		wr.ContentTag("part-name", instName)
 		xinst := wr.Tag("score-instrument", "id", fmt.Sprintf("%s-I1", id))
@@ -100,7 +100,7 @@ func mxmlParts(wr *XMLWriter) {
 	}
 	wr.CloseTag(list)
 	for i, staff := range staves {
-		id := fmt.Sprintf("%d", i)
+		id := fmt.Sprintf("P%d", i)
 		mxmlPart(wr, staff, id)
 	}
 }
@@ -162,15 +162,15 @@ func mxmlPart(wr *XMLWriter, staff *score.Staff, id string) {
 		if m == 1 {
 			iter.advance()
 			attr := wr.Tag("attributes")
+			wr.ContentTag("divisions", divisions)
 			key := wr.Tag("key")
-			wr.ContentTag("fifths", staff.Key())
+			wr.ContentTag("fifths", int(staff.Key()))
 			wr.ContentTag("mode", "major")
 			wr.CloseTag(key)
 			time := wr.Tag("time")
 			wr.ContentTag("beats", 4)
 			wr.ContentTag("beat-type", 4)
 			wr.CloseTag(time)
-			wr.ContentTag("divisions", divisions)
 			mxmlClef(wr, staff.Clef().Origin)
 			wr.CloseTag(attr)
 		}
@@ -253,6 +253,9 @@ func mxmlRest(wr *XMLWriter, ticks, divisions int) {
 
 func mxmlNote(wr *XMLWriter, pitch *uint8, duration *big.Rat, ticks int, chord bool) {
 	defer wr.CloseTag(wr.Tag("note"))
+	if chord {
+		wr.EmptyTag("chord")
+	}
 	if pitch != nil {
 		mxmlPitch(wr, *pitch)
 	} else {
@@ -265,22 +268,19 @@ func mxmlNote(wr *XMLWriter, pitch *uint8, duration *big.Rat, ticks int, chord b
 	if dot {
 		wr.EmptyTag("dot")
 	}
-	if chord {
-		wr.EmptyTag("chord")
-	}
 }
 
 func mxmlPitch(wr *XMLWriter, pitch uint8) {
 	defer wr.CloseTag(wr.Tag("pitch"))
 	s := midi.PitchName(pitch)
 	wr.ContentTag("step", s[0:1])
-	octave, _ := strconv.Atoi(s[len(s) - 1:])
-	wr.ContentTag("octave", octave - 1)
 	if s[1] == '#' {
 		wr.ContentTag("alter", 1)
 	} else if s[1] == 'b' {
 		wr.ContentTag("alter", -1)
 	}
+	octave, _ := strconv.Atoi(s[len(s) - 1:])
+	wr.ContentTag("octave", octave - 1)
 }
 
 func mxmlNoteType(dur *big.Rat) (string, bool) {
