@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sqweek/sqribe/midi"
+	"github.com/sqweek/sqribe/score"
 )
 
 type XMLWriter struct {
@@ -84,10 +85,11 @@ func mxmlIdent(wr *XMLWriter) {
 }
 
 func mxmlParts(wr *XMLWriter) {
-	staves := savedStaves(G.score, G.score.BeatFrames())
+	staves := G.score.Staves()
 	list := wr.Tag("part-list")
 	for i, staff := range staves {
-		instName := midi.InstName(staff.Voice)
+		mix := Mixer.For(staff)
+		instName := midi.InstName(mix.Voice)
 		id := fmt.Sprintf("%d", i)
 		xpart := wr.Tag("score-part", "id", id)
 		wr.ContentTag("part-name", instName)
@@ -112,19 +114,56 @@ func flt(rat *big.Rat) float64 {
 	return float
 }
 
-func mxmlPart(wr *XMLWriter, staff SavedStaff, id string) {
+type NotePosIter struct {
+	Note *score.Note
+
+	notes []*score.Note
+	iN int // index of next note
+	beat *score.BeatRef
+	iB int // index of beat
+}
+
+func (iter NotePosIter) done() bool {
+	return iter.iN >= len(iter.notes)
+}
+
+func (iter *NotePosIter) advance() bool {
+	if iter.done() {
+		iter.Note = nil
+		return false
+	}
+	iter.Note = iter.notes[iter.iN]
+	iter.iN++
+	prevb := iter.beat
+	iter.beat = iter.Note.Beat
+	if prevb == nil {
+		iter.iB = iter.beat.BeatNum() - 1
+	} else {
+		iter.iB += iter.beat.Subtract(prevb)
+	}
+	return true
+}
+
+func (iter NotePosIter) Pos() *big.Rat {
+	b := big.NewRat(int64(iter.iB), 1)
+	b.Add(b, iter.Note.Offset)
+	return b
+}
+
+func mxmlPart(wr *XMLWriter, staff *score.Staff, id string) {
+	iter := &NotePosIter{notes: staff.Notes()}
 	defer wr.CloseTag(wr.Tag("part", "id", id))
 	ticks := 384
 	divisions := ticks/4
-	i0 := 0
-	inote := 0
-	m := 1
-	for {
+	i0 := 0 // beat index of measure start
+	m := 1 // number of measure
+	for !iter.done() {
 		meas := wr.Tag("measure", "number", m)
 		if m == 1 {
+			iter.advance()
 			attr := wr.Tag("attributes")
 			key := wr.Tag("key")
-			wr.ContentTag("fifths", staff.Nsharps)
+			wr.ContentTag("fifths", staff.Key())
 			wr.ContentTag("mode", "major")
 			wr.CloseTag(key)
 			time := wr.Tag("time")
@@ -132,16 +171,16 @@ func mxmlPart(wr *XMLWriter, staff SavedStaff, id string) {
 			wr.ContentTag("beat-type", 4)
 			wr.CloseTag(time)
 			wr.ContentTag("divisions", divisions)
-			mxmlClef(wr, staff.Origin)
+			mxmlClef(wr, staff.Clef().Origin)
 			wr.CloseTag(attr)
 		}
 		iN := i0 + 4
 		curtick := (m - 1) * ticks
 		var prevOffset *big.Rat
-		for inote < len(staff.Notes) && flt(staff.Notes[inote].Offset) < float64(iN) {
-			tick0 := dur2ticks(rat(1,4).Mul(rat(1,4), staff.Notes[inote].Offset), ticks)
+		for !iter.done() && flt(iter.Pos()) < float64(iN) {
+			tick0 := dur2ticks(rat(1,4).Mul(rat(1,4), iter.Pos()), ticks)
 			chord := false
-			if prevOffset != nil && staff.Notes[inote].Offset.Cmp(prevOffset) == 0 {
+			if prevOffset != nil && iter.Pos().Cmp(prevOffset) == 0 {
 				chord = true
 			} else {
 				if tick0 < curtick {
@@ -152,15 +191,15 @@ func mxmlPart(wr *XMLWriter, staff SavedStaff, id string) {
 					mxmlRest(wr ,tick0 - curtick, divisions)
 				}
 			}
-			prevOffset = staff.Notes[inote].Offset
-			note := staff.Notes[inote]
+			prevOffset = iter.Pos()
+			note := iter.Note
 			durticks := dur2ticks(note.Duration, divisions)
 			if durticks <= 0 {
 				durticks = 1
 			}
 			mxmlNote(wr, &note.Pitch, note.Duration, durticks, chord)
 			curtick = tick0 + durticks
-			inote++
+			iter.advance()
 		}
 		if ticks > curtick {
 			mxmlRest(wr, ticks - curtick, divisions) /* insert rest to finish out the measure */
@@ -168,9 +207,6 @@ func mxmlPart(wr *XMLWriter, staff SavedStaff, id string) {
 		wr.CloseTag(meas)
 
 		i0 = iN
-		if inote >= len(staff.Notes) {
-			break
-		}
 		m++
 	}
 }
