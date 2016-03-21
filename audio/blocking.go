@@ -2,15 +2,16 @@ package audio
 
 import (
 	"code.google.com/p/portaudio-go/portaudio"
-	"time"
 
+	"github.com/sqweek/sqribe/log"
 	. "github.com/sqweek/sqribe/core/types"
 )
 
 type blockingOps struct {
 	buf []int16
 	pos int
-	playbackStart time.Duration
+	writes int
+	frameDelay FrameN
 }
 
 func blockOps(channels int) *blockingOps {
@@ -30,6 +31,7 @@ func (block *blockingOps) Append(wav []int16) int {
 		if block.pos == len(block.buf) {
 			stream.Write()
 			block.pos = 0
+			block.writes++
 		}
 	}
 	return len(wav)
@@ -37,14 +39,23 @@ func (block *blockingOps) Append(wav []int16) int {
 
 func (block *blockingOps) Prepare() {
 	block.pos = 0
+	block.writes = 0
 }
 
 func (block *blockingOps) Started() {
-	block.playbackStart = monotonicTime()
+	buflen, err := stream.AvailableToWrite()
+	if err != nil {
+		log.AU.Println("GetWriteAvailable:", err)
+		block.frameDelay = 0
+	} else {
+		block.frameDelay = FrameN(buflen)
+	}
 }
 
 func (block *blockingOps) Index() (FrameN, bool) {
-	dt := monotonicTime() - block.playbackStart
-	return FrameN(float64(SampleRate) * dt.Seconds()), true
+	written := FrameN((block.writes * len(block.buf) + block.pos) / Channels)
+	if written < block.frameDelay {
+		return 0, true
+	}
+	return written - block.frameDelay, true
 }
-

@@ -19,7 +19,7 @@ type audioOps interface {
 	Index() (idx FrameN, ok bool)
 }
 
-var useCallback = flag.Bool("cb", true, "use callback")
+var useCallback = flag.Bool("cb", false, "use callback")
 
 var ops audioOps
 var stream *portaudio.Stream
@@ -106,6 +106,7 @@ func Play(f0 FrameN) error {
 			return err
 		}
 		ops.Started()
+		log.AU.Printf("%#v", stream.Info())
 		stopped = false
 	} else {
 		prevfr, prevBase = fr, baseIndex
