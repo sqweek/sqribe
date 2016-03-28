@@ -254,10 +254,8 @@ func (rng wavRange) MinFrame() FrameN {
 }
 
 func (rng wavRange) MaxFrame() FrameN {
-	return rng.wav.ToFrame(rng.wav.NSamples)
+	return rng.wav.ToFrame(rng.wav.NSamples) - 1
 }
-
-
 
 func Range(wav *Waveform) TimeRange {
 	if wav == nil {
