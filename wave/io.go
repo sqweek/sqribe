@@ -50,6 +50,13 @@ func (c *cache) MaxSize() uint64 {
 }
 
 func (c *cache) Write(readfn func() ([]int16, error)) error {
+	defer func() {
+		c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
+		c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
+		c.bytesWritten = -1
+		log.WAV.Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
+		c.broadcast(nil)
+	}()
 	f, err := os.Create(c.file)
 	if err != nil {
 		return err
@@ -68,11 +75,6 @@ func (c *cache) Write(readfn func() ([]int16, error)) error {
 			c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
 		}
 	}
-	c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
-	c.lastChunkSize = uint(c.bytesWritten % int64(c.blocksz))
-	c.bytesWritten = -1
-	log.WAV.Printf("cache written: last=%d %d\n", c.lastChunkId, c.lastChunkSize)
-	c.broadcast(nil)
 	return nil
 }
 
