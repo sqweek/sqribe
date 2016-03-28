@@ -106,7 +106,6 @@ func Play(f0 FrameN) error {
 			return err
 		}
 		ops.Started()
-		log.AU.Printf("%#v", stream.Info())
 		stopped = false
 	} else {
 		prevfr, prevBase = fr, baseIndex

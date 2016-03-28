@@ -18,8 +18,14 @@ func blockOps(channels int) *blockingOps {
 	return &blockingOps{buf: make([]int16, 1024 * channels)}
 }
 
-func (block *blockingOps) Open(params portaudio.StreamParameters) (*portaudio.Stream, error) {
-	return portaudio.OpenStream(params, block.buf)
+func (block *blockingOps) Open(params portaudio.StreamParameters) (s *portaudio.Stream, err error) {
+	s, err = portaudio.OpenStream(params, block.buf)
+	if err == nil {
+		info := s.Info()
+		block.frameDelay = FrameN(info.OutputLatency.Seconds() * float64(info.SampleRate))
+		log.AU.Println("frameDelay", block.frameDelay)
+	}
+	return
 }
 
 func (block *blockingOps) Append(wav []int16) int {
@@ -43,13 +49,6 @@ func (block *blockingOps) Prepare() {
 }
 
 func (block *blockingOps) Started() {
-	buflen, err := stream.AvailableToWrite()
-	if err != nil {
-		log.AU.Println("GetWriteAvailable:", err)
-		block.frameDelay = 0
-	} else {
-		block.frameDelay = FrameN(buflen)
-	}
 }
 
 func (block *blockingOps) Index() (FrameN, bool) {
