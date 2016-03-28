@@ -63,7 +63,7 @@ func NewWaveform(file, cachefile string, reply chan<- error) (*Waveform, error) 
 		err := wave.cache.Write(decode)
 		reply <- err
 		if err != nil {
-			log.WAV.Println("error decoding", file, "-", err)
+			log.WAV.Printf("decoding error %d samples into %s: %v", wave.NSamples, file, err)
 		}
 		converted.Close()
 		ctx.Close()

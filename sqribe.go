@@ -69,14 +69,13 @@ func open(filename string) error {
 		return err
 	}
 	go func() {
-		err := <-loadErr
+		_ = <-loadErr
 		/* audio has finished loading, either successfully or unsuccessfully.
-		 * send some spurious change events now that waveform's NSamples is stable */
+		 * some mp3s apparently contain stupid stuff like ID3 tags in the middle of
+		 * the last data frame, so a user alert is not raised here...
+		 * Just send some spurious change events now that waveform's NSamples is stable. */
 		G.plumb.score.C <- score.BeatChanged{}
 		G.plumb.score.C <- score.StaffChanged{}
-		if err != nil {
-			alert("Problem loading audio data: %s", err)
-		}
 	}()
 
 	// point of no return; nothing errors after this and we transition to the new file
