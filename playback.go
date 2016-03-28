@@ -173,18 +173,18 @@ func playToggle() {
 		return
 	}
 	playState = PLAYING
-	rng := G.ww.SelectedTimeRange()
+	rng, loop := G.ww.SelectedTimeRange(), true
 	if rng.MinFrame() >= rng.MaxFrame() {
-		rng = G.ww.WaveRange()
+		rng, loop = G.ww.WaveRange(), false
 	}
 	cursor := G.ww.FrameAtCursor()
 	if cursor < rng.MinFrame() || cursor > rng.MaxFrame() {
 		cursor = rng.MinFrame()
 	}
-	play(rng, cursor)
+	play(rng, cursor, loop)
 }
 
-func play(rng TimeRange, startPos FrameN) {
+func play(rng TimeRange, startPos FrameN, loop bool) {
 	log.AU.Println("starting loop", rng.MinFrame(), rng.MaxFrame(), " @", startPos)
 
 	/* wave sample prefetch thread */
@@ -204,6 +204,9 @@ func play(rng TimeRange, startPos FrameN) {
 				s.buf = make([]int16, len(wave) + int(nfPad)*len(frame0))
 				copy(s.buf, wave)
 				copy(s.buf[len(wave):], crossfade(wave[len(wave) - len(frame0):], frame0, nfPad))
+				if !loop {
+					playState = STOPPING
+				}
 			} else {
 				s.buf = G.wav.Frames(s.frame, s.frame + bufsiz - 1)
 			}
@@ -358,7 +361,7 @@ func play(rng TimeRange, startPos FrameN) {
 				}
 				break
 			}
-			G.ww.SetCursorByFrame(f, true)
+			G.ww.SetCursorByFrame(f, !loop)
 			m, w := mpeak, wpeak
 			mpeak, wpeak = 0, 0
 			G.mixw.Levels(m/32700, w/32700)

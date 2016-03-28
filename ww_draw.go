@@ -286,8 +286,10 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
 	csel := color.NRGBA{0xbb, 0xbb, 0xee, 128}
 	rng := ww.SelectedTimeRange()
 	sel0, selN := rng.MinFrame(), rng.MaxFrame()
-	selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN) + 1, r.Max.Y)
-	draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
+	if sel0 < selN {
+		selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN) + 1, r.Max.Y)
+		draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
+	}
 }
 
 func (ww *WaveWidget) drawMixer(dst draw.Image) {
