@@ -15,11 +15,11 @@ type callbackOps struct {
 
 
 func cbOps() *callbackOps {
-	/* TODO should be based on the actual buffer size */
 	return &callbackOps{buf: NewRingBuffer(2048 * 3)}
 }
 
 func (cb *callbackOps) Open(params portaudio.StreamParameters) (*portaudio.Stream, error) {
+	params.FramesPerBuffer = 2048
 	return portaudio.OpenStream(params, paCallback)
 }
 
@@ -63,7 +63,7 @@ type RingBuffer struct {
 
 func NewRingBuffer(bufSize int) *RingBuffer {
 	var ring RingBuffer
-	ring.buf = make([]int16, bufSize + 1)
+	ring.buf = make([]int16, bufSize)
 	return &ring
 }
 
