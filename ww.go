@@ -261,12 +261,8 @@ func (ww *WaveWidget) SetCursorByFrame(frame FrameN, follow bool) {
 	ww.changed(CURSOR, frame)
 }
 
-func (ww *WaveWidget) NFrames() FrameN {
-	if ww.wav == nil {
-		/* TODO allow score without wave */
-		return 0
-	}
-	return ww.wav.ToFrame(ww.wav.NSamples)
+func (ww *WaveWidget) WaveRange() TimeRange {
+	return wave.Range(ww.wav)
 }
 
 func (ww *WaveWidget) FrameAtCursor() FrameN {

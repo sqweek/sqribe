@@ -63,10 +63,21 @@ func open(filename string) error {
 		return err
 	}
 	// TODO allow user to locate audio if it doesn't exist (eg. been moved)
-	wav, err := wave.NewWaveform(files.Audio, filepath.Join(App.Cache, *cachefile))
+	loadErr := make(chan error)
+	wav, err := wave.NewWaveform(files.Audio, filepath.Join(App.Cache, *cachefile), loadErr)
 	if err != nil {
 		return err
 	}
+	go func() {
+		err := <-loadErr
+		/* audio has finished loading, either successfully or unsuccessfully.
+		 * send some spurious change events now that waveform's NSamples is stable */
+		G.plumb.score.C <- score.BeatChanged{}
+		G.plumb.score.C <- score.StaffChanged{}
+		if err != nil {
+			alert("Problem loading audio data: %s", err)
+		}
+	}()
 
 	// point of no return; nothing errors after this and we transition to the new file
 	s.Restore()

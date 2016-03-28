@@ -173,7 +173,8 @@ func (ww *WaveWidget) scrollDrag(mouse image.Point) DragFn {
 
 func (ww *WaveWidget) beatDrag(beat *score.BeatRef) DragFn {
 	prev, next := beat.Prev(), beat.Next()
-	min, max := FrameN(0), ww.NFrames()
+	rng := ww.WaveRange()
+	min, max := rng.MinFrame(), rng.MaxFrame()
 	if next != nil {
 		max = next.Frame()
 	}

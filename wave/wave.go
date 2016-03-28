@@ -18,7 +18,7 @@ type Waveform struct {
 	cache *cache
 }
 
-func NewWaveform(file, cachefile string) (*Waveform, error) {
+func NewWaveform(file, cachefile string, reply chan<- error) (*Waveform, error) {
 	wave := &Waveform{rate: audio.SampleRate, Channels: audio.Channels, NSamples: 0}
 	wave.cache = mkcache(1024*1024, 2, cachefile)
 	wave.Max = make([]int16, wave.Channels)
@@ -61,6 +61,7 @@ func NewWaveform(file, cachefile string) (*Waveform, error) {
 			return samps, nil
 		}
 		err := wave.cache.Write(decode)
+		reply <- err
 		if err != nil {
 			log.WAV.Println("error decoding", file, "-", err)
 		}
@@ -242,4 +243,25 @@ func (wav *Waveform) CacheIgnore(listener <-chan *Chunk) {
 
 func (wav *Waveform) CacheSize() uint64 {
 	return wav.cache.MaxSize()
+}
+
+type wavRange struct {
+	wav *Waveform
+}
+
+func (rng wavRange) MinFrame() FrameN {
+	return 0
+}
+
+func (rng wavRange) MaxFrame() FrameN {
+	return rng.wav.ToFrame(rng.wav.NSamples)
+}
+
+
+
+func Range(wav *Waveform) TimeRange {
+	if wav == nil {
+		return FrameRange{0, 0}
+	}
+	return &wavRange{wav}
 }

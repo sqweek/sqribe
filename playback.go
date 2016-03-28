@@ -175,24 +175,24 @@ func playToggle() {
 	playState = PLAYING
 	rng := G.ww.SelectedTimeRange()
 	if rng.MinFrame() >= rng.MaxFrame() {
-		play(FrameRange{G.ww.FrameAtCursor(), G.wav.ToFrame(G.wav.NSamples) - 1})
-	} else {
-		play(rng)
+		rng = G.ww.WaveRange()
 	}
+	cursor := G.ww.FrameAtCursor()
+	if cursor < rng.MinFrame() || cursor > rng.MaxFrame() {
+		cursor = rng.MinFrame()
+	}
+	play(rng, cursor)
 }
 
-func play(rng TimeRange) {
-	if rng.MinFrame() < 0 {
-		rng = FrameRange{0, rng.MaxFrame()}
-	}
-	log.AU.Println("starting loop", rng.MinFrame(), rng.MaxFrame())
+func play(rng TimeRange, startPos FrameN) {
+	log.AU.Println("starting loop", rng.MinFrame(), rng.MaxFrame(), " @", startPos)
 
 	/* wave sample prefetch thread */
 	sampch := make(chan Samples, 25)
 	go func() {
 		bufsiz := FrameN(2048) // must be multiple of 64
 		var s Samples
-		s.frame = rng.MinFrame()
+		s.frame = startPos
 		for playState == PLAYING {
 			/* re-evaluate f0/fN each iteration in case a bounding beat moves */
 			s.f0, s.fN = rng.MinFrame(), rng.MaxFrame()
@@ -216,7 +216,7 @@ func play(rng TimeRange) {
 		}
 		close(sampch)
 	}()
-	if err := audio.Play(rng.MinFrame()); err != nil {
+	if err := audio.Play(startPos); err != nil {
 		log.AU.Println("couldn't start stream:", err)
 		playState = STOPPED
 		return
@@ -230,12 +230,12 @@ func play(rng TimeRange) {
 		var in Samples
 		var cutoff FrameN
 		woodblock := Synth.Inst(midi.InstWoodblock)
-		bhead, bev := beatlst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
+		bhead, bev := beatlst(rng.MinFrame(), rng.MaxFrame(), startPos)
 		bon := false
 		nf := FrameN(64)
 		bufsiz := int(G.wav.ToSample(nf))
 		mbuf := make([]int16, bufsiz)
-		evhead, mev := midilst(rng.MinFrame(), rng.MaxFrame(), rng.MinFrame())
+		evhead, mev := midilst(rng.MinFrame(), rng.MaxFrame(), startPos)
 		offlist := make([]MidiOff, 0, 32)
 		for playState == PLAYING {
 			if len(in.buf) == 0 {
