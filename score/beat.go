@@ -152,13 +152,25 @@ func (score *Score) Shunt(br BeatRange, Δbeat int) BeatRange {
 }
 
 func (score *Score) MvBeat(beat *BeatRef, newFrame FrameN) bool {
-	orig := beat.frame
-	changed := (newFrame != orig)
-	if changed {
-		beat.frame = newFrame
-		score.plumb.C <- BeatChanged{}
+	return score.update(&MvBeatOp{beat: beat, new: newFrame})
+}
+
+type MvBeatOp struct {
+	beat *BeatRef
+	new, old FrameN
+}
+
+func (op *MvBeatOp) apply(score *Score) interface{} {
+	op.old = op.beat.frame
+	if op.new == op.old {
+		return nil
 	}
-	return changed
+	op.beat.frame = op.new
+	return BeatChanged{}
+}
+
+func (op *MvBeatOp) undo(score *Score) {
+	op.beat.frame = op.old
 }
 
 func (beats *BeatList) ToFrame(pt BeatPoint) (FrameN, bool) {
@@ -222,9 +234,7 @@ func (score *Score) LoadBeats(f []FrameN) {
 }
 
 func (score *Score) AddBeat(frame FrameN) {
-	if score.update(&AddBeatOp{frame: frame}) {
-		score.plumb.C <- BeatChanged{}
-	}
+	score.update(&AddBeatOp{frame: frame})
 }
 
 type AddBeatOp struct {
@@ -238,19 +248,19 @@ func (op *AddBeatOp) reset() {
 	op.beat = nil
 }
 
-func (op *AddBeatOp) apply(score *Score) bool {
+func (op *AddBeatOp) apply(score *Score) interface{} {
 	op.reset()
 	if score.Head == nil {
 		op.beat = &BeatRef{nil, nil, op.frame}
 		score.Head = op.beat
 		score.Tail = op.beat
-		return true
+		return BeatChanged{}
 	}
 	tolerance := FrameN(10000) //XXX should be based on sample rate/bpm
 	op.beat = score.NearestBeat(op.frame)
 	Δf := op.frame - op.beat.frame
 	if Δf == 0 {
-		return false
+		return nil
 	} else if Δf < -tolerance || Δf > tolerance {
 		if Δf > 0 {
 			op.beat = &BeatRef{op.beat, op.beat.next, op.frame}
@@ -262,7 +272,7 @@ func (op *AddBeatOp) apply(score *Score) bool {
 		op.old = op.beat.frame
 		op.beat.frame = op.frame
 	}
-	return true
+	return BeatChanged{}
 }
 
 func (op *AddBeatOp) undo(score *Score) {
@@ -370,7 +380,6 @@ func (score *Score) beatQuantizer(selxn chan interface{}, beats chan interface{}
 			if q.Error != nil {
 				*q.Error = 0
 			}
-			score.plumb.C <- BeatChanged{}
 			reply <- true
 		case reply := <-calc:
 			if q.Nop() {
@@ -400,7 +409,7 @@ type QuantizeOp struct {
 	orig map[*BeatRef]FrameN
 }
 
-func (op *QuantizeOp) apply(score *Score) bool {
+func (op *QuantizeOp) apply(score *Score) interface{} {
 	f0 := op.q.beats.First.frame
 	b := op.q.beats.First.LNext()
 	for i := 1; i < op.q.nb; i++ {
@@ -408,7 +417,7 @@ func (op *QuantizeOp) apply(score *Score) bool {
 		b.frame = f0 + FrameN(float64(i) * op.q.df)
 		b = b.LNext()
 	}
-	return true
+	return BeatChanged{}
 }
 
 func (op *QuantizeOp) undo(score *Score) {

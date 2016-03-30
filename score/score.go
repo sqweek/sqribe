@@ -32,12 +32,23 @@ type BeatMap interface {
 }
 
 type ScoreOp interface {
-	apply(score *Score) bool
+	/* Apply returns a change event representing the op, or nil if nothing was changed. */
+	apply(score *Score) interface{}
+}
+
+type UndoableOp interface {
+	ScoreOp
+	undo(score *Score)
 }
 
 type request struct {
 	op ScoreOp
-	result chan bool
+	result chan interface{}
+}
+
+type historyItem struct {
+	op UndoableOp
+	change interface{}
 }
 
 type Score struct {
@@ -47,6 +58,8 @@ type Score struct {
 	plumb *plumb.Port
 
 	updates chan request
+	history []historyItem
+	undone int // counter of number steps currently undone (for redo)
 
 	quantApply chan chan bool
 	quantCalc chan chan QuantizeBeats
@@ -62,10 +75,24 @@ func MkScore(plumb *plumb.Port) *Score {
 		beatLen: big.NewRat(1, 4),
 		plumb: plumb,
 		updates: make(chan request),
+		history: make([]historyItem, 0, 32),
 	}
 	go func() {
 		for req := range score.updates {
-			req.result <- req.op.apply(&score)
+			change := req.op.apply(&score)
+			req.result <- change
+			if op, ok := req.op.(UndoableOp); ok && change != nil {
+				if score.undone != 0 {
+					score.history = score.history[0:len(score.history) - score.undone]
+					score.undone = 0
+				}
+				if len(score.history) == cap(score.history) {
+					// forget oldest change
+					copy(score.history[0:], score.history[1:])
+					score.history = score.history[:len(score.history) - 1]
+				}
+				score.history = append(score.history, historyItem{op, change})
+			}
 		}
 	}()
 	return &score
@@ -87,9 +114,50 @@ func (score *Score) Unsub(origin interface{}) {
 	score.plumb.Unsub(origin)
 }
 
+/* returns true if the op actually changed something */
 func (score *Score) update(op ScoreOp) bool {
-	req := request{op, make(chan bool)}
+	req := request{op, make(chan interface{})}
 	score.updates <- req
-	return <-req.result
+	change := <-req.result
+	if change != nil {
+		score.plumb.C <- change
+		return true
+	}
+	return false
 }
 
+func (score *Score) clearHistory() {
+	score.history = score.history[0:0]
+}
+
+func (score *Score) Undo() bool {
+	return score.update(&UndoOp{})
+}
+
+type UndoOp struct {}
+
+func (op *UndoOp) apply(score *Score) interface{} {
+	if score.undone >= len(score.history) {
+		return nil // nothing left to undo
+	}
+	score.undone++
+	item := score.history[len(score.history) - score.undone]
+	item.op.undo(score)
+	return item.change
+}
+
+func (score *Score) Redo() bool {
+	return score.update(&RedoOp{})
+}
+
+type RedoOp struct{}
+
+func (op *RedoOp) apply(score *Score) interface{} {
+	if score.undone == 0 {
+		return false
+	}
+	item := score.history[len(score.history) - score.undone]
+	item.op.apply(score)
+	score.undone--
+	return item.change
+}

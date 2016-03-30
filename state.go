@@ -131,6 +131,7 @@ func noteFnFromStructs(notes []SavedNote) noteFunc {
 	}
 }
 
+// XXX lots of pointless change events while building staves
 func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 	staves := make([]*score.Staff, 0, len(saved))
 	for _, sv := range saved {

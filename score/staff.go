@@ -81,20 +81,16 @@ func MkStaff(name string, clef *Clef, key KeySig) *Staff {
 
 func (score *Score) SetStaves(staves []*Staff) {
 	score.update(&SetStavesOp{staves})
-	score.plumb.C <- ResetStaves(staffChanged(staves...))
 }
 
 type SetStavesOp struct {
 	staves []*Staff
 }
 
-func (op *SetStavesOp) apply(score *Score) bool {
+func (op *SetStavesOp) apply(score *Score) interface{} {
 	score.staves = op.staves
-	return true
-}
-
-func (op *SetStavesOp) undo(score *Score) {
-	// can't be undone
+	score.clearHistory()
+	return ResetStaves(staffChanged(op.staves...))
 }
 
 type AddStaffOp struct {
@@ -103,12 +99,11 @@ type AddStaffOp struct {
 
 func (score *Score) AddStaff(staff *Staff) {
 	score.update(&AddStaffOp{staff})
-	score.plumb.C <- staffChanged(staff)
 }
 
-func (op *AddStaffOp) apply(score *Score) bool {
+func (op *AddStaffOp) apply(score *Score) interface{} {
 	score.staves = append(score.staves, op.staff)
-	return true
+	return staffChanged(op.staff)
 }
 
 func (op *AddStaffOp) undo(score *Score) {
@@ -172,24 +167,30 @@ func (staff *Staff) removeNote(note *Note) bool {
 }
 
 func (score *Score) AddNotes(staff *Staff, notes... *Note) {
-	score.update(&AddNotesOp{staff, notes})
-	score.plumb.C <- staffChanged(staff)
+	score.update(&AddNotesOp{staff, notes, make(map[*Note]*big.Rat)})
 }
 
 type AddNotesOp struct {
 	staff *Staff
 	notes []*Note
+	origDur map[*Note]*big.Rat
 }
 
-func (op *AddNotesOp) apply(score *Score) bool {
+func (op *AddNotesOp) apply(score *Score) interface{} {
+	for _, note := range op.notes {
+		if existing := op.staff.NoteAt(note); existing != nil {
+			op.origDur[note] = big.NewRat(1, 1)
+			op.origDur[note].Set(existing.Duration)
+		}
+	}
 	op.staff.addNote(op.notes...)
-	return true
+	return staffChanged(op.staff)
 }
 
 func (op *AddNotesOp) undo(score *Score) {
 	for _, note := range op.notes {
 		if !op.staff.removeNote(note) {
-			//XXX need to restore original duration
+			op.staff.NoteAt(note).Duration.Set(op.origDur[note])
 		}
 	}
 }
@@ -223,7 +224,6 @@ func Merge(list []*Note, notes... *Note) []*Note {
 
 func (score *Score) MvNotes(Δpitch int8, Δbeat *big.Rat, notes... StaffNote) {
 	score.update(&MvNotesOp{Δpitch, Δbeat, notes})
-	score.plumb.C <- notesChanged(notes)
 }
 
 type MvNotesOp struct {
@@ -232,9 +232,9 @@ type MvNotesOp struct {
 	notes []StaffNote
 }
 
-func (op *MvNotesOp) apply(score *Score) bool {
+func (op *MvNotesOp) apply(score *Score) interface{} {
 	op.mv(op.Δpitch, op.Δbeat)
-	return true
+	return notesChanged(op.notes)
 }
 
 func (op *MvNotesOp) mv(Δpitch int8, Δbeat *big.Rat) {
@@ -284,9 +284,7 @@ func (score *Score) RepeatNotes(rng BeatRange) {
 	if rng.First == rng.Last {
 		return
 	}
-	op := &RepeatNotesOp{rng: rng}
-	score.update(op)
-	score.plumb.C <- notesChanged(op.added)
+	score.update(&RepeatNotesOp{rng: rng})
 }
 
 type RepeatNotesOp struct {
@@ -294,7 +292,7 @@ type RepeatNotesOp struct {
 	added []StaffNote
 }
 
-func (op *RepeatNotesOp) apply(score *Score) bool {
+func (op *RepeatNotesOp) apply(score *Score) interface{} {
 	rng := op.rng
 	dest := op.rng.Last
 	n := rng.Last.Subtract(rng.First)
@@ -311,7 +309,7 @@ func (op *RepeatNotesOp) apply(score *Score) bool {
 		src.Staff.addNote(note)
 		op.added = append(op.added, StaffNote{src.Staff, note})
 	}
-	return true
+	return notesChanged(op.added)
 }
 
 func (op *RepeatNotesOp) undo(score *Score) {
@@ -322,19 +320,21 @@ func (op *RepeatNotesOp) undo(score *Score) {
 }
 
 func (score *Score) RemoveNotes(notes... StaffNote) {
+	if len(notes) == 0 {
+		return
+	}
 	score.update(&RemoveNotesOp{notes})
-	score.plumb.C <- notesChanged(notes)
 }
 
 type RemoveNotesOp struct {
 	notes []StaffNote
 }
 
-func (op *RemoveNotesOp) apply(score *Score) bool {
+func (op *RemoveNotesOp) apply(score *Score) interface{} {
 	for _, sn := range op.notes {
 		sn.Staff.removeNote(sn.Note)
 	}
-	return len(op.notes) > 0
+	return notesChanged(op.notes)
 }
 
 func (op *RemoveNotesOp) undo(score *Score) {

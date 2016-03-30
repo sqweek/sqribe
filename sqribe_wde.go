@@ -148,6 +148,10 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			case e.Chord == "control+c":
 				G.ww.Snarf()
 				G.ww.SetPasteMode(true)
+			case e.Chord == "control+z":
+				G.score.Undo()
+			case e.Chord == "shift+control+z", e.Chord == "control+y":
+				G.score.Redo()
 			case e.Chord == "shift+prior":
 				G.mixw.AdjustGain(&Mixer.Midi.Gain, 0.1)
 			case e.Chord == "shift+next":

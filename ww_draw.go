@@ -23,7 +23,6 @@ type DisplayNote struct {
 	accidental *int
 	col color.NRGBA
 	duration float64
-	beatf score.BeatPoint
 	downBeam bool
 	pt *image.Point // centre of note head. nil if not visible
 }
@@ -330,7 +329,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 			maxX = r.Max.X
 			break
 		}
-		x := ww.PixelAtFrame(beat.Frame())
+		x := ww.PixelAtFrame(ww.beatFrame(beat))
 		if minX == -1 {
 			minX = x
 		}
@@ -444,12 +443,11 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 
 func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int) *DisplayNote {
 	dn := DisplayNote{}
-	dn.beatf = ww.score.Beatf(note)
 	dn.duration = note.Durf()
 	dn.delta, dn.accidental = staff.LineForPitch(note.Pitch)
 	dn.downBeam = (dn.delta > 2)
 	rng:= ww.VisibleFrameRange()
-	frame, _ := ww.score.ToFrame(dn.beatf)
+	frame := ww.ToFrame(ww.score.Beatf(note))
 	if frame >= rng.MinFrame() && frame <= rng.MaxFrame() {
 		dn.pt = &image.Point{ww.PixelAtFrame(frame), mid - (yspacing / 2) * dn.delta}
 	}
@@ -657,9 +655,9 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 		// XXX should start search from b0
 		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).LNext()
 		i := b0.BeatNum()
-		for b := b0; b != nil && b.Frame() <= bN.Frame(); b = b.Next() {
+		for b := b0; b != nil && ww.beatFrame(b) <= ww.beatFrame(bN); b = b.Next() {
 			beats = append(beats, float64(i))
-			frames = append(frames, b.Frame())
+			frames = append(frames, ww.beatFrame(b))
 			i++
 		}
 	}

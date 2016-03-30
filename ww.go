@@ -97,6 +97,7 @@ type WaveWidget struct {
 	notesel map[*score.Note]*score.Staff
 	snarf map[*score.Staff] []*score.Note // the cut/copy buffer
 	pasteMode bool
+	beatdrag map[*score.BeatRef]FrameN
 
 	/* renderer related state */
 	renderstate struct {
@@ -121,6 +122,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
 	ww.selection = &FrameRange{0, 0}
 	ww.notesel = make(map[*score.Note]*score.Staff)
+	ww.beatdrag = make(map[*score.BeatRef]FrameN)
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -429,6 +431,19 @@ func (ww *WaveWidget) SetPasteMode(mode bool) {
 	}
 	ww.pasteMode = mode
 	ww.changed(SCALE, ww.snarf)
+}
+
+func (ww *WaveWidget) beatFrame(beat *score.BeatRef) FrameN {
+	if f, ok := ww.beatdrag[beat]; ok {
+		return f
+	}
+	return beat.Frame()
+}
+
+func (ww *WaveWidget) ToFrame(pt score.BeatPoint) FrameN {
+	b1 := pt.Beat()
+	f1, f2 := ww.beatFrame(b1), ww.beatFrame(b1.LNext())
+	return f1 + FrameN(pt.Offsetf() * float64(f2 - f1))
 }
 
 func (ww *WaveWidget) TimeAtCursor(x int) time.Duration {

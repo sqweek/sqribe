@@ -182,11 +182,22 @@ func (ww *WaveWidget) beatDrag(beat *score.BeatRef) DragFn {
 		min = prev.Frame()
 	}
 	return func(pos image.Point, finished bool, moved bool) bool {
-		f := ww.FrameAtPixel(pos.X)
-		if f <= min || f >= max || !moved {
+		if !moved {
 			return false
 		}
-		ww.score.MvBeat(beat, f)
+		f := ww.FrameAtPixel(pos.X)
+		if f <= min || f >= max || !pos.In(ww.rect.waveRulers) {
+			delete(ww.beatdrag, beat)
+			ww.changed(BEATS, beat)
+			return false
+		}
+		if finished {
+			delete(ww.beatdrag, beat)
+			ww.score.MvBeat(beat, f)
+		} else {
+			ww.beatdrag[beat] = f
+			ww.changed(BEATS, beat)
+		}
 		return true
 	}
 }
