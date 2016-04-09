@@ -1,8 +1,8 @@
 package main
 
 import (
-	"code.google.com/p/freetype-go/freetype"
-	"code.google.com/p/freetype-go/freetype/truetype"
+	"github.com/golang/freetype"
+	"github.com/golang/freetype/truetype"
 	"image"
 	"image/color"
 	"image/draw"

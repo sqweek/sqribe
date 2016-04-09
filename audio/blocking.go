@@ -1,7 +1,7 @@
 package audio
 
 import (
-	"code.google.com/p/portaudio-go/portaudio"
+	"github.com/gordonklaus/portaudio"
 
 	"github.com/sqweek/sqribe/log"
 	. "github.com/sqweek/sqribe/core/types"
