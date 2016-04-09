@@ -1,8 +1,9 @@
 package main
 
 import (
-	"code.google.com/p/freetype-go/freetype"
-	"code.google.com/p/freetype-go/freetype/truetype"
+	"github.com/golang/freetype"
+	"github.com/golang/freetype/truetype"
+	"golang.org/x/image/math/fixed"
 	"image"
 	"image/color"
 	"image/draw"
@@ -15,7 +16,7 @@ const DPI = 96.0
 type Font struct {
 	fc *freetype.Context
 	font *truetype.Font
-	fontscale int32
+	fontscale fixed.Int26_6
 }
 
 func NewFont(filename string, size int) (*Font, error) {
@@ -39,16 +40,13 @@ func NewFont(filename string, size int) (*Font, error) {
 func (font *Font) SetSize(size int) {
 	fsz := float64(size)
 	font.fc.SetFontSize(fsz)
-	font.fontscale = int32(fsz * DPI * (64.0 / 72.0)) // copied from freetype.recalc()
+	font.fontscale = fixed.Int26_6(fsz * DPI * (64.0 / 72.0)) // copied from freetype.recalc()
 }
 
 /* freetype.Font functions return 26.6 fixed width ints */
-func roundFix(fix int32, floatBits uint) int {
-	mask := int32(0)
-	for i := uint(0); i < floatBits; i++ {
-		mask |= 1 << i
-	}
-	floor := int(fix >> floatBits)
+func roundFix(fix fixed.Int26_6) int {
+	mask := fixed.Int26_6(0x3f)
+	floor := int(fix >> 6)
 	frac := fix & mask
 	if frac >= mask / 2 {
 		floor++
@@ -58,30 +56,30 @@ func roundFix(fix int32, floatBits uint) int {
 
 func (font *Font) PixelWidth(str string) int {
 	var previ truetype.Index
-	width := int32(0)
+	width := fixed.Int26_6(0)
 	for istr, r := range str {
 		i := font.font.Index(r)
 		hm := font.font.HMetric(font.fontscale, i)
 		width += hm.AdvanceWidth
 		if istr != 0 {
-			width += font.font.Kerning(font.fontscale, previ, i)
+			width += font.font.Kern(font.fontscale, previ, i)
 		} else {
 			width += hm.LeftSideBearing
 		}
 		previ = i
 	}
-	return roundFix(width, 6)
+	return roundFix(width)
 }
 
 func (font *Font) PixelHeight() int {
 	b := font.font.Bounds(font.fontscale)
-	return 1 + roundFix(b.YMax - b.YMin, 6)
+	return 1 + roundFix(b.Max.Y - b.Min.Y)
 }
 
 func (font *Font) Draw(dst draw.Image, colour color.Color, r image.Rectangle, str string) {
 	b := font.font.Bounds(font.fontscale)
 	h := font.PixelHeight()
-	baseline := (r.Min.Y + r.Max.Y) / 2 + h / 2 + roundFix(b.YMin, 6)
+	baseline := (r.Min.Y + r.Max.Y) / 2 + h / 2 + roundFix(b.Min.Y)
 	font.fc.SetDst(dst)
 	font.fc.SetSrc(&image.Uniform{colour})
 	font.fc.SetClip(r)
@@ -94,7 +92,7 @@ func (font *Font) DrawC(dst draw.Image, colour color.Color, clip image.Rectangle
 	b := font.font.Bounds(font.fontscale)
 	h := font.PixelHeight()
 	left := pt.X - w / 2
-	baseline := pt.Y + h / 2 + roundFix(b.YMin, 6)
+	baseline := pt.Y + h / 2 + roundFix(b.Min.Y)
 	font.fc.SetDst(dst)
 	font.fc.SetSrc(&image.Uniform{colour})
 	font.fc.SetClip(clip)
