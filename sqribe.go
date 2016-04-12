@@ -14,6 +14,9 @@ import (
 	"runtime/pprof"
 	"time"
 
+	_ "github.com/skelterjohn/go.wde/init"
+	"github.com/skelterjohn/go.wde"
+
 	"github.com/sqweek/sqribe/audio"
 	"github.com/sqweek/sqribe/log"
 	"github.com/sqweek/sqribe/midi"
@@ -149,7 +152,8 @@ func main() {
 	if *cachefile == "" {
 		main_parent()
 	} else {
-		main_child()
+		go main_child()
+		wde.Run()
 	}
 }
 
@@ -301,4 +305,5 @@ func main_child() {
 	if err != nil {
 		log.FS.Println(err)
 	}
+	wde.Stop()
 }
