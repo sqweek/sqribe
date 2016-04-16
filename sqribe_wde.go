@@ -186,17 +186,17 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				}
 			case e.Key == wde.KeyDelete:
 				G.score.RemoveNotes(G.ww.SelectedNotes()...)
-			case e.Key == wde.KeyS:
+			case e.Glyph == "s":
 				if err := save(); err != nil {
 					alert("save failed: %v", err)
 				}
-			case e.Key == wde.KeyT:
+			case e.Glyph == "t":
 				G.mixw.Toggle(&Mixer.MuteMetronome)
-			case e.Key == wde.KeyA:
+			case e.Glyph == "a":
 				G.mixw.Toggle(&Mixer.Wave.Muted)
-			case e.Key == wde.KeyM:
+			case e.Glyph == "m":
 				G.mixw.Toggle(&Mixer.Midi.Muted)
-			case e.Key == wde.KeyQ:
+			case e.Glyph == "q":
 				go G.score.QuantizeBeats()
 			case e.Glyph == "#":
 				G.score.MvNotes(1, &rZero, G.ww.SelectedNotes()...)
