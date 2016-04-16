@@ -104,6 +104,10 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				cur = G.ww.MouseMoved(e.Where)
 			}
 			win.SetCursor(cur)
+		case wde.ScrollEvent:
+			G.ww.ScrollPixels(-e.Delta.X)
+		case wde.MagnifyEvent:
+			G.ww.Zoom(1.0 / e.Magnification)
 		case wde.KeyDownEvent:
 			switch e.Key {
 			case wde.KeyLeftShift, wde.KeyRightShift:

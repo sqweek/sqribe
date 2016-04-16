@@ -389,6 +389,13 @@ func (ww *WaveWidget) ScrollPixels(dx int) int {
 
 func (ww *WaveWidget) Zoom(factor float64) float64 {
 	fpp := int(float64(ww.frames_per_pixel) * factor)
+	if fpp == ww.frames_per_pixel {
+		if factor < 1.0 {
+			fpp--
+		} else if factor > 1.0 {
+			fpp++
+		}
+	}
 	if fpp < 1 {
 		fpp = 1
 	}
