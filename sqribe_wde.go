@@ -336,3 +336,11 @@ func InitWde(redraw chan Widget) *sync.WaitGroup {
 
 	return &wg
 }
+
+func wderun(f func()) {
+	go func() {
+		f()
+		wde.Stop()
+	}()
+	wde.Run()
+}

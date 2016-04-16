@@ -14,9 +14,6 @@ import (
 	"runtime/pprof"
 	"time"
 
-	_ "github.com/skelterjohn/go.wde/init"
-	"github.com/skelterjohn/go.wde"
-
 	"github.com/sqweek/sqribe/audio"
 	"github.com/sqweek/sqribe/log"
 	"github.com/sqweek/sqribe/midi"
@@ -152,8 +149,11 @@ func main() {
 	if *cachefile == "" {
 		main_parent()
 	} else {
-		go main_child()
-		wde.Run()
+		wderun(main_child)
+		//XXX should avoid closing GUI if save fails
+		if err := save(); err != nil {
+			log.FS.Println(err)
+		}
 	}
 }
 
@@ -301,10 +301,4 @@ func main_child() {
 	wg.Wait()
 
 	audio.Shutdown()
-	//XXX should avoid closing GUI if save fails
-	err = save()
-	if err != nil {
-		log.FS.Println(err)
-	}
-	wde.Stop()
 }
