@@ -194,8 +194,9 @@ func main_parent() {
 	for i := 1; i < len(os.Args); i++ {
 		cmd.Args[i+1] = os.Args[i]
 	}
-	logpath := filepath.Join(App.Cache, fmt.Sprintf("%s.%d.log", host, os.Getpid()))
-	logfile, err := fs.Create(logpath)
+	logname := fmt.Sprintf("%s.%d.log", host, os.Getpid())
+	logpath := filepath.Join(App.Cache, logname)
+	logfile, err := fs.CreateIn(App.Cache, logname)
 	var logger io.Writer
 	if err != nil {
 		log.Println("error creating log file: ", err)

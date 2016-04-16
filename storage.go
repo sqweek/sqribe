@@ -44,12 +44,19 @@ func Open(file string) (files FileContext, s State, err error) {
 		files.Version = s.Headers().Version
 	} else {
 		files.Audio = file
+		_, err = os.Stat(App.Docs)
+		if err != nil {
+			err = os.MkdirAll(App.Docs, 0777)
+		}
+		if err != nil {
+			return
+		}
 		states, dberr := filesDB.StateFiles(file)
 		if dberr != nil {
 			log.DB.Printf("error retrieving linked state file: %s: %v\n", file, dberr)
 		}
 		if len(states) == 0 {
-			files.State = filepath.Join(App.Data, stateKey(file))
+			files.State = filepath.Join(App.Docs, stateKey(file))
 		} else {
 			files.State = states[0]
 			if len(states) > 1 {
@@ -107,7 +114,11 @@ func LoadState(statefile string) (s State, modTime time.Time, err error) {
 func SaveState(files *FileContext, s State) (err error) {
 	var tmpfile *os.File
 	d, f := filepath.Split(files.State)
-	if tmpfile, err = ioutil.TempFile(d, f); err == nil {
+	err = fs.CreateVia(d, func() (e error) {
+		tmpfile, e = ioutil.TempFile(d, f)
+		return e
+	})
+	if err == nil {
 		err = s.Write(tmpfile)
 		tmpfile.Close()
 		if err == nil {
@@ -156,8 +167,11 @@ var filesDB filesSqlite
 
 func (f *filesSqlite) withDB(fn func(db *sql.DB)error) (err error) {
 	if f.db == nil {
-		f.db, err = sql.Open("sqlite3", filepath.Join(App.Data, "files.qps?_busy_timeout=3500"))
-		if err != nil {
+		dbdir := App.Data
+		if err = os.MkdirAll(dbdir, 0777); err != nil {
+			return err
+		}
+		if f.db, err = sql.Open("sqlite3", filepath.Join(dbdir, "files.qps?_busy_timeout=3500")); err != nil {
 			return err
 		}
 	}
