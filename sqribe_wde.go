@@ -26,10 +26,16 @@ type DragState struct {
 	button wde.Button
 }
 
+// overridden on OSX; see sqribe_darwin.go
+var eventFilter func(<-chan interface{}) <-chan interface{} = nil
+
 func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGroup) {
 	openDlg := dialog.File().Title("sqribe - Open").Filter("Audio Files", "mp3", "ogg", "m4a", "wma", "mov", "mp4", "flv", "wmv").Filter("Sqribe Save", "sqs")
 	exportDlg := dialog.File().Title("sqribe - Export to MusicXML").Filter("MXML Files", "xml", "mxl")
 	events := win.EventChan()
+	if eventFilter != nil {
+		events = eventFilter(events)
+	}
 	defer func() {
 		done <- true
 		wg.Done()
