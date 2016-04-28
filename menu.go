@@ -85,9 +85,16 @@ func (menu *MenuWidget) Popup(bounds image.Rectangle, refresh chan Widget, mouse
 	w := menu.maxWidth
 	ih := menu.height
 	h := ih * len(menu.options)
-	relTarget := image.Point{w / 2, ih * menu.lastSelected + ih / 2}
-	target := mouse.Sub(relTarget)
-	r := image.Rectangle{target, target.Add(image.Pt(w, h))}
+	topLeft := mouse.Sub(image.Point{w / 2, ih / 2})
+	// if close to upper/lower boundary, align menu with edge
+	// (otherwise the aligment is such that the mouse is at the centre of a menu item)
+	if mouse.Y < bounds.Min.Y + ih/2 {
+		topLeft.Y = bounds.Min.Y
+	} else if mouse.Y > bounds.Max.Y - ih/2 {
+		topLeft.Y = bounds.Max.Y - ih
+	}
+	topLeft.Y -= ih * menu.lastSelected
+	r := image.Rectangle{topLeft, topLeft.Add(image.Pt(w, h))}
 	min := r.Min.Sub(bounds.Min)
 	max := bounds.Max.Sub(r.Max)
 	dx := 0

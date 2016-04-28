@@ -113,8 +113,8 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 					id, ok := item.(int)
 					if item != nil && ok {
 						Mixer.For(staff).Voice = id
-						ww.changed(MIXER, ww)
 					}
+					ww.changed(MIXER, ww)
 				}()
 				return G.instMenu.Drag
 			} else if e.Where.In(layout.volS) {
