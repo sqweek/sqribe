@@ -362,8 +362,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		ww.drawProspectiveNote(dst, r, staff, mid)
 	}
 	if selRect != nil {
-		drawBorders(dst, *selRect, color.NRGBA{0xff,0xff,0xff,0x88}, color.NRGBA{0xff,0xff,0xff,0x44})
-		// TODO highlight notes within selection rect
+		drawBorders(dst, selRect.Intersect(ww.rect.waveRulers), color.NRGBA{0xff,0xff,0xff,0x88}, color.NRGBA{0xff,0xff,0xff,0x44})
 	}
 }
 
@@ -441,12 +440,25 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 	drawVertSlider(dst, layout.volS, fg, float64(mix.Velocity) / 127.0)
 }
 
+func (ww *WaveWidget) noteX(note *score.Note) int {
+	return ww.PixelAtFrame(ww.ToFrame(ww.score.Beatf(note)))
+}
+
+func (ww *WaveWidget) noteY(staff *score.Staff, note *score.Note, mid int) int {
+	delta, _ := staff.LineForPitch(note.Pitch)
+	return mid - delta * (yspacing/2)
+}
+
+func (ww *WaveWidget) notePt(staff *score.Staff, note *score.Note, mid int) image.Point {
+	return image.Point{ww.noteX(note), ww.noteY(staff, note, mid)}
+}
+
 func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int) *DisplayNote {
 	dn := DisplayNote{}
 	dn.duration = note.Durf()
 	dn.delta, dn.accidental = staff.LineForPitch(note.Pitch)
 	dn.downBeam = (dn.delta > 2)
-	rng:= ww.VisibleFrameRange()
+	rng := ww.VisibleFrameRange()
 	frame := ww.ToFrame(ww.score.Beatf(note))
 	if frame >= rng.MinFrame() && frame <= rng.MaxFrame() {
 		dn.pt = &image.Point{ww.PixelAtFrame(frame), mid - (yspacing / 2) * dn.delta}

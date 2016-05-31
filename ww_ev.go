@@ -260,22 +260,23 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 }
 
 func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
-	// XXX funny interaction with scrolling because we hold on to pixel values
+	// XXX funny interaction with scrolling because mouse state gets cleared
 	sc := ww.score
 	addToSel := G.kb.shift
+	fstart := ww.FrameAtPixel(start.X)
 	return func(end image.Point, finished bool, moved bool)bool {
-		r := image.Rectangle{start, end}.Canon()
+		r := image.Rect(ww.PixelAtFrame(fstart), start.Y, end.X, end.Y).Canon()
 		if !finished {
 			ww.getMouseState(end).rectSelect = &r
 			ww.changed(SCALE, r)
 		} else {
 			notes := make([]score.StaffNote, 0, 8)
 			var sn score.StaffNote
-			next := sc.Iter(ww.VisibleFrameRange())
+			next := sc.Iter(FrameRange{ww.FrameAtPixel(r.Min.X), ww.FrameAtPixel(r.Max.X)})
 			for next != nil {
 				sn, next = next()
-				dn := ww.dispNote(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
-				if dn.pt != nil && dn.pt.In(r) {
+				y := ww.noteY(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
+				if y >= r.Min.Y && y < r.Max.Y {
 					notes = append(notes, sn)
 				}
 			}
@@ -314,10 +315,8 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 		var closest struct{d int; n *score.Note}
 		for next != nil {
 			sn, next = next()
-			frame, _ := sc.ToFrame(sc.Beatf(sn.Note))
-			x := ww.PixelAtFrame(frame)
-			delta, _ := staff.LineForPitch(sn.Note.Pitch)
-			y := mid - (yspacing / 2) * (delta)
+			x := ww.noteX(sn.Note)
+			y := ww.noteY(staff, sn.Note, mid)
 			d := sqdist(mouse.X, mouse.Y, x, y)
 			if d < (yspacing*yspacing)/4 && (closest.n == nil || d < closest.d) {
 				closest.d = d
