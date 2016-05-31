@@ -225,6 +225,12 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	sc := ww.score
 	addToSel := G.kb.shift
 	return func(pos image.Point, finished bool, moved bool)bool {
+		if finished && !moved {
+			/* regular click */
+			ww.selectNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
+			ww.changed(SCALE, ww.notesel)
+			return true
+		}
 		prospect := ww.noteAtPixel(staff, pos)
 		if prospect == nil {
 			return false
@@ -234,17 +240,12 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 		Δbeat := Δb(beat, offset, note.Beat, note.Offset)
 		_, selected := ww.notesel[note]
 		if finished {
+			/* `moved` must be true */
 			ww.mouse.state = nil
-			if moved {
-				if selected {
-					sc.MvNotes(Δpitch, Δbeat, ww.SelectedNotes()...)
-				} else {
-					sc.MvNotes(Δpitch, Δbeat, score.StaffNote{staff, note})
-				}
+			if selected {
+				sc.MvNotes(Δpitch, Δbeat, ww.SelectedNotes()...)
 			} else {
-				/* regular click */
-				ww.selectNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
-				ww.changed(SCALE, ww.notesel)
+				sc.MvNotes(Δpitch, Δbeat, score.StaffNote{staff, note})
 			}
 		} else {
 			if selected {
