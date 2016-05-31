@@ -76,3 +76,9 @@ func snapto(x, origin, step int) int {
 	}
 	return x + sgn * (step - rem)
 }
+
+// returns squared distance between two points
+func sqdist(x1, y1, x2, y2 int) int {
+	dx, dy := x2 - x1, y2 - y1
+	return dx*dx + dy*dy
+}

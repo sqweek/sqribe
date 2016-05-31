@@ -311,17 +311,21 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 		mid := rect.Min.Y + rect.Dy() / 2
 		next := sc.Iter(rng, staff)
 		var sn score.StaffNote
+		var closest struct{d int; n *score.Note}
 		for next != nil {
 			sn, next = next()
 			frame, _ := sc.ToFrame(sc.Beatf(sn.Note))
 			x := ww.PixelAtFrame(frame)
 			delta, _ := staff.LineForPitch(sn.Note.Pitch)
 			y := mid - (yspacing / 2) * (delta)
-			r := padPt(image.Pt(x, y), yspacing / 2, yspacing / 2)
-			// XXX would be good to target the closest note instead of the first
-			if mouse.In(r) {
-				return ww.noteDrag(staff, sn.Note), wde.GrabHoverCursor
+			d := sqdist(mouse.X, mouse.Y, x, y)
+			if d < (yspacing*yspacing)/4 && (closest.n == nil || d < closest.d) {
+				closest.d = d
+				closest.n = sn.Note
 			}
+		}
+		if closest.n != nil {
+			return ww.noteDrag(staff, closest.n), wde.GrabHoverCursor
 		}
 	}
 
