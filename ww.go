@@ -306,13 +306,13 @@ func (ww *WaveWidget) selectNotes(clear bool, notes... score.StaffNote) {
 	}
 }
 
-func (ww *WaveWidget) staffContaining(pos image.Point) *score.Staff {
+func (ww *WaveWidget) staffContaining(pos image.Point) (*score.Staff, image.Rectangle) {
 	for staff, rect := range ww.rect.staves {
-		if pos.In(rect) {
-			return staff
+		if mix, ok := ww.rect.mixers[staff]; (!ok || !mix.Minimised) && pos.In(rect) {
+			return staff, rect
 		}
 	}
-	return nil
+	return nil, image.ZR
 }
 
 func (ww *WaveWidget) noteAtPixel(staff *score.Staff, pos image.Point) *noteProspect {
@@ -350,13 +350,11 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	state.dragFn = dragFn
 	state.cursor = cursor
 
-	staff := ww.staffContaining(pos)
-	if staff == nil {
-		state.note = nil;
-	} else {
+	if staff, _ := ww.staffContaining(pos); staff != nil {
 		state.note = ww.noteAtPixel(staff, pos)
+	} else {
+		state.note = nil;
 	}
-
 	return state
 }
 

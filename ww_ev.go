@@ -305,10 +305,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	}
 
 	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
-	for staff, rect := range ww.rect.staves {
-		if mix, ok := ww.rect.mixers[staff]; (ok && mix.Minimised) || !mouse.In(rect) {
-			continue
-		}
+	if staff, rect := ww.staffContaining(mouse); staff != nil {
 		mid := rect.Min.Y + rect.Dy() / 2
 		next := sc.Iter(rng, staff)
 		var sn score.StaffNote
