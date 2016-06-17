@@ -30,7 +30,7 @@ body {
   font-family:"Helvetica Neue", Helvetica, Arial, sans-serif;
 	font-size: 14px;
 	color: #232323;
-	background-color: #FBFAF7;
+	background-color: #888877;
 	margin: 0;
 	line-height: 1.8em;
 	-webkit-font-smoothing: antialiased;
@@ -147,8 +147,6 @@ img {
   margin: 0 auto;
   max-width: 650px;
   padding: 5px;
-  margin: 10px 0 32px 0;
-  border: 1px solid #ccc;
 }
 
 p img {
@@ -215,24 +213,35 @@ td {
 /* Header */
 
 header {
-	background-color: #171717;
-	color: #FDFDFB;
-  width:170px;
-  float:left;
-  position:fixed;
-	border: 1px solid #000;
+	/*background-color: #ddddaa; *//*#171717;*/
+	background-image: url("../images/sqribe_cover_wide.png");
+	color: #444444;
+  /*width:90%;*/
+  min-width: 240px;
+  height:244px;
+	border: 2px solid #171717;
 	-webkit-border-top-right-radius: 4px;
 	-webkit-border-bottom-right-radius: 4px;
 	-moz-border-radius-topright: 4px;
 	-moz-border-radius-bottomright: 4px;
 	border-top-right-radius: 4px;
 	border-bottom-right-radius: 4px;
-	padding: 34px 25px 22px 50px;
-	margin: 30px 25px 0 0;
+	padding: 22px 16px 22px 16px;
+	/*margin: 10px 25px 30px 5px;*/
 	-webkit-font-smoothing: antialiased;
+	/*text-shadow: 1px 1px 2px #171717;*/
+}
+
+img.logo {
+	width: 76px;
+	height: 90%;
+	vertical-align:middle;
+	display:block;
+	float:left;
 }
 
 p.header {
+	margin-left: 100px;
 	font-size: 16px;
 }
 
@@ -244,7 +253,6 @@ h1.header {
 	border-bottom: none;
 	margin-top: 0;
 }
-
 
 h1.header, a.header, a.name, header a{
 	color: #fff;
@@ -261,6 +269,8 @@ a.name {
 header ul {
   list-style:none;
   padding:0;
+  vertical-align:middle;
+  display: inline-block;
 }
 
 header li {
@@ -317,60 +327,35 @@ a.buttons:hover {
 
 
 /* Section - for main page content */
-
 section {
   width:650px;
-  float:right;
   padding-bottom:50px;
+  padding:20px 84px 20px 50px;
+  margin:0 0 20px;
 }
 
 
 /* Footer */
-
 footer {
-  width:170px;
-  float:left;
-  position:fixed;
   bottom:10px;
-	padding-left: 50px;
+  text-align: right;
+  border-top: 1px solid #ccc;
+  padding:0;
+}
+
+div.wrapper {
+  margin-left: 5px;
+  width: 90%;
 }
 
 @media print, screen and (max-width: 960px) {
-
-  div.wrapper {
-    width:auto;
-    margin:0;
-  }
-
-  header, section, footer {
+  /*section, footer {
     float:none;
     position:static;
-    width:auto;
-  }
-
-	footer {
-		border-top: 1px solid #ccc;
-		margin:0 84px 0 50px;
-		padding:0;
-	}
-
-  header {
-    padding-right:320px;
-  }
-
-  section {
-    padding:20px 84px 20px 50px;
-    margin:0 0 20px;
-  }
+  }*/
 
   header a small {
     display:inline;
-  }
-
-  header ul {
-    position:absolute;
-    right:130px;
-    top:84px;
   }
 }
 
@@ -379,12 +364,8 @@ footer {
     word-wrap:break-word;
   }
 
-  header {
-    padding:10px 20px 0;
-		margin-right: 0;
-  }
-
 	section {
+    width: 90%;
     padding:10px 0 10px 20px;
     margin:0 0 30px;
   }
@@ -394,11 +375,14 @@ footer {
 	}
 
   header ul, header p.view {
-    position:static;
+    
   }
 }
 
 @media print, screen and (max-width: 480px) {
+  header {
+    float:none;
+  }
 
   header ul li.download {
     display:none;
