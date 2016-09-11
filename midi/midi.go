@@ -18,6 +18,7 @@ const (
 	InstEPiano = 4
 	InstGuitar = 25
 	InstEGuitar = 27
+	InstMuteGuitar = 28
 	InstViolin = 40
 	InstHarp = 46
 	InstVoice = 53
@@ -88,6 +89,7 @@ func init() {
 	inst(InstEPiano, "E. Piano")
 	inst(InstGuitar, "Guitar")
 	inst(InstEGuitar, "E. Guitar")
+	inst(InstMuteGuitar, "Muted Guitar")
 	inst(InstViolin, "Violin")
 	inst(InstHarp, "Harp")
 	inst(InstVoice, "Voice")

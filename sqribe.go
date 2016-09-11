@@ -260,7 +260,7 @@ func main_child() {
 	G.font.luxi = mustMkFont(MustFind("luxisr.ttf"), 10)
 	G.noteMenu = mkMenu(StringMenuOps{}, "1/16", "1/8", "1/4", "1/2", "1", "2", "3", "4")
 	G.noteMenu.SetDefault("1")
-	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstViolin, midi.InstHarp, midi.InstVoice)
+	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstMuteGuitar, midi.InstViolin, midi.InstHarp, midi.InstVoice)
 
 	Synth, err = SynthInit(audio.SampleRate, MustFind("FluidR3_GM.sf2"))
 	if err != nil {
