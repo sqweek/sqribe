@@ -122,7 +122,6 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
 	ww.selection = &FrameRange{0, 0}
 	ww.notesel = make(map[*score.Note]*score.Staff)
-	ww.beatdrag = make(map[*score.BeatRef]FrameN)
 	ww.renderstate.img = nil
 	ww.renderstate.changed = WAV
 	ww.refresh = refresh
@@ -211,15 +210,17 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 				case score.KeyChanged:
 					change |= MIXER
 				case score.StaffChanged:
+					gone := make([]score.StaffNote, 0, 8)
 					for note, staff := range ww.notesel {
 						if _, ok := ev.Staves[staff]; !ok {
 							continue
 						}
 						if staff.NoteAt(note) != note {
 							/* note has been removed from staff */
-							delete(ww.notesel, note)
+							gone = append(gone, score.StaffNote{staff, note})
 						}
 					}
+					ww.deselectNotes(gone...)
 					if len(sc.Staves()) != len(ww.rect.staves) {
 						change |= LAYOUT
 					}
@@ -281,7 +282,7 @@ func (ww *WaveWidget) PixelAtFrame(frame FrameN) int {
 	return ww.rect.wave.Min.X + int(frame - ww.first_frame) / ww.frames_per_pixel
 }
 
-func (ww *WaveWidget) allAreSelected(notes... score.StaffNote) bool {
+func (ww *WaveWidget) areAllSelected(notes... score.StaffNote) bool {
 	for _, sn := range notes {
 		if _, ok := ww.notesel[sn.Note]; !ok {
 			return false
@@ -290,20 +291,37 @@ func (ww *WaveWidget) allAreSelected(notes... score.StaffNote) bool {
 	return true
 }
 
-func (ww *WaveWidget) selectNotes(clear bool, notes... score.StaffNote) {
-	if clear {
-		for note, _ := range ww.notesel {
-			delete(ww.notesel, note)
-		}
+func (ww *WaveWidget) toggleNotes(clear bool, notes... score.StaffNote) {
+	allSelected := !clear && ww.areAllSelected(notes...)
+	if allSelected {
+		ww.deselectNotes(notes...)
+	} else {
+		ww.selectNotes(clear, notes...)
 	}
-	allSelected := ww.allAreSelected(notes...)
+}
+
+func (ww *WaveWidget) deselectNotes(notes... score.StaffNote) {
+	newsel := make(map[*score.Note]*score.Staff)
+	for note, staff := range ww.notesel {
+		newsel[note] = staff
+	}
 	for _, sn := range notes {
-		if allSelected {
-			delete(ww.notesel, sn.Note)
-		} else {
-			ww.notesel[sn.Note] = sn.Staff
+		delete(newsel, sn.Note)
+	}
+	ww.notesel = newsel
+}
+
+func (ww *WaveWidget) selectNotes(clear bool, notes... score.StaffNote) {
+	newsel := make(map[*score.Note]*score.Staff)
+	if !clear {
+		for note, staff := range ww.notesel {
+			newsel[note] = staff
 		}
 	}
+	for _, sn := range notes {
+		newsel[sn.Note] = sn.Staff
+	}
+	ww.notesel = newsel
 }
 
 func (ww *WaveWidget) staffContaining(pos image.Point) (*score.Staff, image.Rectangle) {
@@ -439,8 +457,10 @@ func (ww *WaveWidget) SetPasteMode(mode bool) {
 }
 
 func (ww *WaveWidget) beatFrame(beat *score.BeatRef) FrameN {
-	if f, ok := ww.beatdrag[beat]; ok {
-		return f
+	if ww.beatdrag != nil {
+		if f, ok := ww.beatdrag[beat]; ok {
+			return f
+		}
 	}
 	return beat.Frame()
 }

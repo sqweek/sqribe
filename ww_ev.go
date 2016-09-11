@@ -187,15 +187,17 @@ func (ww *WaveWidget) beatDrag(beat *score.BeatRef) DragFn {
 		}
 		f := ww.FrameAtPixel(pos.X)
 		if f <= min || f >= max || !pos.In(ww.rect.waveRulers) {
-			delete(ww.beatdrag, beat)
+			ww.beatdrag = nil
 			ww.changed(BEATS, beat)
 			return false
 		}
 		if finished {
-			delete(ww.beatdrag, beat)
+			ww.beatdrag = nil
 			ww.score.MvBeat(beat, f)
 		} else {
-			ww.beatdrag[beat] = f
+			newmap := make(map[*score.BeatRef]FrameN)
+			newmap[beat] = f
+			ww.beatdrag = newmap
 			ww.changed(BEATS, beat)
 		}
 		return true
@@ -227,7 +229,7 @@ func (ww *WaveWidget) noteDrag(staff *score.Staff, note *score.Note) DragFn {
 	return func(pos image.Point, finished bool, moved bool)bool {
 		if finished && !moved {
 			/* regular click */
-			ww.selectNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
+			ww.toggleNotes(!(addToSel || G.kb.shift), score.StaffNote{staff, note})
 			ww.changed(SCALE, ww.notesel)
 			return true
 		}
@@ -280,7 +282,7 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 					notes = append(notes, sn)
 				}
 			}
-			ww.selectNotes(!(addToSel || G.kb.shift), notes...)
+			ww.toggleNotes(!(addToSel || G.kb.shift), notes...)
 			ww.getMouseState(end).rectSelect = nil
 			ww.changed(SCALE, &ww.notesel)
 		}

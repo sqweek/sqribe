@@ -61,7 +61,7 @@ func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	return layout
 }
 
-func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score, reset bool) {
+func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score, reset bool) {
 	rect.Rectangle = r
 	axish := 20
 	infow := 100
@@ -74,19 +74,23 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score, reset bool
 	rect.aboveMixer = aboveRect(rect.mixer, axish)
 	rect.belowMixer = belowRect(rect.mixer, axish)
 	rect.newStaffB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
-	if reset {
-		for staff, _ := range rect.staves {
-			delete(rect.staves, staff)
-			delete(rect.mixers, staff)
+	staffR := make(map[*score.Staff] image.Rectangle)
+	mixR := make(map[*score.Staff] *MixerLayout)
+	if !reset {
+		for staff, rect := range rect.staves {
+			staffR[staff] = rect
+		}
+		for staff, layout := range rect.mixers {
+			mixR[staff] = layout
 		}
 	}
-	if score != nil && len(score.Staves()) > 0 {
+	if sc != nil && len(sc.Staves()) > 0 {
 		minimisedH := 18
 		nstaves := 0 // counts number of non-minimised staves
 		spaceY := rect.wave.Dy()
-		staves := score.Staves()
+		staves := sc.Staves()
 		for _, staff := range staves {
-			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
+			if mix, ok := mixR[staff]; ok && mix.Minimised {
 				spaceY -= minimisedH
 			} else {
 				nstaves++
@@ -103,22 +107,24 @@ func (rect *WaveLayout) layout(r image.Rectangle, score *score.Score, reset bool
 		ypos := rect.wave.Min.Y
 		for _, staff := range staves {
 			var height int
-			if mix, ok := rect.mixers[staff]; ok && mix.Minimised {
+			if mix, ok := mixR[staff]; ok && mix.Minimised {
 				height = minimisedH
 			} else {
 				height = scoreh
 			}
 			srect := image.Rect(rect.wave.Min.X, ypos, rect.wave.Max.X, ypos + height)
 			ypos += height
-			rect.staves[staff] = srect
-			mix, ok := rect.mixers[staff]
+			staffR[staff] = srect
+			mix, ok := mixR[staff]
 			if !ok {
 				mix = &MixerLayout{}
-				rect.mixers[staff] = mix
+				mixR[staff] = mix
 			}
 			mix.calc(yspacing, leftRect(srect, infow))
 		}
 	}
+	rect.staves = staffR
+	rect.mixers = mixR
 }
 
 func (ww *WaveWidget) Rect() image.Rectangle {
