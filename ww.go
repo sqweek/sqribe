@@ -118,8 +118,7 @@ func NewWaveWidget(refresh chan Widget) *WaveWidget {
 	var ww WaveWidget
 	ww.first_frame = 0
 	ww.frames_per_pixel = 512
-	ww.rect.staves = make(map[*score.Staff]image.Rectangle)
-	ww.rect.mixers = make(map[*score.Staff]*MixerLayout)
+	ww.rect.staff.Store(make(map[*score.Staff]*StaffLayout))
 	ww.selection = &FrameRange{0, 0}
 	ww.notesel = make(map[*score.Note]*score.Staff)
 	ww.renderstate.img = nil
@@ -221,7 +220,7 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 						}
 					}
 					ww.deselectNotes(gone...)
-					if len(sc.Staves()) != len(ww.rect.staves) {
+					if len(sc.Staves()) != len(ww.rect.staves()) {
 						change |= LAYOUT
 					}
 				case score.ResetStaves:
@@ -324,28 +323,32 @@ func (ww *WaveWidget) selectNotes(clear bool, notes... score.StaffNote) {
 	ww.notesel = newsel
 }
 
-func (ww *WaveWidget) staffContaining(pos image.Point) (*score.Staff, image.Rectangle) {
-	for staff, rect := range ww.rect.staves {
-		if mix, ok := ww.rect.mixers[staff]; (!ok || !mix.Minimised) && pos.In(rect) {
-			return staff, rect
+func (ww *WaveWidget) staffContaining(pos image.Point) (*score.Staff, *StaffLayout) {
+	for staff, slayout := range ww.rect.staves() {
+		if !slayout.mix.Minimised && pos.In(slayout.r) {
+			return staff, slayout
 		}
 	}
-	return nil, image.ZR
+	return nil, nil
 }
 
 func (ww *WaveWidget) noteAtPixel(staff *score.Staff, pos image.Point) *noteProspect {
-	rect := ww.rect.staves[staff]
-	mid := rect.Min.Y + rect.Dy() / 2
+	if slayout, ok := ww.rect.staves()[staff]; ok {
+		return ww.noteAtPixelWithMid(staff, pos, slayout.Mid())
+	}
+	return nil
+}
+
+func (ww *WaveWidget) noteAtPixelWithMid(staff *score.Staff, pos image.Point, mid int) *noteProspect {
 	noteY := snapto(pos.Y, mid, yspacing / 2)
 	delta := (mid - noteY) / (yspacing / 2)
 
 	frame := ww.FrameAtPixel(pos.X)
-	beatf, ok := ww.score.ToBeat(frame)
-	if !ok {
-		return nil
-	}
 
-	return &noteProspect{delta, beatf, staff}
+	if beatf, ok := ww.score.ToBeat(frame); ok {
+		return &noteProspect{delta, beatf, staff}
+	}
+	return nil
 }
 
 func (ww *WaveWidget) getMouseState(pos image.Point) *mouseState {
@@ -368,8 +371,8 @@ func (ww *WaveWidget) calcMouseState(pos image.Point) *mouseState {
 	state.dragFn = dragFn
 	state.cursor = cursor
 
-	if staff, _ := ww.staffContaining(pos); staff != nil {
-		state.note = ww.noteAtPixel(staff, pos)
+	if staff, slayout := ww.staffContaining(pos); staff != nil {
+		state.note = ww.noteAtPixelWithMid(staff, pos, slayout.Mid())
 	} else {
 		state.note = nil;
 	}

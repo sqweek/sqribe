@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"math"
 	"math/big"
+	"sync/atomic"
 	"time"
 
 	"github.com/skelterjohn/go.wde"
@@ -33,8 +34,20 @@ type WaveLayout struct {
 	waveRulers image.Rectangle	// waveform + rulers
 
 	beatAxis, timeAxis, mixRulers, mixer, aboveMixer, belowMixer, newStaffB image.Rectangle
-	staves map[*score.Staff] image.Rectangle
-	mixers map[*score.Staff] *MixerLayout
+	staff atomic.Value //holds map[*score.Staff]*StaffLayout
+}
+
+func (w *WaveLayout) staves() map[*score.Staff]*StaffLayout {
+	return w.staff.Load().(map[*score.Staff]*StaffLayout)
+}
+
+type StaffLayout struct {
+	r image.Rectangle // rect of staff's waveform overlay
+	mix MixerLayout
+}
+
+func (slayout StaffLayout) Mid() int {
+	return slayout.r.Min.Y + slayout.r.Dy() / 2
 }
 
 type MixerLayout struct {
@@ -61,7 +74,7 @@ func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	return layout
 }
 
-func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score, reset bool) {
+func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score) {
 	rect.Rectangle = r
 	axish := 20
 	infow := 100
@@ -74,26 +87,22 @@ func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score, reset bool) {
 	rect.aboveMixer = aboveRect(rect.mixer, axish)
 	rect.belowMixer = belowRect(rect.mixer, axish)
 	rect.newStaffB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
-	staffR := make(map[*score.Staff] image.Rectangle)
-	mixR := make(map[*score.Staff] *MixerLayout)
-	if !reset {
-		for staff, rect := range rect.staves {
-			staffR[staff] = rect
-		}
-		for staff, layout := range rect.mixers {
-			mixR[staff] = layout
-		}
-	}
+	staffR := make(map[*score.Staff]*StaffLayout, len(sc.Staves()))
 	if sc != nil && len(sc.Staves()) > 0 {
 		minimisedH := 18
 		nstaves := 0 // counts number of non-minimised staves
 		spaceY := rect.wave.Dy()
 		staves := sc.Staves()
+		prev := rect.staff.Load().(map[*score.Staff]*StaffLayout) // previous layouts
 		for _, staff := range staves {
-			if mix, ok := mixR[staff]; ok && mix.Minimised {
+			layout := prev[staff]
+			if layout != nil && layout.mix.Minimised {
 				spaceY -= minimisedH
 			} else {
 				nstaves++
+			}
+			if layout != nil {
+				staffR[staff] = layout // so we remember Minimised state
 			}
 		}
 		scoreh := 0
@@ -107,24 +116,22 @@ func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score, reset bool) {
 		ypos := rect.wave.Min.Y
 		for _, staff := range staves {
 			var height int
-			if mix, ok := mixR[staff]; ok && mix.Minimised {
+			slayout, ok := staffR[staff]
+			if !ok {
+				slayout = new(StaffLayout)
+				staffR[staff] = slayout
+			}
+			if slayout.mix.Minimised {
 				height = minimisedH
 			} else {
 				height = scoreh
 			}
-			srect := image.Rect(rect.wave.Min.X, ypos, rect.wave.Max.X, ypos + height)
+			slayout.r = image.Rect(rect.wave.Min.X, ypos, rect.wave.Max.X, ypos + height)
+			slayout.mix.calc(yspacing, leftRect(slayout.r, infow))
 			ypos += height
-			staffR[staff] = srect
-			mix, ok := mixR[staff]
-			if !ok {
-				mix = &MixerLayout{}
-				mixR[staff] = mix
-			}
-			mix.calc(yspacing, leftRect(srect, infow))
 		}
 	}
-	rect.staves = staffR
-	rect.mixers = mixR
+	rect.staff.Store(staffR)
 }
 
 func (ww *WaveWidget) Rect() image.Rectangle {
@@ -145,7 +152,7 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 	}
 	if change != 0 {
 		if change & (LAYOUT | RESET) != 0 {
-			ww.rect.layout(r, ww.score, change & RESET != 0)
+			ww.rect.layout(r, ww.score)
 		}
 		if ww.renderstate.cursor == nil {
 			curcol := color.RGBA{0, 0xdd, 0, 255}
@@ -307,8 +314,8 @@ func (ww *WaveWidget) drawMixer(dst draw.Image) {
 		return
 	}
 	img := image.NewRGBA(ww.rect.mixer) // hack: new image to make clipping easy
-	for staff, _ := range ww.rect.staves {
-		ww.drawStaffCtl(img, staff)
+	for staff, slayout := range ww.rect.staves() {
+		ww.drawStaffCtl(img, staff, slayout)
 	}
 	draw.Draw(dst, ww.rect.mixer, img, ww.rect.mixer.Min, draw.Over)
 	drawBorders(dst, ww.rect.newStaffB, border, bg)
@@ -355,12 +362,11 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		return
 	}
 	selRect := ww.getMouseState(ww.mouse.pos).rectSelect
-	for _, staff := range ww.score.Staves() {
-		if mix, ok := ww.rect.mixers[staff]; ok && mix.Minimised {
+	for staff, slayout := range ww.rect.staves() {
+		if slayout.mix.Minimised {
 			continue
 		}
-		rect := ww.rect.staves[staff]
-		mid := rect.Min.Y + rect.Dy() / 2
+		mid := slayout.Mid()
 		drawStaffLines(dst, black4, minX, maxX, mid)
 
 		ww.drawNotes(dst, r, staff, mid, selRect)
@@ -391,9 +397,9 @@ func drawBorders(dst draw.Image, r image.Rectangle, border color.Color, fill col
 	}
 }
 
-func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
-	layout := ww.rect.mixers[staff]
+func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff, slayout *StaffLayout) {
 	mix := Mixer.For(staff)
+	layout := slayout.mix
 	r := layout.r
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
 	bg := color.NRGBA{0x55, 0x44, 0x44, 0xff}
@@ -423,7 +429,7 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff) {
 		return
 	}
 
-	mid := r.Min.Y + r.Dy() / 2
+	mid := slayout.Mid()
 	drawStaffLines(dst, fg, layout.sig.Min.X, layout.sig.Max.X, mid)
 	keysig, lines := staff.KeyAccidentalLines()
 	for i, delta := range lines {

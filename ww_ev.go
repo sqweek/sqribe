@@ -32,14 +32,14 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
 		return
 	}
-	for staff, layout := range ww.rect.mixers {
-		if mouse.In(layout.r) {
-			if mouse.In(layout.muteB) {
+	for staff, slayout := range ww.rect.staves() {
+		if mouse.In(slayout.mix.r) {
+			if mouse.In(slayout.mix.muteB) {
 				toggle(&Mixer.For(staff).Muted)
 				ww.changed(MIXER, ww)
-			} else if mouse.In(layout.minmaxB) {
-				toggle(&layout.Minimised)
-				ww.changed(LAYOUT | SCALE, &layout.Minimised)
+			} else if mouse.In(slayout.mix.minmaxB) {
+				toggle(&slayout.mix.Minimised)
+				ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
 			}
 		}
 	}
@@ -51,18 +51,18 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 		return
 	}
 	if mouse.In(ww.rect.mixer) {
-		for staff, _ := range ww.rect.staves {
-			layout := ww.rect.mixers[staff]
-			if mouse.In(layout.minmaxB) {
-				layout.Minimised = false
-				for staff2, layout2 := range ww.rect.mixers {
+		staves := ww.rect.staves()
+		for staff, slayout := range staves {
+			if mouse.In(slayout.mix.minmaxB) {
+				slayout.mix.Minimised = false
+				for staff2, slayout2 := range staves {
 					if staff2 != staff {
-						layout2.Minimised = true
+						slayout2.mix.Minimised = true
 					}
 				}
-				ww.changed(LAYOUT | SCALE, &layout.Minimised)
+				ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
 				return
-			} else if mouse.In(layout.muteB) {
+			} else if mouse.In(slayout.mix.muteB) {
 				Mixer.ToggleSolo(staff)
 				ww.changed(MIXER, ww)
 			}
@@ -104,10 +104,10 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 			return ww.getMouseState(e.Where).dragFn
 		}
 	} else {
-		for staff, layout := range ww.rect.mixers {
-			if e.Where.In(layout.instC) {
+		for staff, slayout := range ww.rect.staves() {
+			if e.Where.In(slayout.mix.instC) {
 				G.instMenu.SetDefault(Mixer.For(staff).Voice)
-				reply := G.instMenu.Popup(layout.r, ww.refresh, e.Where)
+				reply := G.instMenu.Popup(slayout.mix.r, ww.refresh, e.Where)
 				go func() {
 					item := <-reply
 					id, ok := item.(int)
@@ -117,10 +117,11 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 					ww.changed(MIXER, ww)
 				}()
 				return G.instMenu.Drag
-			} else if e.Where.In(layout.volS) {
+			} else if e.Where.In(slayout.mix.volS) {
 				return func(pos image.Point, finished bool, moved bool)bool {
-					if (moved || finished) && pos.In(layout.volS) {
-						α := float64(pos.Y - layout.volS.Min.Y) / float64(layout.volS.Dy())
+					slider := slayout.mix.volS
+					if (moved || finished) && pos.In(slider) {
+						α := float64(pos.Y - slider.Min.Y) / float64(slider.Dy())
 						vel := 127 - int(127.0 * α + 0.5)
 						Mixer.For(staff).Velocity = vel
 						ww.changed(MIXER, ww)
@@ -277,9 +278,11 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 			next := sc.Iter(FrameRange{ww.FrameAtPixel(r.Min.X), ww.FrameAtPixel(r.Max.X)})
 			for next != nil {
 				sn, next = next()
-				y := ww.noteY(sn.Staff, sn.Note, centerPt(ww.rect.staves[sn.Staff]).Y)
-				if y >= r.Min.Y && y < r.Max.Y {
-					notes = append(notes, sn)
+				if slayout, ok := ww.rect.staves()[sn.Staff]; ok {
+					y := ww.noteY(sn.Staff, sn.Note, centerPt(slayout.r).Y)
+					if y >= r.Min.Y && y < r.Max.Y {
+						notes = append(notes, sn)
+					}
 				}
 			}
 			ww.toggleNotes(!(addToSel || G.kb.shift), notes...)
@@ -307,8 +310,8 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	}
 
 	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
-	if staff, rect := ww.staffContaining(mouse); staff != nil {
-		mid := rect.Min.Y + rect.Dy() / 2
+	if staff, layout := ww.staffContaining(mouse); staff != nil {
+		mid := layout.Mid()
 		next := sc.Iter(rng, staff)
 		var sn score.StaffNote
 		var closest struct{d int; n *score.Note}
