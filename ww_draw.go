@@ -138,7 +138,7 @@ func (ww *WaveWidget) Rect() image.Rectangle {
 	return ww.rect.Rectangle
 }
 
-// dst.Bounds() is the entire window, r is the area this widget is responsible for
+// screen.Bounds() is the entire window, r is the area this widget is responsible for
 func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 	change := ww.renderstate.changed
 	ww.renderstate.changed = 0
@@ -151,6 +151,7 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 		ww.Zoom(1.0) // to prevent wider resize blowing wave cache
 	}
 	if change != 0 {
+		pos := ww.pos
 		if change & (LAYOUT | RESET) != 0 {
 			ww.rect.layout(r, ww.score)
 		}
@@ -169,13 +170,13 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 			change |= WAV | BEATS | VIEWPOS
 		}
 		if change & WAV != 0 {
-			ww.drawWave(ww.renderstate.waveRulers, ww.rect.wave)
+			ww.drawWave(ww.renderstate.waveRulers, ww.rect.wave, &pos)
 		}
 		if change & (BEATS | VIEWPOS | SELXN) != 0 {
-			ww.drawBeatAxis(ww.renderstate.waveRulers, ww.rect.beatAxis)
+			ww.drawBeatAxis(ww.renderstate.waveRulers, ww.rect.beatAxis, &pos)
 		}
 		if change & (VIEWPOS | SELXN) != 0 {
-			ww.drawTimeAxis(ww.renderstate.waveRulers, ww.rect.timeAxis)
+			ww.drawTimeAxis(ww.renderstate.waveRulers, ww.rect.timeAxis, &pos)
 		}
 		switch {
 		case change & (WAV | BEATS | VIEWPOS) != 0:
@@ -185,8 +186,8 @@ func (ww *WaveWidget) Draw(screen wde.Image, r image.Rectangle) {
 			draw.Draw(ww.renderstate.img, ww.rect.waveRulers, ww.renderstate.waveRulers, ww.rect.waveRulers.Min, draw.Src)
 		}
 		if change & (SELXN | SCALE | BEATS) != 0 {
-			ww.drawSelxn(ww.renderstate.img, ww.rect.waveRulers)
-			ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx())
+			ww.drawSelxn(ww.renderstate.img, ww.rect.waveRulers, &pos)
+			ww.drawScale(ww.renderstate.img, ww.rect.wave, ww.rect.mixer.Dx(), &pos)
 			img := ww.renderstate.img.SubImage(ww.rect.waveRulers).(*image.RGBA)
 			screen.CopyRGBA(img, ww.rect.waveRulers)
 			ww.drawCursor(screen, r, ww.cursorX, false)
@@ -252,7 +253,7 @@ func scale(chMin, chMax int16, yscale float64) (int, int) {
 	return min, max
 }
 
-func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle, pos *FramePos) {
 	bg := color.RGBA{0xee, 0xee, 0xcc, 255}
 	cl := color.RGBA{0x99, 0x99, 0xcc, 255}
 	ci := color.RGBA{0xbb, 0x99, 0xbb, 255}
@@ -261,21 +262,21 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	if ww.wav == nil {
 		return
 	}
-	f0 := ww.first_frame
-	fpp := FrameN(ww.frames_per_pixel)
+	f0 := pos.f0
+	fpp := FrameN(pos.ppix)
 	f0_get, dx0 := f0, 0
 	if f0 < 0 {
 		f0_get = 0
 		dx0 = 1 + int(-f0 / fpp)
 	}
-	size := r.Size()
-	if dx0 >= size.X {
+	if dx0 >= r.Dx() {
 		return
 	}
-	yorigin := (r.Min.Y + r.Max.Y) / 2
-	yscale := (float64(ww.wav.MaxAmp()) / float64(size.Y / 2))
-	chunks := ww.wav.GetFrames(f0_get, f0 + FrameN(size.X) * fpp)
-	for dx := dx0; dx < size.X; dx++ {
+	halfy := r.Dy() / 2
+	yorigin := r.Min.Y + halfy
+	yscale := (float64(ww.wav.MaxAmp()) / float64(halfy))
+	chunks := ww.wav.GetFrames(f0_get, f0 + FrameN(r.Dx()) * fpp)
+	for dx := dx0; dx < r.Dx(); dx++ {
 		pixS0, pixSN := ww.wav.SampleRange(f0 + fpp * FrameN(dx), f0 + fpp * FrameN(dx+1))
 		pixSamples := wave.Extract(chunks, pixS0, pixSN)
 		ext := ww.wav.ChannelExtents(pixSamples)
@@ -294,12 +295,12 @@ func (ww *WaveWidget) drawWave(dst draw.Image, r image.Rectangle) {
 	}
 }
 
-func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle, pos *FramePos) {
 	csel := color.NRGBA{0xbb, 0xbb, 0xee, 128}
 	rng := ww.SelectedTimeRange()
 	sel0, selN := rng.MinFrame(), rng.MaxFrame()
 	if sel0 < selN {
-		selR := image.Rect(ww.PixelAtFrame(sel0), r.Min.Y, ww.PixelAtFrame(selN) + 1, r.Max.Y)
+		selR := image.Rect(r.Min.X + pos.DxAtFrame(sel0), r.Min.Y, r.Min.X + pos.DxAtFrame(selN) + 1, r.Max.Y)
 		draw.Draw(dst, selR, &image.Uniform{csel}, image.ZP, draw.Over)
 	}
 }
@@ -322,18 +323,18 @@ func (ww *WaveWidget) drawMixer(dst draw.Image) {
 	G.font.luxi.DrawC(dst, fg, ww.rect.newStaffB, "+", centerPt(ww.rect.newStaffB))
 }
 
-func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
+func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int, pos *FramePos) {
 	if ww.score == nil || !ww.score.HasBeats() {
 		return
 	}
 	black4 := color.RGBA{0x00, 0x00, 0x00, 0x88}
 	black1 := color.RGBA{0x00, 0x00, 0x00, 0x22}
-	lastFrame := ww.VisibleFrameRange().MaxFrame()
+	lastFrame := pos.FrameAtDx(r.Dx())
 	minX, maxX := -1, -1
-	b0 := ww.score.NearestBeat(ww.first_frame).LPrev()
+	b0 := ww.score.NearestBeat(pos.f0).LPrev()
 	i := b0.BeatNum() - 1
 	for beat := b0; beat != nil; beat = beat.Next() {
-		if beat.Frame() < ww.first_frame {
+		if beat.Frame() < pos.f0 {
 			minX = r.Min.X
 			i++
 			continue
@@ -342,7 +343,7 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 			maxX = r.Max.X
 			break
 		}
-		x := ww.PixelAtFrame(ww.beatFrame(beat))
+		x := r.Min.X + pos.DxAtFrame(ww.beatFrame(beat))
 		if minX == -1 {
 			minX = x
 		}
@@ -369,9 +370,9 @@ func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int) {
 		mid := slayout.Mid()
 		drawStaffLines(dst, black4, minX, maxX, mid)
 
-		ww.drawNotes(dst, r, staff, mid, selRect)
+		ww.drawNotes(dst, r, staff, mid, selRect, pos)
 
-		ww.drawProspectiveNote(dst, r, staff, mid)
+		ww.drawProspectiveNote(dst, r, staff, mid, pos)
 	}
 	if selRect != nil {
 		drawBorders(dst, selRect.Intersect(ww.rect.waveRulers), color.NRGBA{0xff,0xff,0xff,0x88}, color.NRGBA{0xff,0xff,0xff,0x44})
@@ -452,8 +453,8 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff, slayout *
 	drawVertSlider(dst, layout.volS, fg, float64(mix.Velocity) / 127.0)
 }
 
-func (ww *WaveWidget) noteX(note *score.Note) int {
-	return ww.PixelAtFrame(ww.ToFrame(ww.score.Beatf(note)))
+func (ww *WaveWidget) noteX(note *score.Note, pos *FramePos) int {
+	return ww.rect.wave.Min.X + pos.DxAtFrame(ww.ToFrame(ww.score.Beatf(note)))
 }
 
 func (ww *WaveWidget) noteY(staff *score.Staff, note *score.Note, mid int) int {
@@ -461,19 +462,21 @@ func (ww *WaveWidget) noteY(staff *score.Staff, note *score.Note, mid int) int {
 	return mid - delta * (yspacing/2)
 }
 
-func (ww *WaveWidget) notePt(staff *score.Staff, note *score.Note, mid int) image.Point {
-	return image.Point{ww.noteX(note), ww.noteY(staff, note, mid)}
+func (ww *WaveWidget) notePt(staff *score.Staff, note *score.Note, mid int, pos *FramePos) image.Point {
+	return image.Point{ww.noteX(note, pos), ww.noteY(staff, note, mid)}
 }
 
-func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int) *DisplayNote {
+func (ww *WaveWidget) dispNote(staff *score.Staff, note *score.Note, mid int, pos *FramePos) *DisplayNote {
 	dn := DisplayNote{}
 	dn.duration = note.Durf()
 	dn.delta, dn.accidental = staff.LineForPitch(note.Pitch)
 	dn.downBeam = (dn.delta > 2)
-	rng := ww.VisibleFrameRange()
+	r := ww.rect.wave
+	rng := pos.Range(r.Dx())
 	frame := ww.ToFrame(ww.score.Beatf(note))
 	if frame >= rng.MinFrame() && frame <= rng.MaxFrame() {
-		dn.pt = &image.Point{ww.PixelAtFrame(frame), mid - (yspacing / 2) * dn.delta}
+		pt := ww.notePt(staff, note, mid, pos)
+		dn.pt = &pt
 	}
 	return &dn
 }
@@ -546,15 +549,15 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 }
 
 
-func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int, selRect *image.Rectangle) {
-	next := score.Chords(ww.score.Iter(ww.VisibleFrameRange(), staff))
+func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int, selRect *image.Rectangle, pos *FramePos) {
+	next := score.Chords(ww.score.Iter(pos.Range(r.Dx()), staff))
 	var chord []score.StaffNote
 	for next != nil {
 		chord, next = next()
 		downBeam := true
 		notes := make([]*DisplayNote, len(chord))
 		for i, sn := range chord {
-			notes[i] = ww.dispNote(staff, sn.Note, mid)
+			notes[i] = ww.dispNote(staff, sn.Note, mid, pos)
 			downBeam = downBeam && (notes[i].delta > 2)
 		}
 		for i, note := range notes {
@@ -577,7 +580,7 @@ func (ww *WaveWidget) drawNotes(dst draw.Image, r image.Rectangle, staff *score.
 	}
 }
 
-func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int) {
+func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, staff *score.Staff, mid int, pos *FramePos) {
 	s := ww.getMouseState(ww.mouse.pos)
 	if s.rectSelect != nil {
 		return // dragging to select notes
@@ -588,7 +591,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 				continue
 			}
 			note := sn.Note.Dup().Mv(s.ndelta.Δpitch, s.ndelta.Δbeat)
-			n := ww.dispNote(sn.Staff, note, mid)
+			n := ww.dispNote(sn.Staff, note, mid, pos)
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
 		}
@@ -599,7 +602,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		beat, offset := sc.Quantize(s.note.beatf)
 		Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
 		for _, note := range ww.snarf[staff] {
-			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat), mid)
+			n := ww.dispNote(staff, note.Dup().Mv(Δpitch, Δbeat), mid, pos)
 			n.col = color.NRGBA{0x88, 0x88, 0x88, 0xaa}
 			ww.drawNote(dst, r, mid, n)
 		}
@@ -608,7 +611,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 		var dur big.Rat
 		dur.SetString(menu)
 		note, exists := s.note.mkNote(ww.score, &dur)
-		dn := ww.dispNote(staff, note, mid)
+		dn := ww.dispNote(staff, note, mid, pos)
 		if !exists {
 			dn.col = colourFor(note.Offset, 0xbb)
 		} else {
@@ -623,7 +626,7 @@ func (ww *WaveWidget) drawProspectiveNote(dst draw.Image, r image.Rectangle, sta
 	}
 }
 
-func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, frames []FrameN, label func(float64)string) {
+func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, vals []float64, frames []FrameN, label func(float64)string, pos *FramePos) {
 	targetPixPerTick := 30
 	bg := color.RGBA{0x55, 0x44, 0x44, 0xff}
 	fg := color.RGBA{0xcc, 0xcc, 0xbb, 0xff}
@@ -637,7 +640,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	lastTextX := r.Min.X - textSpacing
 	xs := make([]int, 0, len(frames))
 	for _, f := range frames {
-		xs = append(xs, ww.PixelAtFrame(f))
+		xs = append(xs, r.Min.X + pos.DxAtFrame(f))
 	}
 	for i, a := range vals {
 		last := (i + 1 == len(vals))
@@ -667,7 +670,7 @@ func (ww *WaveWidget) drawTicks(dst draw.Image, r image.Rectangle, bottom bool, 
 	}
 }
 
-func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle, pos *FramePos) {
 	score := ww.score
 	label := func(beatf float64) string {
 		return fmt.Sprintf("b%d", int(beatf))
@@ -675,9 +678,9 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 	beats := make([]float64, 0)
 	frames := make([]FrameN, 0)
 	if score != nil && score.HasBeats() {
-		b0 := score.NearestBeat(ww.FrameAtPixel(r.Min.X)).LPrev()
+		b0 := score.NearestBeat(pos.FrameAtDx(0)).LPrev()
 		// XXX should start search from b0
-		bN := score.NearestBeat(ww.FrameAtPixel(r.Max.X)).LNext()
+		bN := score.NearestBeat(pos.FrameAtDx(r.Dx())).LNext()
 		i := b0.BeatNum()
 		for b := b0; b != nil && ww.beatFrame(b) <= ww.beatFrame(bN); b = b.Next() {
 			beats = append(beats, float64(i))
@@ -685,11 +688,11 @@ func (ww *WaveWidget) drawBeatAxis(dst draw.Image, r image.Rectangle) {
 			i++
 		}
 	}
-	ww.drawTicks(dst, r, true, beats, frames, label)
+	ww.drawTicks(dst, r, true, beats, frames, label, pos)
 }
 
 
-func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
+func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle, pos *FramePos) {
 	wav := ww.wav
 	label := func(t float64) string {
 		dur := time.Duration(t) * time.Second
@@ -698,11 +701,11 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 	times := make([]float64, 0)
 	frames := make([]FrameN, 0)
 	if wav != nil {
-		t0 := math.Trunc(ww.TimeAtCursor(r.Min.X).Seconds())
+		t0 := math.Trunc(wav.TimeAtFrame(pos.f0).Seconds())
 		if t0 < 0 {
 			t0 = 0.0
 		}
-		fRight := wav.Clip(ww.FrameAtPixel(r.Max.X), 0)
+		fRight := wav.Clip(pos.FrameAtDx(r.Max.X), 0)
 		tRight := wav.TimeAtFrame(fRight)
 		tN := math.Ceil(tRight.Seconds())
 		for t := t0; t <= tN; t += 1.0 {
@@ -710,5 +713,5 @@ func (ww *WaveWidget) drawTimeAxis(dst draw.Image, r image.Rectangle) {
 			frames = append(frames, wav.FrameAtTime(time.Duration(t * 1000.0) * time.Millisecond))
 		}
 	}
-	ww.drawTicks(dst, r, false, times, frames, label)
+	ww.drawTicks(dst, r, false, times, frames, label, pos)
 }

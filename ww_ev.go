@@ -268,7 +268,7 @@ func (ww *WaveWidget) noteSelectDrag(start image.Point) DragFn {
 	addToSel := G.kb.shift
 	fstart := ww.FrameAtPixel(start.X)
 	return func(end image.Point, finished bool, moved bool)bool {
-		r := image.Rect(ww.PixelAtFrame(fstart), start.Y, end.X, end.Y).Canon()
+		r := image.Rect(ww.rect.wave.Min.X + ww.pos.DxAtFrame(fstart), start.Y, end.X, end.Y).Canon()
 		if !finished {
 			ww.getMouseState(end).rectSelect = &r
 			ww.changed(SCALE, r)
@@ -300,10 +300,11 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	r := ww.Rect()
 	bAxis, tAxis := mouse.In(ww.rect.beatAxis), mouse.In(ww.rect.timeAxis)
 	snap := bAxis && sc != nil && sc.HasBeats()
+	wr := ww.rect.wave
 	if bAxis || tAxis {
-		if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MinFrame())), grabw, 0)) {
+		if mouse.In(padRect(vrect(r, wr.Min.X + ww.pos.DxAtFrame(ww.selection.MinFrame())), grabw, 0)) {
 			return ww.timeSelectDrag(ww.selection.MaxFrame(), snap), wde.ResizeWCursor
-		} else if mouse.In(padRect(vrect(r, ww.PixelAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
+		} else if mouse.In(padRect(vrect(r, wr.Min.X + ww.pos.DxAtFrame(ww.selection.MaxFrame())), grabw, 0)) {
 			return ww.timeSelectDrag(ww.selection.MinFrame(), snap), wde.ResizeECursor
 		}
 		return ww.timeSelectDrag(ww.FrameAtPixel(mouse.X), snap), wde.IBeamCursor
@@ -317,7 +318,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 		var closest struct{d int; n *score.Note}
 		for next != nil {
 			sn, next = next()
-			x := ww.noteX(sn.Note)
+			x := ww.noteX(sn.Note, &ww.pos)
 			y := ww.noteY(staff, sn.Note, mid)
 			d := sqdist(mouse.X, mouse.Y, x, y)
 			if d < (yspacing*yspacing)/4 && (closest.n == nil || d < closest.d) {
@@ -334,7 +335,7 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 	if sc != nil && mouse.Y <= ww.rect.wave.Min.Y + beath {
 		beat := sc.NearestBeat(ww.FrameAtPixel(mouse.X))
 		if beat != nil {
-			x := ww.PixelAtFrame(beat.Frame())
+			x := ww.rect.wave.Min.X + ww.pos.DxAtFrame(beat.Frame())
 			if x - grabw <= mouse.X && mouse.X <= x + grabw {
 				return ww.beatDrag(beat), wde.ResizeEWCursor
 			}
