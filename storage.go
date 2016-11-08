@@ -24,6 +24,9 @@ type FileContext struct {
 
 // file can be either a .sqs file or audio file
 func Open(file string) (files FileContext, s State, err error) {
+	if file, err = filepath.Abs(file); err != nil {
+		return
+	}
 	if IsStateFilename(file) {
 		// if a state file is named, it must exist
 		if _, err = os.Stat(file); err != nil {
