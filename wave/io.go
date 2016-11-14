@@ -100,12 +100,12 @@ func (c *cache) Get(id uint64) *Chunk {
 
 /* blocks waiting for the chunk to be read */
 func (c *cache) Wait(id uint64) *Chunk {
-	c.iodone.L.Lock()
-	defer c.iodone.L.Unlock()
 	chunk := c.Get(id)
 	if chunk != nil {
 		return chunk
 	}
+	c.iodone.L.Lock()
+	defer c.iodone.L.Unlock()
 	ok := false
 	for !ok {
 		c.iodone.Wait()
