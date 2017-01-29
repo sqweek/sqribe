@@ -96,6 +96,10 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 		case wde.WheelDownButton:
 			ww.Zoom(1.50)
 			return nil
+		case wde.WheelLeftButton:
+			ww.Scroll(-0.1)
+		case wde.WheelRightButton:
+			ww.Scroll(0.1)
 		case wde.MiddleButton:
 			return ww.scrollDrag(e.Where)
 		case wde.RightButton:

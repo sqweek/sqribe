@@ -52,15 +52,6 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 			if e.Where.In(G.ww.Rect()) {
 				if drag.fn == nil {
 					drag.fn = G.ww.ButtonDown(e)
-				} else {
-					// hacky. wouldn't be necessary with a more sophisticated
-					// API to start a drag action...
-					switch (e.Which) {
-					case wde.WheelUpButton:
-						G.ww.Zoom(0.75)
-					case wde.WheelDownButton:
-						G.ww.Zoom(1.50)
-					}
 				}
 			}
 		case wde.MouseUpEvent:
