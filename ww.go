@@ -30,7 +30,7 @@ const (
 	EVERYTHING changeMask = MAXBIT - 1
 )
 
-const yspacing = 12 // pixels between staff lines
+var yspacing = 12 // pixels between staff lines
 
 type noteProspect struct {
 	delta int

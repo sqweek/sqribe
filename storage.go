@@ -47,9 +47,9 @@ func Open(file string) (files FileContext, s State, err error) {
 		files.Version = s.Headers().Version
 	} else {
 		files.Audio = file
-		_, err = os.Stat(App.Docs)
+		_, err = os.Stat(Cfg.FS.SaveDir)
 		if err != nil {
-			err = os.MkdirAll(App.Docs, 0777)
+			err = os.MkdirAll(Cfg.FS.SaveDir, 0777)
 		}
 		if err != nil {
 			return
@@ -59,7 +59,7 @@ func Open(file string) (files FileContext, s State, err error) {
 			log.DB.Printf("error retrieving linked state file: %s: %v\n", file, dberr)
 		}
 		if len(states) == 0 {
-			files.State = filepath.Join(App.Docs, stateKey(file))
+			files.State = filepath.Join(Cfg.FS.SaveDir, stateKey(file))
 		} else {
 			files.State = states[0]
 			if len(states) > 1 {

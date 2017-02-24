@@ -237,6 +237,7 @@ func main_parent() {
 func main_child() {
 	var err error
 	log.Println("sqribe version unknown")
+	confinit()
 
 	if *profile != "" {
 		f, err := os.Create(*profile)

@@ -510,10 +510,10 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		var beamEnd image.Point
 		var beam image.Rectangle
 		if n.downBeam {
-			beamEnd = n.pt.Add(image.Pt(-yspacing/2 + 1, yspacing * 2.5 + 1))
+			beamEnd = n.pt.Add(image.Pt(-yspacing/2 + 1, 5*yspacing/2 + 1))
 			beam = image.Rectangle{n.pt.Add(image.Pt(-yspacing/2, 0)), beamEnd}
 		} else {
-			beamEnd = n.pt.Add(image.Pt(yspacing/2 - 1, -yspacing * 2.5 - 1))
+			beamEnd = n.pt.Add(image.Pt(yspacing/2 - 1, -5*yspacing/2 - 1))
 			beam = image.Rectangle{beamEnd, n.pt.Add(image.Pt(yspacing/2, 0))}
 		}
 		draw.Draw(dst, beam, &image.Uniform{n.col}, r.Min, draw.Over)
