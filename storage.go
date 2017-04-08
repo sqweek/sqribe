@@ -19,7 +19,8 @@ type FileContext struct {
 	Audio string
 	State string
 	Timestamp time.Time // last modified time when state was read. 0 => fresh state (file didn't exist)
-	Version int // version of loaded state file
+	Version int // version of loaded state file (0 if it didn't exist)
+	ViaState bool // did we open a state file?
 }
 
 // file can be either a .sqs file or audio file
@@ -27,7 +28,8 @@ func Open(file string) (files FileContext, s State, err error) {
 	if file, err = filepath.Abs(file); err != nil {
 		return
 	}
-	if IsStateFilename(file) {
+	files.ViaState = IsStateFilename(file)
+	if files.ViaState {
 		// if a state file is named, it must exist
 		if _, err = os.Stat(file); err != nil {
 			return
@@ -43,6 +45,7 @@ func Open(file string) (files FileContext, s State, err error) {
 		files.Audio = a
 		if files.Audio == "" {
 			files.Audio = s.Headers().String("Filename")
+			filesDB.CheckStaleStates(files.Audio)
 		}
 		files.Version = s.Headers().Version
 	} else {
@@ -203,15 +206,41 @@ func (f *filesSqlite) createSchema(db *sql.DB) (err error) {
 	return
 }
 
+func qStateFiles(db *sql.DB, audiofile string) (statefiles []string, err error) {
+	var rows *sql.Rows
+	if rows, err = db.Query("SELECT state FROM paths WHERE audio = ?", audiofile); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			rows.Scan(&s)
+			statefiles = append(statefiles, s)
+		}
+	}
+	return
+}
+
 func (f *filesSqlite) StateFiles(audiofile string) (statefiles []string, err error) {
 	err = f.withDB(func(db *sql.DB) (err error) {
-		var rows *sql.Rows
-		if rows, err = db.Query("SELECT state FROM paths WHERE audio = ?", audiofile); err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var s string
-				rows.Scan(&s)
-				statefiles = append(statefiles, s)
+		statefiles, err = qStateFiles(db, audiofile)
+		return
+	})
+	return
+}
+
+// Removes any DB entries referring to non-existant state files.
+// The presumption is that said files have been moved elsewhere.
+func (f *filesSqlite) CheckStaleStates(audiofile string) (err error) {
+	err = f.withDB(func(db *sql.DB) (err error) {
+		var statefiles []string
+		if statefiles, err = qStateFiles(db, audiofile); err != nil {
+			return
+		}
+		for _, state := range statefiles {
+			if _, staterr := os.Stat(state); os.IsNotExist(staterr) {
+				_, subErr := db.Exec("DELETE FROM paths WHERE state = ?", state)
+				if err == nil && subErr != nil {
+					err = subErr // report first error
+				}
 			}
 		}
 		return

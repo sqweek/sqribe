@@ -49,20 +49,27 @@ var G struct {
 
 var ZeroTime time.Time
 
+var AudioExtensions = []string{"mp3", "ogg", "m4a", "wma", "mov", "mp4", "flv", "wmv"}
+
 func open(filename string) error {
 	files, s, err := Open(filename)
-	if !files.Timestamp.IsZero() {
-		// sanity check for correct state file
-		hfile := s.Headers().String("Filename")
-		if hfile != "" && hfile != files.Audio {
-			return fmt.Errorf("found state (%s) for wrong audio file (got %s; wanted %s)", files.State, hfile, files.Audio)
+	if files.ViaState {
+		if _, err := os.Stat(files.Audio); os.IsNotExist(err) {
+			dlg := dialog.Message("Cannot find audio file! Last known path: %s\nWould you like to browse for the file?", files.Audio)
+			if dlg.YesNo() {
+				filedlg := dialog.File().Title("sqribe - locate audio for " + files.Audio).Filter("Audio Files", AudioExtensions...)
+				if f, err := filedlg.Load(); err == nil {
+					files.Audio = f
+				} else if err != dialog.Cancelled {
+					log.UI.Printf("locating audio for %s: %v", files.Audio, err)
+				}
+			}
 		}
 	}
 
 	if err := os.MkdirAll(App.Cache, 0777); err != nil {
 		return err
 	}
-	// TODO allow user to locate audio if it doesn't exist (eg. been moved)
 	loadErr := make(chan error)
 	wav, err := wave.NewWaveform(files.Audio, filepath.Join(App.Cache, *cachefile), loadErr)
 	if err != nil {
