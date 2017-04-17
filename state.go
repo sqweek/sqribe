@@ -36,8 +36,14 @@ type SavedNote struct {
 	Offset *big.Rat
 }
 
+type SavedView struct {
+	Width int
+	Height int
+}
+
 type State interface {
 	Headers() *Headers
+	View() SavedView
 	Restore() // restores this objects state to the memory model
 
 	Write(io.Writer) error
@@ -61,10 +67,7 @@ type stateV3 struct {
 		First FrameN
 		Zoom int
 	}
-	Win struct {
-		Width int
-		Height int
-	}
+	Win SavedView
 }
 
 func savedNotes(staff *score.Staff, beats []FrameN) []string {
@@ -212,6 +215,10 @@ func (s *stateV3) Headers() *Headers {
 	return s.h
 }
 
+func (s *stateV3) View() SavedView {
+	return s.Win
+}
+
 func (s *stateV3) Restore() {
 	convertFrames(s.Beats, s.FrameRate, audio.SampleRate)
 	G.score.LoadBeats(s.Beats)
@@ -226,9 +233,7 @@ func (s *stateV3) Restore() {
 	if (s.Pos.Zoom != 0) {
 		G.ww.RestorePos(s.Pos.First, s.Pos.Zoom)
 	}
-	if (s.Win.Width != 0) {
-		RootWin.SetSize(s.Win.Width, s.Win.Height)
-	}
+	/* s.Win is restored separately */
 }
 
 type Headers struct {

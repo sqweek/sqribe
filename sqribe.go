@@ -22,6 +22,13 @@ import (
 	"github.com/sqweek/sqribe/wave"
 )
 
+type PendingLoad struct {
+	files FileContext
+	s State
+	wav *wave.Waveform
+	wavDone chan error
+}
+
 var G struct {
 	/* global state */
 	files FileContext
@@ -52,31 +59,54 @@ var ZeroTime time.Time
 var AudioExtensions = []string{"mp3", "ogg", "m4a", "wma", "mov", "mp4", "flv", "wmv"}
 
 func open(filename string) error {
-	files, s, err := Open(filename)
-	if files.ViaState {
-		if _, err := os.Stat(files.Audio); os.IsNotExist(err) {
-			dlg := dialog.Message("Cannot find audio file! Last known path: %s\nWould you like to browse for the file?", files.Audio)
+	ld, err := Load(filename)
+	if err != nil {
+		return err
+	}
+	ld.Pivot()
+	return nil
+}
+
+func Load(filename string) (ld PendingLoad, err error) {
+	ld.files, ld.s, err = Open(filename)
+	if ld.files.ViaState {
+		if _, err := os.Stat(ld.files.Audio); os.IsNotExist(err) {
+			dlg := dialog.Message("Cannot find audio file! Last known path: %s\nWould you like to browse for the file?", ld.files.Audio)
 			if dlg.YesNo() {
-				filedlg := dialog.File().Title("sqribe - locate audio for " + files.Audio).Filter("Audio Files", AudioExtensions...)
+				filedlg := dialog.File().Title("sqribe - locate audio for " + ld.files.Audio).Filter("Audio Files", AudioExtensions...)
 				if f, err := filedlg.Load(); err == nil {
-					files.Audio = f
+					ld.files.Audio = f
 				} else if err != dialog.Cancelled {
-					log.UI.Printf("locating audio for %s: %v", files.Audio, err)
+					log.UI.Printf("locating audio for %s: %v", ld.files.Audio, err)
 				}
 			}
 		}
 	}
 
-	if err := os.MkdirAll(App.Cache, 0777); err != nil {
-		return err
+	if err = os.MkdirAll(App.Cache, 0777); err != nil {
+		return
 	}
-	loadErr := make(chan error)
-	wav, err := wave.NewWaveform(files.Audio, filepath.Join(App.Cache, *cachefile), loadErr)
+	ld.wavDone = make(chan error)
+	ld.wav, err = wave.NewWaveform(ld.files.Audio, filepath.Join(App.Cache, *cachefile), ld.wavDone)
 	if err != nil {
-		return err
+		return
 	}
+	return
+}
+
+// Finishes the load; pivots memory model to new pending context
+func (ld *PendingLoad) Pivot() {
+	// point of no return; nothing errors after this and we transition to the new file
+	ld.s.Restore()
+	G.files = ld.files
+	G.wav = ld.wav
+	old := G.ww.SetWaveform(ld.wav)
+	if old != nil {
+		go old.Close()
+	}
+
 	go func() {
-		_ = <-loadErr
+		_ = <-ld.wavDone
 		/* audio has finished loading, either successfully or unsuccessfully.
 		 * some mp3s apparently contain stupid stuff like ID3 tags in the middle of
 		 * the last data frame, so a user alert is not raised here...
@@ -84,16 +114,6 @@ func open(filename string) error {
 		G.plumb.score.C <- score.BeatChanged{}
 		G.plumb.score.C <- score.StaffChanged{}
 	}()
-
-	// point of no return; nothing errors after this and we transition to the new file
-	s.Restore()
-	G.files = files
-	G.wav = wav
-	old := G.ww.SetWaveform(wav)
-	if old != nil {
-		go old.Close()
-	}
-	return nil
 }
 
 func save() error {
@@ -281,6 +301,16 @@ func main_child() {
 		fatal(err)
 	}
 
+	audioFile := flag.Arg(0)
+	var ld PendingLoad
+	var lderr error
+	if len(audioFile) > 0 {
+		ld, lderr = Load(audioFile)
+		if lderr != nil {
+			alert("%v", lderr)
+		}
+	}
+
 	redraw := make(chan Widget, 10)
 
 	G.ww = NewWaveWidget(redraw)
@@ -288,7 +318,11 @@ func main_child() {
 
 	G.mixw = NewMixWidget(redraw)
 
-	wg := InitWde(redraw)
+	var view SavedView
+	if lderr == nil {
+		view = ld.s.View()
+	}
+	wg := InitWde(redraw, view)
 
 	// 1. audio callback thread
 	// 2. ui event goroutine
@@ -301,11 +335,9 @@ func main_child() {
 	// 9. audio decoder
 	runtime.GOMAXPROCS(6)
 
-	audioFile := flag.Arg(0)
-	if len(audioFile) > 0 {
-		if err = open(audioFile); err != nil {
-			alert("%v", err)
-		} else if *initialTime != 0 && G.wav != nil {
+	if lderr == nil {
+		ld.Pivot()
+		if *initialTime != 0 && G.wav != nil {
 			G.ww.ScrollToFrame(G.wav.FrameAtTime(*initialTime))
 		}
 	}
