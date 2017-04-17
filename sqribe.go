@@ -270,7 +270,13 @@ func main_child() {
 	G.noteMenu.SetDefault("1")
 	G.instMenu = mkMenu(StringMenuOps{toStr: func(item interface{})string {return midi.InstName(item.(int))}}, midi.InstPiano, midi.InstEPiano, midi.InstGuitar, midi.InstEGuitar, midi.InstMuteGuitar, midi.InstViolin, midi.InstHarp, midi.InstVoice)
 
-	Synth, err = SynthInit(audio.SampleRate, MustFind("FluidR3_GM.sf2"))
+	soundfont := Cfg.FS.SoundFont
+	if soundfont == "" {
+		soundfont = MustFind("FluidR3_GM.sf2")
+	} else if _, err = os.Stat(soundfont); err != nil {
+		fatal(err)
+	}
+	Synth, err = SynthInit(audio.SampleRate, soundfont)
 	if err != nil {
 		fatal(err)
 	}

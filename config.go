@@ -12,6 +12,7 @@ import (
 type ConfigJSON struct {
 	FS struct {
 		SaveDir string
+		SoundFont string
 	}
 	UI struct {
 		Scale int
@@ -52,6 +53,9 @@ func ReadConfig(path string) (mtime time.Time, p ConfigJSON, err error) {
 func applyConfig(mtime time.Time, params *ConfigJSON) {
 	if params.FS.SaveDir != "" {
 		Cfg.FS.SaveDir = params.FS.SaveDir
+	}
+	if params.FS.SoundFont != "" {
+		Cfg.FS.SoundFont = params.FS.SoundFont
 	}
 	if params.UI.Scale > 0 {
 		Cfg.UI.Scale = params.UI.Scale
