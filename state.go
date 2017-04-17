@@ -26,6 +26,8 @@ type SavedStaff struct {
 	Muted bool `json:",omitempty"`
 	Notes []SavedNote `json:",omitempty"` // use Notestr since V3
 	Notestr []string
+
+	Minimised bool `json:",omitempty"`
 }
 
 type SavedNote struct {
@@ -55,6 +57,14 @@ type stateV3 struct {
 	MetronomeOff bool `json:",omitempty"`
 	WaveOff bool `json:",omitempty"`
 	MidiOff bool `json:",omitempty"`
+	Pos struct {
+		First FrameN
+		Zoom int
+	}
+	Win struct {
+		Width int
+		Height int
+	}
 }
 
 func savedNotes(staff *score.Staff, beats []FrameN) []string {
@@ -98,7 +108,7 @@ func savedStaves(score *score.Score, beats []FrameN) []SavedStaff {
 	for _, staff := range staves {
 		notes := savedNotes(staff, beats)
 		mix := Mixer.For(staff)
-		saved = append(saved, SavedStaff{staff.Name(), mix.Voice, mix.Velocity - 100, staff.Clef().Origin, int(staff.Key()), mix.Muted, nil, notes})
+		saved = append(saved, SavedStaff{staff.Name(), mix.Voice, mix.Velocity - 100, staff.Clef().Origin, int(staff.Key()), mix.Muted, nil, notes, G.ww.IsMinimised(staff)})
 	}
 	return saved
 }
@@ -132,7 +142,8 @@ func noteFnFromStructs(notes []SavedNote) noteFunc {
 }
 
 // XXX lots of pointless change events while building staves
-func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
+func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN) {
+	minimised := make(map[*score.Staff]bool)
 	staves := make([]*score.Staff, 0, len(saved))
 	for _, sv := range saved {
 		clef := score.FindClef(sv.Origin)
@@ -152,8 +163,10 @@ func loadStaves(sc *score.Score, saved []SavedStaff, beats []FrameN)  {
 		sc.AddNotes(staff, loadNotes(sc, staff, n, notefn, beats)...)
 		staves = append(staves, staff)
 		Mixer.LoadStaff(staff, sv)
+		minimised[staff] = sv.Minimised
 	}
 	sc.SetStaves(staves)
+	G.ww.RestoreStaffView(minimised)
 }
 
 func round(x float64) float64 {
@@ -186,6 +199,8 @@ func CaptureState() State {
 	s.MetronomeOff = Mixer.MuteMetronome
 	s.WaveOff = Mixer.Wave.Muted
 	s.MidiOff = Mixer.Midi.Muted
+	s.Pos.First, s.Pos.Zoom = G.ww.CapturePos()
+	s.Win.Width, s.Win.Height = RootWin.Size()
 	return s
 }
 
@@ -208,6 +223,12 @@ func (s *stateV3) Restore() {
 	Mixer.MuteMetronome = s.MetronomeOff
 	Mixer.Wave.Muted = s.WaveOff
 	Mixer.Midi.Muted = s.MidiOff
+	if (s.Pos.Zoom != 0) {
+		G.ww.RestorePos(s.Pos.First, s.Pos.Zoom)
+	}
+	if (s.Win.Width != 0) {
+		RootWin.SetSize(s.Win.Width, s.Win.Height)
+	}
 }
 
 type Headers struct {

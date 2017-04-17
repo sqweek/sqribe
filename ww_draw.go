@@ -74,6 +74,19 @@ func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	return layout
 }
 
+func (rect *WaveLayout) restore(view map[*score.Staff]bool) {
+	staves := rect.staff.Load().(map[*score.Staff]*StaffLayout)
+	for staff, minimised := range view {
+		slayout, ok := staves[staff]
+		if !ok {
+			slayout = &StaffLayout{}
+			staves[staff] = slayout
+		}
+		slayout.mix.Minimised = minimised
+	}
+	rect.staff.Store(staves)
+}
+
 func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score) {
 	rect.Rectangle = r
 	axish := 20

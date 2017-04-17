@@ -443,6 +443,25 @@ func (ww *WaveWidget) Zoom(factor float64) float64 {
 	return delta
 }
 
+func (ww *WaveWidget) CapturePos() (FrameN, int) {
+	return ww.pos.f0, ww.pos.ppix
+}
+
+func (ww *WaveWidget) RestorePos(f0 FrameN, ppix int) {
+	ww.pos.f0 = f0
+	ww.pos.ppix = ppix
+	ww.changed(WAV | CURSOR | VIEWPOS, &ww.pos)
+}
+
+func (ww *WaveWidget) IsMinimised(staff *score.Staff) bool {
+	slayout := ww.rect.staves()[staff]
+	return slayout != nil && slayout.mix.Minimised
+}
+
+func (ww *WaveWidget) RestoreStaffView(minimised map[*score.Staff]bool) {
+	ww.rect.restore(minimised)
+}
+
 func (ww *WaveWidget) Snarf() {
 	snarf := make(map[*score.Staff] []*score.Note)
 	for note, staff := range ww.notesel {
