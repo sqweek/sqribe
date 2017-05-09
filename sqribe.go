@@ -319,7 +319,7 @@ func main_child() {
 	G.mixw = NewMixWidget(redraw)
 
 	var view SavedView
-	if lderr == nil {
+	if len(audioFile) > 0 && lderr == nil {
 		view = ld.s.View()
 	}
 	wg := InitWde(redraw, view)
@@ -335,7 +335,7 @@ func main_child() {
 	// 9. audio decoder
 	runtime.GOMAXPROCS(6)
 
-	if lderr == nil {
+	if len(audioFile) > 0 && lderr == nil {
 		ld.Pivot()
 		if *initialTime != 0 && G.wav != nil {
 			G.ww.ScrollToFrame(G.wav.FrameAtTime(*initialTime))
