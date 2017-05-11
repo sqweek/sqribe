@@ -447,18 +447,8 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff, slayout *
 	drawStaffLines(dst, fg, layout.sig.Min.X, layout.sig.Max.X, mid)
 	keysig, lines := staff.KeyAccidentalLines()
 	for i, delta := range lines {
-		cg := CenteredGlyph{
-			col: fg,
-			p: image.Point{layout.sig.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2},
-			r: yspacing/2,
-		}
-		var glyph image.Image
-		if keysig.IsSharps() {
-			glyph = &SharpGlyph{cg}
-		} else {
-			glyph = &FlatGlyph{cg}
-		}
-		draw.Draw(dst, r, glyph, r.Min, draw.Over)
+		p := image.Point{layout.sig.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2}
+		DrawGlyph(dst, r, Glyphs.SharpOrFlat(keysig.IsSharps()), fg, p)
 	}
 
 //	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
@@ -512,13 +502,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		draw.Draw(dst, line, &image.Uniform{black}, image.ZP, draw.Over)
 	}
 
-	var head *NoteHead
-	if n.duration < 2 {
-		head = newNoteHead(n.col, *n.pt, yspacing/2, 35.0)
-	} else {
-		head = newHollowNote(n.col, *n.pt, yspacing/2, 35.0)
-	}
-	draw.Draw(dst, r, head, r.Min, draw.Over)
+	DrawGlyph(dst, r, Glyphs.NoteHead(n.duration < 2), n.col, *n.pt)
 	if n.duration <= 3 {
 		var beamEnd image.Point
 		var beam image.Rectangle
@@ -539,7 +523,7 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 				c = image.Pt(beamEnd.X, beamEnd.Y + i * 3)
 			}
 			i++
-			draw.Draw(dst, r, &NoteTail{CenteredGlyph{n.col, c, 4*yspacing/(2*5)}, n.downBeam}, r.Min, draw.Over)
+			DrawGlyph(dst, r, Glyphs.NoteTail(n.downBeam), n.col, c)
 		}
 	}
 	/* TODO triplets */
@@ -554,10 +538,10 @@ func (ww *WaveWidget) drawNote(dst draw.Image, r image.Rectangle, mid int, n *Di
 		}
 	}
 	for i := 0; i < dotted; i++ {
-		draw.Draw(dst, r, &DotGlyph{CenteredGlyph{n.col, n.pt.Add(image.Pt(yspacing/2 + 3 + 5*i, 0)), yspacing/2}}, r.Min, draw.Over)
+		DrawGlyph(dst, r, Glyphs.Dot, n.col, n.pt.Add(image.Pt(yspacing/2 + 3 + 5*i, 0)))
 	}
 	if n.accidental != nil {
-		draw.Draw(dst, r, newAccidental(n.col, n.pt.Sub(image.Pt(yspacing, 0)), yspacing/2, *n.accidental), r.Min, draw.Over)
+		DrawGlyph(dst, r, Glyphs.Ax(*n.accidental), n.col, n.pt.Sub(image.Pt(yspacing, 0)))
 	}
 }
 

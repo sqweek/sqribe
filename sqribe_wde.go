@@ -324,6 +324,7 @@ func InitWde(redraw chan Widget, view SavedView) *sync.WaitGroup {
 	if view.Width == 0 {
 		view.Width, view.Height = 800, 400
 	}
+	Glyphs.init(yspacing)
 	dw, err := wde.NewWindow(view.Width, view.Height)
 	if err != nil {
 		fatal(err)

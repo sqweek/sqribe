@@ -2,80 +2,152 @@ package main
 
 import (
 	"image/color"
+	"image/draw"
 	"image"
 	"math"
 )
 
-type CenteredGlyph struct {
-	col color.NRGBA
-	p image.Point //center
-	r int //radius
+// A Glyph is an Image with (0, 0) treated as its "hotspot"
+type Glyph image.Image
+
+// Paints a Glyph with its (0, 0) coordinate aligned with pt
+func DrawGlyph(dst draw.Image, r image.Rectangle, glyph Glyph, col color.Color, pt image.Point) {
+	draw.DrawMask(dst, r, &image.Uniform{col}, image.ZP, glyph, r.Min.Sub(pt), draw.Over)
 }
 
-func (g *CenteredGlyph) ColorModel() color.Model {
-	return color.NRGBAModel
+type GlyphPalette struct {
+	SolidNote,
+	HollowNote,
+	DownTail,
+	UpTail,
+
+	Flat,
+	Sharp,
+	Natural,
+	Placeholder,
+
+	Dot,
+
+	TrebleClef,
+	BassClef Glyph
+}
+var Glyphs GlyphPalette
+
+func (p *GlyphPalette) init(sz int) {
+	r :=  sz/2
+	cent := CenteredGlyph{r: r}
+	p.SolidNote = &NoteHead{cent, 0.0}
+	p.HollowNote = &NoteHead{cent, 0.6}
+	tailsz := 4*sz/(2*5)
+	p.DownTail = &NoteTail{sz: tailsz, downBeam: false}
+	p.UpTail = &NoteTail{sz: tailsz, downBeam: true}
+
+	p.Flat = &FlatGlyph{r: r}
+	p.Sharp = &SharpGlyph{cent}
+	p.Natural = &NaturalGlyph{cent}
+	p.Placeholder = &DefaultGlyph{cent}
+
+	p.Dot = &DotGlyph{cent}
+}
+
+func (p GlyphPalette) SharpOrFlat(sharp bool) Glyph {
+	if sharp {
+		return p.Sharp
+	}
+	return p.Flat
+}
+
+func (p GlyphPalette) NoteHead(solid bool) Glyph {
+	if solid {
+		return p.SolidNote
+	}
+	return p.HollowNote
+}
+
+func (p GlyphPalette) NoteTail(downBeam bool) Glyph {
+	if downBeam {
+		return p.UpTail
+	}
+	return p.DownTail
+}
+
+func (p GlyphPalette) Ax(accidental int) Glyph {
+	switch accidental {
+	case -1: return Glyphs.Flat
+	case 0: return Glyphs.Natural
+	case 1: return Glyphs.Sharp
+	}
+	return Glyphs.Placeholder
+}
+
+type glyphBase struct {}
+func (g *glyphBase) ColorModel() color.Model {
+	return color.AlphaModel
+}
+
+type CenteredGlyph struct {
+	glyphBase
+	r int //radius, (0, 0) is the centre point
 }
 
 func (g *CenteredGlyph) Bounds() image.Rectangle {
-	return image.Rect(g.p.X - g.r, g.p.Y - g.r, g.p.X + g.r + 1, g.p.Y + g.r + 1)
+	return image.Rect(-g.r, -g.r, g.r + 1, g.r + 1)
 }
 
 type NoteHead struct {
 	CenteredGlyph
-	α float64
 	hollowness float64
 }
 
 func (n *NoteHead) At(x, y int) color.Color {
-	xx, yy, rr := float64(x - n.p.X)+0.5, float64(y - n.p.Y)+0.5, float64(n.r)
-	rx := xx * math.Cos(n.α) - yy * math.Sin(n.α)
-	ry := xx * math.Sin(n.α) + yy * math.Cos(n.α)
+	α := 35.0
+	xx, yy, rr := float64(x)+0.5, float64(y)+0.5, float64(n.r)
+	rx := xx * math.Cos(α) - yy * math.Sin(α)
+	ry := xx * math.Sin(α) + yy * math.Cos(α)
 	rr2 := rr*rr
 	dist2 := rx*rx + 1.25*1.25*ry*ry
 	if dist2 < rr2 && dist2 >= n.hollowness * rr2 {
-		return n.col
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
-}
-
-func newNoteHead(col color.NRGBA, p image.Point, r int, α float64) *NoteHead {
-	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.0}
-}
-
-func newHollowNote(col color.NRGBA, p image.Point, r int, α float64) *NoteHead {
-	return &NoteHead{CenteredGlyph{col, p, r}, α, 0.6}
+	return color.Transparent
 }
 
 type NoteTail struct {
-	CenteredGlyph
+	glyphBase
+	sz int
 	downBeam bool
 }
 
-func (t *NoteTail) At(x, y int) color.Color {
-	dx, dy := x - t.p.X, y - t.p.Y
-	if dx > 0 && ((t.downBeam && dx + dy == 0) || (!t.downBeam && dx - dy == 0)) {
-		return t.col
+func (t *NoteTail) Bounds() image.Rectangle {
+	if t.downBeam {
+		return image.Rect(0, -t.sz, t.sz + 1, 0 + 1)
 	}
-	return color.NRGBA{0, 0, 0, 0}
+	return image.Rect(0, 0, t.sz + 1, t.sz + 1)
+}
+
+func (t *NoteTail) At(x, y int) color.Color {
+	if x > 0 && ((t.downBeam && x + y == 0) || (!t.downBeam && x - y == 0)) {
+		return color.Opaque
+	}
+	return color.Transparent
 }
 
 type FlatGlyph struct {
-	CenteredGlyph
+	glyphBase
+	r int
 }
 
 func (f *FlatGlyph) At(x, y int) color.Color {
-	dx, dy := x - f.p.X, y - f.p.Y + 3
-	if dx == -2 ||
-	    (dy <= 5 && dy >= 3 && dy + dx == 4) ||
-	    (dy < 3 && dy >= 1 && dy - dx == 2) {
-		return f.col
+	if x == -2 ||
+	    (y <= 2 && y >= 0 && y + x == 1) ||
+	    (y < 0 && y >= -2 && y - x == -1) {
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
+	return color.Transparent
 }
 
-// HACK the flat glyph is not aligned with the actual centre point 'p'
 func (f *FlatGlyph) Bounds() image.Rectangle {
-	return f.CenteredGlyph.Bounds().Sub(image.Point{0, 3})
+	return image.Rect(-f.r, -f.r - 3, f.r + 1, f.r - 3 + 1)
 }
 
 type SharpGlyph struct {
@@ -83,13 +155,12 @@ type SharpGlyph struct {
 }
 
 func (s *SharpGlyph) At(x, y int) color.Color {
-	dx, dy := s.p.X - x, s.p.Y - y
-	line := dy + ceil(dx, 2)
-	if (dx == -2 || dx == 2) ||
+	line := y + ceil(x, 2)
+	if (x == -2 || x == 2) ||
 	    (line == 2 || line == -2) {
-		return s.col
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
+	return color.Transparent
 }
 
 type NaturalGlyph struct {
@@ -97,14 +168,13 @@ type NaturalGlyph struct {
 }
 
 func (n *NaturalGlyph) At(x, y int) color.Color {
-	dx, dy := x - n.p.X, y - n.p.Y
-	line := dy + divØ(dx, 2)
-	if (dx == -2 && dy < 3) ||
-	    (dx == 2 && dy > -3) ||
-	    (dx > -3 && dx < 3 && (line == 1 || line == -1)) {
-		return n.col
+	line := y + divØ(x, 2)
+	if (x == -2 && y < 3) ||
+	    (x == 2 && y > -3) ||
+	    (x > -3 && x < 3 && (line == 1 || line == -1)) {
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
+	return color.Transparent
 }
 
 type DefaultGlyph struct {
@@ -112,24 +182,15 @@ type DefaultGlyph struct {
 }
 
 func (d *DefaultGlyph) At(x, y int) color.Color {
-	inX := (x > d.p.X - 3 && x < d.p.X + 3)
-	inY := (y > d.p.Y - 3 && y < d.p.Y + 3)
-	if (x == d.p.X - 3 && inY) ||
-	    (x == d.p.X + 3 && inY) ||
-	    (y == d.p.Y - 3 && inX) ||
-	    (y == d.p.Y + 3 && inX) {
-		return d.col
+	inX := (x > -3 && x < 3)
+	inY := (y > -3 && y < 3)
+	if (x == -3 && inY) ||
+	    (x == 3 && inY) ||
+	    (y == -3 && inX) ||
+	    (y == 3 && inX) {
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
-}
-
-func newAccidental(col color.NRGBA, p image.Point, r int, accidental int) image.Image {
-	switch accidental {
-	case -1: return &FlatGlyph{CenteredGlyph{col, p, r}}
-	case 0: return &NaturalGlyph{CenteredGlyph{col, p, r}}
-	case 1: return &SharpGlyph{CenteredGlyph{col, p, r}}
-	}
-	return &DefaultGlyph{CenteredGlyph{col, p, r}}
+	return color.Transparent
 }
 
 type DotGlyph struct {
@@ -137,15 +198,15 @@ type DotGlyph struct {
 }
 
 func (f *DotGlyph) At(x, y int) color.Color {
-	dx, dy := x - f.p.X, y - f.p.Y
+	dx, dy := x, y
 	if dx > 0 && dx <= 2 {
 		dx--
 	}
 	if (dy + dx >= -1 && dx + dy <= 1) &&
 	    (dy - dx >= -1 && dy - dx <= 1) {
-		return f.col
+		return color.Opaque
 	}
-	return color.NRGBA{0, 0, 0, 0}
+	return color.Transparent
 }
 
 func MkIcon(data []string) *image.Alpha {
