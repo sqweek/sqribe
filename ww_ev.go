@@ -28,8 +28,11 @@ func (ww *WaveWidget) MouseMoved(mousePos image.Point) wde.Cursor {
 }
 
 func (ww *WaveWidget) LeftClick(mouse image.Point) {
-	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
+	if mouse.In(ww.rect.newTrebleB) && ww.score != nil {
 		ww.score.AddStaff(score.MkStaff("", &score.TrebleClef, ww.score.Key()))
+		return
+	} else if mouse.In(ww.rect.newBassB) && ww.score != nil {
+		ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
 		return
 	}
 	for staff, slayout := range ww.rect.staves() {
@@ -46,10 +49,6 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 }
 
 func (ww *WaveWidget) RightClick(mouse image.Point) {
-	if mouse.In(ww.rect.newStaffB) && ww.score != nil {
-		ww.score.AddStaff(score.MkStaff("", &score.BassClef, ww.score.Key()))
-		return
-	}
 	if mouse.In(ww.rect.mixer) {
 		staves := ww.rect.staves()
 		for staff, slayout := range staves {

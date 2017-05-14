@@ -33,7 +33,7 @@ type WaveLayout struct {
 	wave image.Rectangle	// rect of the waveform display
 	waveRulers image.Rectangle	// waveform + rulers
 
-	beatAxis, timeAxis, mixRulers, mixer, aboveMixer, belowMixer, newStaffB image.Rectangle
+	beatAxis, timeAxis, mixRulers, mixer, aboveMixer, belowMixer, newTrebleB, newBassB image.Rectangle
 	staff atomic.Value //holds map[*score.Staff]*StaffLayout
 }
 
@@ -101,7 +101,8 @@ func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score) {
 	rect.mixer = leftRect(rect.wave, infow)
 	rect.aboveMixer = aboveRect(rect.mixer, axish)
 	rect.belowMixer = belowRect(rect.mixer, axish)
-	rect.newStaffB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
+	rect.newTrebleB = leftH(centerV(box(axish, axish), rect.belowMixer), rect.belowMixer)
+	rect.newBassB = rightRect(rect.newTrebleB, axish)
 	staffR := make(map[*score.Staff]*StaffLayout, len(sc.Staves()))
 	if sc != nil && len(sc.Staves()) > 0 {
 		minimisedH := 18
@@ -320,6 +321,14 @@ func (ww *WaveWidget) drawSelxn(dst draw.Image, r image.Rectangle, pos *FramePos
 	}
 }
 
+func drawCenteredIcon(dst draw.Image, r image.Rectangle, fg color.Color, icon image.Image) {
+	ir := icon.Bounds()
+	centre := ir.Min.Add(ir.Max).Div(2)
+	centre.X -= r.Dx() / 2
+	centre.Y -= r.Dy() / 2
+	draw.DrawMask(dst, r, &image.Uniform{fg}, image.ZP, icon, centre, draw.Over)
+}
+
 func (ww *WaveWidget) drawMixer(dst draw.Image) {
 	mixbg := color.RGBA{0x33, 0x22, 0x22, 0xff}
 	border := color.RGBA{0x99, 0x88, 0x88, 0xff}
@@ -334,8 +343,10 @@ func (ww *WaveWidget) drawMixer(dst draw.Image) {
 		ww.drawStaffCtl(img, staff, slayout)
 	}
 	draw.Draw(dst, ww.rect.mixer, img, ww.rect.mixer.Min, draw.Over)
-	drawBorders(dst, ww.rect.newStaffB, border, bg)
-	G.font.luxi.DrawC(dst, fg, ww.rect.newStaffB, "+", centerPt(ww.rect.newStaffB))
+	drawBorders(dst, ww.rect.newTrebleB, border, bg)
+	drawCenteredIcon(dst, ww.rect.newTrebleB, fg, IconTreble)
+	drawBorders(dst, ww.rect.newBassB, border, bg)
+	drawCenteredIcon(dst, ww.rect.newBassB, fg, IconBass)
 }
 
 func (ww *WaveWidget) drawScale(dst draw.Image, r image.Rectangle, infow int, pos *FramePos) {
