@@ -51,14 +51,16 @@ func (slayout StaffLayout) Mid() int {
 }
 
 type MixerLayout struct {
-	r, sig, minmaxB, muteB, instC, volS image.Rectangle
+	r, staff, sig, minmaxB, muteB, instC, volS image.Rectangle
 	Minimised bool
 }
 
 func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	layout.r = r
 
+	clefW := 3*yspacing
 	sigW := 8*(yspacing/2)
+	layout.staff = rightH(centerV(box(clefW + sigW, 7*yspacing), r), r)
 	layout.sig = rightH(centerV(box(sigW, 7*yspacing), r), r)
 
 	button := box(12, 12) // button size
@@ -90,7 +92,7 @@ func (rect *WaveLayout) restore(view map[*score.Staff]bool) {
 func (rect *WaveLayout) layout(r image.Rectangle, sc *score.Score) {
 	rect.Rectangle = r
 	axish := 20
-	infow := 100
+	infow := 150
 	rect.waveRulers = image.Rect(r.Min.X + infow, r.Min.Y, r.Max.X, r.Max.Y)
 	rect.wave = image.Rect(r.Min.X + infow, r.Min.Y + axish, r.Max.X, r.Max.Y - axish)
 	rect.beatAxis = aboveRect(rect.wave, axish)
@@ -444,11 +446,18 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff, slayout *
 	}
 
 	mid := slayout.Mid()
-	drawStaffLines(dst, fg, layout.sig.Min.X, layout.sig.Max.X, mid)
+	drawStaffLines(dst, fg, layout.staff.Min.X, layout.staff.Max.Y, mid)
 	keysig, lines := staff.KeyAccidentalLines()
 	for i, delta := range lines {
 		p := image.Point{layout.sig.Min.X + (i + 1) * (yspacing/2), mid - delta * yspacing/2}
 		DrawGlyph(dst, r, Glyphs.SharpOrFlat(keysig.IsSharps()), fg, p)
+	}
+	clefp := image.Point{layout.staff.Min.X + 3 * (yspacing/2), mid}
+	switch staff.Clef() {
+	case &score.TrebleClef:
+		DrawGlyph(dst, r, Glyphs.TrebleClef, fg, clefp)
+	case &score.BassClef:
+		DrawGlyph(dst, r, Glyphs.BassClef, fg, clefp)
 	}
 
 //	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
