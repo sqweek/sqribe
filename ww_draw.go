@@ -57,14 +57,15 @@ type MixerLayout struct {
 
 func (layout *MixerLayout) calc(yspacing int, r image.Rectangle) *MixerLayout {
 	layout.r = r
+	button := box(12, 12) // button size
+	layout.instC = topV(box(r.Dx() - 2, 18), r).Add(image.Point{1, 1})
 
 	clefW := 3*yspacing
 	sigW := 8*(yspacing/2)
-	layout.staff = rightH(centerV(box(clefW + sigW, 7*yspacing), r), r)
-	layout.sig = rightH(centerV(box(sigW, 7*yspacing), r), r)
+	layout.staff = rightH(centerV(box(clefW + sigW, r.Dy()), r), r)
+	layout.staff.Min.Y += layout.instC.Dy()
+	layout.sig = rightH(centerV(box(sigW, layout.staff.Dy()), r), r)
 
-	button := box(12, 12) // button size
-	layout.instC = topV(box(r.Dx() - 2, 18), r).Add(image.Point{1, 1})
 	layout.minmaxB = leftH(centerV(button, layout.instC), r).Add(image.Point{1, 0})
 	layout.muteB = rightRect(layout.minmaxB, button.Dx())
 	layout.instC.Min.X = layout.muteB.Max.X
@@ -466,9 +467,9 @@ func (ww *WaveWidget) drawStaffCtl(dst draw.Image, staff *score.Staff, slayout *
 	clefp := image.Point{layout.staff.Min.X + 3 * (yspacing/2), mid}
 	switch staff.Clef() {
 	case &score.TrebleClef:
-		DrawGlyph(dst, r, Glyphs.TrebleClef, fg, clefp)
+		DrawGlyph(dst, layout.staff, Glyphs.TrebleClef, fg, clefp)
 	case &score.BassClef:
-		DrawGlyph(dst, r, Glyphs.BassClef, fg, clefp)
+		DrawGlyph(dst, layout.staff, Glyphs.BassClef, fg, clefp)
 	}
 
 //	restR := image.Rectangle{r.Min, image.Point{sigR.Min.X, r.Max.Y}}.Inset(1)
