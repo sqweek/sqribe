@@ -11,6 +11,9 @@ import (
 	. "github.com/sqweek/sqribe/core/types"
 )
 
+type IOError error
+type DecodeError error
+
 var failure = &Chunk{} // non-nil sentinel used to avoid deadlock on i/o failure
 
 type cache struct {
@@ -49,6 +52,9 @@ func (c *cache) MaxSize() uint64 {
 	return uint64(c.blocksz) * uint64(c.lru.max)
 }
 
+// Writes out the cache file, given a func which successively spits out decoded
+// wave samples, and returns io.EOF when complete. If the returned error is non-nil,
+// it will be of type IOError or DecodeError depending on where it occurred.
 func (c *cache) Write(readfn func() ([]int16, error)) error {
 	defer func() {
 		c.lastChunkId = uint64(c.bytesWritten / int64(c.blocksz))
@@ -59,19 +65,22 @@ func (c *cache) Write(readfn func() ([]int16, error)) error {
 	}()
 	f, err := os.Create(c.file)
 	if err != nil {
-		return err
+		return IOError(err)
 	}
 	defer f.Close()
 	for {
 		buf, err := readfn()
 		if err != nil && err != io.EOF {
-			return err
+			return DecodeError(err)
 		}
 		if err == io.EOF {
 			break
 		}
 		if len(buf) > 0 {
-			binary.Write(f, binary.LittleEndian, buf)
+			err = binary.Write(f, binary.LittleEndian, buf)
+			if err != nil {
+				return IOError(err)
+			}
 			c.bytesWritten += int64(len(buf)) * int64(c.sampsz)
 		}
 	}

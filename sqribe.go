@@ -106,11 +106,15 @@ func (ld *PendingLoad) Pivot() {
 	}
 
 	go func() {
-		_ = <-ld.wavDone
-		/* audio has finished loading, either successfully or unsuccessfully.
-		 * some mp3s apparently contain stupid stuff like ID3 tags in the middle of
-		 * the last data frame, so a user alert is not raised here...
-		 * Just send some spurious change events now that waveform's NSamples is stable. */
+		erri := <-ld.wavDone // wait for audio to finish loading
+		switch err := erri.(type) {
+		case wave.IOError:
+			alert(err.Error())
+		case wave.DecodeError:
+			 /* some mp3s apparently contain stupid stuff like ID3 tags in the middle of
+			 * the last data frame, so a user alert is not raised here... */
+		}
+		/* Send some spurious change events now that waveform's NSamples is stable. */
 		G.plumb.score.C <- score.BeatChanged{}
 		G.plumb.score.C <- score.StaffChanged{}
 	}()
