@@ -46,14 +46,13 @@ func testClefLines(t *testing.T, clef *Clef, key KeySig) {
 	for _, d := range scale2degree {
 		pitch := origin[key] + uint8(d)
 		line, ax := clef.LineForPitch(key, pitch)
+		if len(lines) > 0 && line != lines[len(lines)-1].int + 1 {
+			fail = true // lines should be precisely ascending over scale
+		}
 		axs := ""
 		if ax != nil {
 			axs = axstr(*ax)
-		}
-		for _, prev := range lines {
-			if prev.int == line {
-				fail = true // same line used twice within scale
-			}
+			fail = true // shouldn't be any accidentals in scale
 		}
 		lines = append(lines, struct{uint8; int; string}{pitch, line, axs})
 	}
@@ -69,6 +68,20 @@ func TestScaleLines(t *testing.T) {
 	for _, clef := range []*Clef{&TrebleClef, &BassClef} {
 		for key := KeySig(-7); key <= 7; key++ {
 			testClefLines(t, clef, key)
+		}
+	}
+}
+
+func TestRoundTrip(t *testing.T) {
+	for _, clef := range []*Clef{&TrebleClef, &BassClef} {
+		for key := KeySig(-7); key <= 7; key++ {
+			for delta := -16; delta <= 16; delta++ {
+				pitch := clef.PitchForLine(key, delta)
+				d2, ax := clef.LineForPitch(key, pitch)
+				if delta != d2 {
+					t.Errorf("%s (%v)  %3d => %3d != %3d (%s) %v", clef.Name, key, delta, pitch, d2, midi.PitchName(pitch), ax)
+				}
+			}
 		}
 	}
 }

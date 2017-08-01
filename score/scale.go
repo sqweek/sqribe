@@ -39,8 +39,12 @@ var scaleSharps []KeySig = []KeySig{1, 3, 5, 0, 2, 4, 6}
 
 // delta is the number of scale lines from the stave's center note. +ve = higher pitch
 func (staff *Staff) PitchForLine(delta int) uint8 {
-	pitch := int(staff.clef.Origin)
-	scale0 := staff.clef.tone
+	return staff.clef.PitchForLine(staff.nsharps, delta)
+}
+
+func (clef *Clef) PitchForLine(nsharps KeySig, delta int) uint8 {
+	pitch := int(clef.Origin)
+	scale0 := clef.tone
 	s := scale0 + delta
 	/* first deal with octaves, in "scale" space */
 	for s < 0 {
@@ -54,7 +58,7 @@ func (staff *Staff) PitchForLine(delta int) uint8 {
 	/* then apply the intra-scale delta */
 	pitch += scale2degree[s] - scale2degree[scale0]
 	/* finally, apply the key signature */
-	pitch += staff.accidental(s)
+	pitch += nsharps.accidental(s)
 	return uint8(pitch)
 }
 
@@ -92,14 +96,19 @@ func (nsharps KeySig) accidental(tone int) int {
 	return 0
 }
 
-func (staff *Staff) accidental(tone int) int {
-	return staff.nsharps.accidental(tone)
+/* returns n modulo d, on the range [0,d) */
+func mod(n, d int) int {
+	ans := n % d
+	if ans < 0 {
+		ans += d
+	}
+	return ans
 }
 
 func (key KeySig) toneForPitch(pitch uint8) int {
 	degree := int(pitch % 12)
 	for s, _ := range(scale2degree) {
-		if scale2degree[s] + key.accidental(s) == degree {
+		if mod(scale2degree[s] + key.accidental(s), 12) == degree {
 			return s
 		}
 	}
@@ -139,17 +148,16 @@ func lineForPitch(clef *Clef, nsharps KeySig, pitch uint8) (int, bool) {
 	if tone == -1 {
 		return 0, false
 	}
-	octave := 0
-	d := int(pitch) - int(clef.Origin - clef.Origin % 12)
-	for d < 0 {
-		octave -= 7
-		d += 12
+	o := int(clef.Origin) + nsharps.accidental(int(clef.tone))
+	Δp := int(pitch) - o
+	Δt := tone - clef.tone
+	delta := 7 * (Δp/12) + Δt
+	/* toneForPitch doesn't include any octave information -- correct for those cases */
+	if Δp < 0 && Δt > 0 {
+		delta -= 7
+	} else if Δp > 0 && Δt < 0 {
+		delta += 7
 	}
-	for d >= 12 {
-		octave += 7
-		d -= 12
-	}
-	delta := -clef.tone + octave + tone
 	return delta, true
 }
 
