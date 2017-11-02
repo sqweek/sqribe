@@ -69,7 +69,7 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 	}
 	if ww.pasteMode {
 		sc := ww.score
-		if s := ww.getMouseState(mouse); s != nil && len(ww.snarf[s.note.staff]) > 0 {
+		if s := ww.getMouseState(mouse); s != nil && s.note != nil && len(ww.snarf[s.note.staff]) > 0 {
 			anchor := ww.snarf[s.note.staff][0]
 			Δpitch := s.note.Δpitch(anchor)
 			beat, offset := sc.Quantize(s.note.beatf)
