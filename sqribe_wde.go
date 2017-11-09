@@ -307,6 +307,7 @@ func drawstuff(w wde.Window, redraw chan Widget, done chan bool) {
 				if !G.instMenu.Rect().Empty() {
 					G.instMenu.Draw(screen, G.instMenu.Rect())
 				}
+				G.overlay.Draw(screen, screen.Bounds())
 				w.FlushImage()
 				merged = 0
 				lastframe = time.Now()

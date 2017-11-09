@@ -46,6 +46,7 @@ var G struct {
 	mixw *MixWidget
 	instMenu MenuWidget
 	noteMenu MenuWidget
+	overlay *OverlayWidget
 	font struct {
 		luxi *Font
 	}
@@ -321,6 +322,7 @@ func main_child() {
 	G.ww.SetScore(G.score)
 
 	G.mixw = NewMixWidget(redraw)
+	G.overlay = NewOverlayWidget(redraw)
 
 	var view SavedView
 	if len(audioFile) > 0 && lderr == nil {

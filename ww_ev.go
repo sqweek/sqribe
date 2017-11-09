@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"image/color"
 	"math/big"
 	"time"
 
@@ -131,6 +132,34 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 						return true
 					}
 					return false
+				}
+			} else if e.Where.In(slayout.mix.minmaxB) {
+				overlay := NoOverlay
+				return func(pos image.Point, finished bool, moved bool)bool {
+					if overlay == NoOverlay {
+						overlay = G.overlay.Make()
+					}
+					ok, border, fill := false, color.NRGBA{0xff, 0x00, 0x00, 0xcc}, color.NRGBA{0x88, 0x55, 0x55, 0xcc}
+					if pos.In(ww.rect.mixer) {
+						ok = true
+						if !pos.In(slayout.mix.r) {
+							border, fill = color.NRGBA{0x00, 0xff, 0x00, 0xcc}, color.NRGBA{0x55, 0x88, 0x55, 0xcc}
+							if finished {
+								for staff2, slayout2 := range ww.rect.staves() {
+									if pos.In(slayout2.mix.r) {
+										ww.MoveStaffTo(staff, staff2)
+										break
+									}
+								}
+							}
+						}
+					}
+					if finished {
+						overlay.Close(false)
+					} else {
+						overlay.Update(boxDrawable(pos, slayout.mix.minmaxB.Dx()/2, slayout.mix.minmaxB.Dy()/2, border, fill))
+					}
+					return ok
 				}
 			}
 		}
@@ -313,8 +342,8 @@ func (ww *WaveWidget) dragState(mouse image.Point) (DragFn, wde.Cursor) {
 		return ww.timeSelectDrag(ww.FrameAtPixel(mouse.X), snap), wde.IBeamCursor
 	}
 
-	rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
 	if staff, layout := ww.staffContaining(mouse); staff != nil {
+		rng := FrameRange{ww.FrameAtPixel(mouse.X - yspacing*2), ww.FrameAtPixel(mouse.X + yspacing*2)}
 		mid := layout.Mid()
 		next := sc.Iter(rng, staff)
 		var sn score.StaffNote

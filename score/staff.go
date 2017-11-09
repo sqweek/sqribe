@@ -29,6 +29,8 @@ type KeyChanged StaffChanged
 
 type ResetStaves StaffChanged
 
+type StaffMoved StaffChanged
+
 func staffChanged(staves... *Staff) StaffChanged {
 	c := StaffChanged{make(map[*Staff]struct{})}
 	for _, staff := range staves {
@@ -91,6 +93,39 @@ func (op *SetStavesOp) apply(score *Score) interface{} {
 	score.staves = op.staves
 	score.clearHistory()
 	return ResetStaves(staffChanged(op.staves...))
+}
+
+/* Moves target staff to the anchor's position */
+type MoveStaffOp struct {
+	target, anchor *Staff
+}
+
+func (op *MoveStaffOp) apply(score *Score) interface{} {
+	src, dst := -1, -1
+	for i, s := range score.staves {
+		if s == op.target {
+			src = i
+		} else if s == op.anchor {
+			dst = i
+		}
+	}
+	if src != -1 && dst != -1 {
+		var changed []*Staff
+		if src > dst {
+			copy(score.staves[dst+1:], score.staves[dst:src+1])
+			changed = score.staves[dst:src+1]
+		} else {
+			copy(score.staves[src:], score.staves[src+1:dst+1])
+			changed = score.staves[src:dst+1]
+		}
+		score.staves[dst] = op.target
+		return StaffMoved(staffChanged(changed...))
+	}
+	return nil
+}
+
+func (score *Score) MoveStaff(target, anchor *Staff) {
+	score.update(&MoveStaffOp{target, anchor})
 }
 
 type AddStaffOp struct {

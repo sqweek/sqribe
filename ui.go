@@ -136,6 +136,129 @@ func (w *ImageWidget) Img(r image.Rectangle) (dst *image.RGBA, resized bool) {
 	return w.img, resized
 }
 
+type Overlay struct {
+	data Drawable
+	cache *image.RGBA
+	flushCache bool
+}
+
+type OverlayId uint
+
+type OverlayHandle struct {
+	id OverlayId
+	c chan interface{}
+}
+
+var NoOverlay OverlayHandle = OverlayHandle{}
+
+type OverlayWidget struct {
+	WidgetCore
+	active map[OverlayId]*Overlay
+	c chan interface{}
+}
+
+type OverlayAdd struct {
+	reply chan OverlayId
+}
+
+type OverlayUpdate struct {
+	id OverlayId
+	data Drawable // nil means "we're done"
+	flushCache bool
+}
+
+type OverlayPaint struct {
+	wait chan bool
+}
+
+func NewOverlayWidget(refresh chan Widget) *OverlayWidget {
+	w := &OverlayWidget{WidgetCore{refresh}, make(map[OverlayId]*Overlay), make(chan interface{})}
+	go w.loop()
+	return w
+}
+
+func (w *OverlayWidget) loop() {
+	id := OverlayId(1) // start at 1 so 0 (aka NoOverlay) is never a valid ID
+	for {
+		cmd := <-w.c
+		switch c := cmd.(type) {
+		case OverlayAdd:
+			w.active[id] = &Overlay{}
+			c.reply <- id
+			close(c.reply)
+			id++
+		case OverlayUpdate:
+			w.active[c.id].data = c.data
+			w.active[c.id].flushCache = c.flushCache
+			w.refresh <- w
+		case OverlayPaint:
+			<- c.wait // block other events so painter has exclusive access to map
+		}
+	}
+}
+
+func (w *OverlayWidget) Rect() image.Rectangle {
+	return image.ZR
+}
+
+func (w *OverlayWidget) Draw(dst wde.Image, bounds image.Rectangle) {
+	blocker := make(chan bool)
+	defer close(blocker)
+	w.c <- OverlayPaint{blocker}
+	for id, overlay := range w.active {
+		if overlay.cache != nil && overlay.flushCache {
+			dst.CopyRGBA(overlay.cache, overlay.cache.Bounds())
+		}
+		if overlay.data == nil {
+			if overlay.cache == nil {
+				continue // fresh new overlay, yet to be updated
+			}
+			delete(w.active, id)
+		} else {
+			r := overlay.data.Rect()
+			if overlay.cache == nil || overlay.cache.Bounds() != r {
+				overlay.cache = image.NewRGBA(r)
+			}
+			draw.Draw(overlay.cache, r, dst, r.Min, draw.Src)
+			overlay.data.Draw(dst, r)
+		}
+	}
+}
+
+// Make creates a new overlay, returning a handle
+func (w *OverlayWidget) Make() OverlayHandle {
+	reply := make(chan OverlayId)
+	w.c <- OverlayAdd{reply}
+	return OverlayHandle{<-reply, w.c}
+}
+
+// Updates the image data associated with an overlay handle
+func (h *OverlayHandle) Update(data Drawable) {
+	h.c <- OverlayUpdate{h.id, data, true}
+}
+
+// Finalises and cleans up an overlay handle
+func (h *OverlayHandle) Close(flushCache bool) {
+	h.c <- OverlayUpdate{h.id, nil, flushCache}
+}
+
+func boxDrawable(centre image.Point, radiusw, radiush int, border, fill color.Color) DrawBox {
+	return DrawBox{image.Rectangle{centre.Sub(image.Pt(radiusw, radiush)), centre.Add(image.Pt(radiusw, radiush))}, border, fill}
+}
+
+type DrawBox struct {
+	r image.Rectangle
+	border, fill color.Color
+}
+
+func (b DrawBox) Rect() image.Rectangle {
+	return b.r
+}
+
+func (b DrawBox) Draw(dst wde.Image, r image.Rectangle) {
+	drawBorders(dst, r, b.border, b.fill)
+}
+
 func drawHorzSlider(dst draw.Image, r image.Rectangle, fg color.Color, posn float64) {
 	mid := r.Min.Y + r.Dy() / 2
 	draw.Draw(dst, image.Rect(r.Min.X, mid, r.Max.X, mid + 1), &image.Uniform{fg}, image.ZP, draw.Over)

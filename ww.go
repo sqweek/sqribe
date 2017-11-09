@@ -226,6 +226,8 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 					if len(sc.Staves()) != len(ww.rect.staves()) {
 						change |= LAYOUT
 					}
+				case score.StaffMoved:
+					change |= LAYOUT
 				case score.ResetStaves:
 					ww.selectNotes(true) // clear selection
 					change |= RESET
@@ -240,6 +242,13 @@ func (ww *WaveWidget) SetScore(sc *score.Score) *score.Score {
 	}
 	ww.changed(SCALE | LAYOUT, sc)
 	return old
+}
+
+func (ww *WaveWidget) MoveStaffTo(staff, anchor *score.Staff) {
+	sc := ww.score
+	if sc != nil {
+		sc.MoveStaff(staff, anchor)
+	}
 }
 
 func (ww *WaveWidget) SelectedNotes() []score.StaffNote {
