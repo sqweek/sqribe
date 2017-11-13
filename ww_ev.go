@@ -37,34 +37,21 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 		return
 	}
 	for staff, slayout := range ww.rect.staves() {
-		if mouse.In(slayout.mix.r) {
-			if mouse.In(slayout.mix.muteB) {
-				toggle(&Mixer.For(staff).Muted)
-				ww.changed(MIXER, ww)
-			} else if mouse.In(slayout.mix.minmaxB) {
-				toggle(&slayout.mix.Minimised)
-				ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
-			}
+		if mouse.In(slayout.mix.muteB) {
+			toggle(&Mixer.For(staff).Muted)
+			ww.changed(MIXER, ww)
+			return
 		}
 	}
 }
 
 func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if mouse.In(ww.rect.mixer) {
-		staves := ww.rect.staves()
-		for staff, slayout := range staves {
-			if mouse.In(slayout.mix.minmaxB) {
-				slayout.mix.Minimised = false
-				for staff2, slayout2 := range staves {
-					if staff2 != staff {
-						slayout2.mix.Minimised = true
-					}
-				}
-				ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
-				return
-			} else if mouse.In(slayout.mix.muteB) {
+		for staff, slayout := range ww.rect.staves() {
+			if mouse.In(slayout.mix.muteB) {
 				Mixer.ToggleSolo(staff)
 				ww.changed(MIXER, ww)
+				return
 			}
 		}
 	}
@@ -108,7 +95,8 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 			return ww.getMouseState(e.Where).dragFn
 		}
 	} else {
-		for staff, slayout := range ww.rect.staves() {
+		staves := ww.rect.staves()
+		for staff, slayout := range staves {
 			if e.Where.In(slayout.mix.instC) {
 				G.instMenu.SetDefault(Mixer.For(staff).Voice)
 				reply := G.instMenu.Popup(slayout.mix.r, ww.refresh, e.Where)
@@ -136,6 +124,21 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 			} else if e.Where.In(slayout.mix.minmaxB) {
 				overlay := NoOverlay
 				return func(pos image.Point, finished bool, moved bool)bool {
+					if (finished && !moved) {  /* regular click */
+						switch e.Which {
+						case wde.LeftButton:
+							toggle(&slayout.mix.Minimised)
+							ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
+						case wde.RightButton:
+							slayout.mix.Minimised = false
+							for staff2, slayout2 := range staves {
+								if staff2 != staff {
+									slayout2.mix.Minimised = true
+								}
+							}
+							ww.changed(LAYOUT | SCALE, &slayout.mix.Minimised)
+						}
+					}
 					if overlay == NoOverlay {
 						overlay = G.overlay.Make()
 					}

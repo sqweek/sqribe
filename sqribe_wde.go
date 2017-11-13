@@ -66,6 +66,8 @@ func event(win wde.Window, redraw chan Widget, done chan bool, wg *sync.WaitGrou
 				if done {
 					drag.fn = nil
 				}
+				/* Hmm... continue here forces DragFn to be responsible for regular clicks.
+				 * But it also keeps logic related to a particular UI component together. */
 				continue
 			}
 			if drag.moved {
