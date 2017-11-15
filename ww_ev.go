@@ -144,8 +144,8 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 					}
 					ok, border, fill := false, color.NRGBA{0xff, 0x00, 0x00, 0xcc}, color.NRGBA{0x88, 0x55, 0x55, 0xcc}
 					if pos.In(ww.rect.mixer) {
-						ok = true
 						if !pos.In(slayout.mix.r) {
+							ok = true
 							border, fill = color.NRGBA{0x00, 0xff, 0x00, 0xcc}, color.NRGBA{0x55, 0x88, 0x55, 0xcc}
 							if finished {
 								for staff2, slayout2 := range ww.rect.staves() {
@@ -158,7 +158,7 @@ func (ww *WaveWidget) ButtonDown(e wde.MouseDownEvent) DragFn {
 						}
 					}
 					if finished {
-						overlay.Close(false)
+						overlay.Close(!ok)
 					} else {
 						overlay.Update(boxDrawable(pos, slayout.mix.minmaxB.Dx()/2, slayout.mix.minmaxB.Dy()/2, border, fill))
 					}

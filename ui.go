@@ -11,6 +11,7 @@ import (
 	"github.com/skelterjohn/go.wde"
 )
 
+// note: return value is currently ignored. should perhaps be expanded to include cursor info?
 type DragFn func(pos image.Point, finished, moved bool) bool
 
 type Widget interface {
