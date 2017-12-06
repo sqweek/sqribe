@@ -1,0 +1,31 @@
+#define? DEPT_ARP_URL_PUBLISHER           http://www.sqweek.net/
+#define? DEPT_ARP_URL_TECHNICAL_SUPPORT   http://www.sqweek.net/
+#define? DEPT_NAME                        sqweek
+#define? DEPT_ADDRESS                     sqweek@gmail.com
+#define? COMPANY_CONTACT_NAME             <$DEPT_NAME>
+#define? COMPANY_CONTACT_NAME_PHONE
+#define? COMPANY_SUMMARY_SCHEMA           200
+#define? COMPANY_SUMMARY_TEMPLATE         x64;1033
+
+#define  COMMONFRAMEWORK_ZIP_SOURCE_FOR_BACKUP	N
+
+#include "DEPT.MMH"
+
+
+#(
+	#define SystemFileAssociation
+
+	#define+ zzkey SOFTWARE\Classes\SystemFileAssociations\{$Type}\shell\{$Name}
+
+	<$Registry HKEY="HKMU" MsiFormatted="KEY" KeyAction="INSTALL_UNINSTALL"
+		Key="<$zzkey>"
+	>
+	<$Registry HKEY="HKMU" MsiFormatted="KEY VALUE"
+		Key="<$zzkey>"
+		Value="{$Desc}"
+	>
+	<$Registry HKEY="HKMU" MsiFormatted="KEY VALUE"
+		Key="<$zzkey>\command"
+		Value=^{$Command}^
+	>
+#)

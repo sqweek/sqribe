@@ -1,0 +1,12 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; ProductName = Sqribe
+; Description = Sqribe is a musical transcription assistant
+; Installed   = WINDOWS_ALL
+; MsiName     = Sqribe-<$ProductVersion>
+; Guid.UpgradeCode = {3C8BE038-115C-4A3A-B56C-15A7359BCA4B}
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;############################################################################
+VERSION : 0.9.9
+DATE    : 23 November 2017
+CHANGES : First MSI
