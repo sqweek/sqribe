@@ -45,6 +45,34 @@ func (ww *WaveWidget) LeftClick(mouse image.Point) {
 	}
 }
 
+func (ww *WaveWidget) pasteStaff(staff *score.Staff) (*score.Staff, []*score.Note) {
+	if len(ww.snarf) == 1 {
+		for s, notes := range ww.snarf {
+			return s, notes
+		}
+	}
+	return staff, ww.snarf[staff]
+}
+
+func (ww *WaveWidget) canPaste(s *mouseState) bool {
+	if ww.pasteMode && len(ww.snarf) > 0 && s != nil && s.note != nil {
+		// a single-staff selection can be pasted anywhere.
+		// a multi-staff selection is confined to those staves.
+		_, notes := ww.pasteStaff(s.note.staff)
+		return len(notes) > 0
+	}
+	return false
+}
+
+func (ww *WaveWidget) pasteDeltas(s *mouseState, sc *score.Score) (Δpitch int8, Δbeat *big.Rat) {
+	_, notes := ww.pasteStaff(s.note.staff)
+	anchor := notes[0]
+	Δpitch = s.note.Δpitch(anchor)
+	beat, offset := sc.Quantize(s.note.beatf)
+	Δbeat = Δb(beat, offset, anchor.Beat, anchor.Offset)
+	return
+}
+
 func (ww *WaveWidget) RightClick(mouse image.Point) {
 	if mouse.In(ww.rect.mixer) {
 		for staff, slayout := range ww.rect.staves() {
@@ -56,18 +84,19 @@ func (ww *WaveWidget) RightClick(mouse image.Point) {
 		}
 	}
 	if ww.pasteMode {
-		sc := ww.score
-		if s := ww.getMouseState(mouse); s != nil && s.note != nil && len(ww.snarf[s.note.staff]) > 0 {
-			anchor := ww.snarf[s.note.staff][0]
-			Δpitch := s.note.Δpitch(anchor)
-			beat, offset := sc.Quantize(s.note.beatf)
-			Δbeat := Δb(beat, offset, anchor.Beat, anchor.Offset)
+		if s := ww.getMouseState(mouse); ww.canPaste(s) {
+			sc := ww.score
+			Δpitch, Δbeat := ww.pasteDeltas(s, sc)
 			for staff, notes := range ww.snarf {
 				mv := make([]*score.Note, 0, len(notes))
 				for _, note := range notes {
 					mv = append(mv, note.Dup().Mv(Δpitch, Δbeat))
 				}
-				sc.AddNotes(staff, mv...)
+				if len(ww.snarf) == 1 {
+					sc.AddNotes(s.note.staff, mv...)
+				} else {
+					sc.AddNotes(staff, mv...)
+				}
 			}
 			ww.pasteMode = false
 		}
@@ -174,7 +203,7 @@ func (ww *WaveWidget) placeNoteDrag(mouse image.Point) DragFn {
 	s := ww.getMouseState(mouse)
 	// XXX no way to exit pasteMode without pasting...
 	sc := ww.score
-	if s.note == nil || sc == nil || (ww.pasteMode && len(ww.snarf[s.note.staff]) > 0) {
+	if s.note == nil || sc == nil || ww.canPaste(s) {
 		return nil
 	}
 	note := s.note
