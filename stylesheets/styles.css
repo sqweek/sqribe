@@ -158,6 +158,27 @@ p img {
   border: none;
 }
 
+ul.nav {
+  list-style: none;
+  display: inline-block;
+  font-variant: small-caps;
+  /*margin-left: 2.5em;*/
+}
+
+ul.nav li {
+  padding: 0;
+  margin: 0;
+  width: 6em;
+  display: inline-block;
+  border: 1px solid #ddddaa;
+  border-radius: 4px;
+  text-align: center;
+}
+
+ul.nav li:hover {
+  background: #ddddaa;
+}
+
 /* Code blocks */
 
 code, pre {

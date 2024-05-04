@@ -1,0 +1,1 @@
+Watch -t xprop -id 0x4a0001f -f _SURF_GO 8s -set _SURF_GO file:///n/sqribe/www/index.html
