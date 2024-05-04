@@ -1,0 +1,169 @@
+0.1
+	* time selection
+	* audio playback
+	* synchronize measures to audio (constant bpm)
+	* snap selection to measures
+	* read whole song
+	* allow dragging of selection
+		* requires changing the mouse cursor
+	* paint current time during playback
+		* pick bpm/hits while playing
+	* place notes
+	* midi playback
+	* allow bpm changes
+	* serialise beats/notes per audio file
+	* key signatures
+
+0.9
+	* fix issues while zooming out really far/scrolling past EOF
+	* drop -audio
+	* windows support
+		* mouse cursor
+		* file storage
+	* improve audio format support (ffmpeg backend)
+	* modify notes while playback active
+	* per-staff options
+		* volume
+		* voice
+	* smooth scrolling
+	* moving first/last selected beat during playback adjusts loop extents
+	* apply accidentals to selected notes
+	* transpose up/down octave
+	* copy/paste notes
+	* adapt to system sample rate
+	* dropped locks from beat list
+	* square note selection tool
+	* allow .sqs files to be opened directly
+	* system dialogs (open/export)
+	* undo/redo!
+	* allow time to be specified on command-line (starts view at specified time)
+		* enables "transqribe at current position" music player integration
+
+0.9.5
+	* OSX support
+
+0.9.9
+	* persist current working state (view/zoom/minimised staves)
+	* bass/treble clefs!
+	* staves can be moved
+	* config file
+
+x.y
+	* remember last project??
+	* label song regions (verses/chorus/etc)
+	* bars/time signatures
+	* virtual keyboard
+	* polish UI
+		* scalable svg glyphs
+	* proper analysis of frame rounding/display/latency issues
+	* alter beats - half/double time, delete
+	* 8va up/down sections (or clef changes)
+	* note selection tweaks
+		* clear current selection
+	* modify existing notes (apply eg. accents, dotted duration, broken chord, ties)
+	* scroll staff view up/down?
+	* selectively mute notes (good for QCing fast runs)
+	* auto detect beats
+
+* BUG impossible to copy/paste between staves!?!??!
+* BUG log isn't flushed promptly
+* BUG crash if i/o error serialising state file (eg. disk full)
+* FIXME look for font/soundfont in common path? user configurable?
+	* linux: /usr/share/soundfonts
+* UX exiting blocks if the audio is still being decoded xD
+* UX undo doesn't restore selection state
+* UX some consistency would be nice wrt. which beats get numbered on the axis
+* UX if you drag a note above/below a staff too far, it can no longer be dragged!
+* UX note starting on triplet offset should default to triplet duration?
+	* how do you infer intent for offset zero?
+	* maybe this goes away if you can actually select triplet durations...
+
+
+* FETCH
+	* nightingale:
+		* osx packaging scripts?
+
+
+* release:
+	* build portaudio with WDKMS/WASAPI?
+	* fluidsynth sans glib?
+	* licenses for ffmpeg/portaudio/etc
+
+
+* beats should probably be stored as first frame + duration (in frames)
+	- currently you need to mark 5 beats to play one bar
+	- resolving a note needs two BeatRefs
+	* common use cases:
+		- given a BeatRef, move to next/previous beat
+		- get all beats within certain frame range 
+		- does note at beat/offset exist?
+
+
+* selection semantics
+	* how to disambiguate time selection, beat selection, and note selection?
+		* time selection should probably be restricted to time/beat rulers
+	* easily select time range for different verse/chorus
+	* XXX how to make obvious that notes off-screen are currently selected?
+
+
+
+* song structure
+	* beats at arbitrary frames
+		* ui needs to make it easy to define constant bpm regions
+			? mark start of two bars and provide number of bars/beats?
+			? bulk shift beats to account for input/audio latency?
+	* beats can be grouped into contiguous sections (verse/chorus/etc)
+	* XXX time signatures
+	* XXX fermatas don't quite work; they'll stretch the previous beat
+	* XXX probably don't need different length beats in a single bar
+		- tempo transitions can be handled as special case
+		- needs to be able to accurately answer the question "what is a bar?"
+
+
+* ui
+	* Widget stuff is circular?
+		* Widget.Rect() tells event loop where the widget is
+		* render loop/layout tells widget where it is
+	* widget has a collection of handles that can be interacted with?
+		+ can reuse layout event dispatch algorithm
+		+ centralised cursor management
+		- memory/cpu cost of rebuilding collection?
+		* specifying active regions up front may be advantageous where there is latency involved (ie. whoever is doing the rendering knows what regions can be interacted with/what cursor should be used, so no round trip when moving the mouse)
+	* widget = visual + interactive
+	* XXX easy to lose clicks by accidently "dragging" mouse 1px
+	* Draw(img, rect) should be written Draw(img.SubImage(rect))
+
+	* what if widget redraws to a double-buffered image when the model changes?
+		+ render thread becomes straight blitting
+		+ goroutine friendly
+		- window is buffered 3 times
+			* unless you use SubImage() - but then how to protect against partial paints without blocking render thread?
+		- wasteful if multiple changes between frames
+			? post function to redraw widget?
+
+
+axed features
+	* lyrics
+
+
+unhandled event: type xproto.MappingNotifyEvent
+MappingNotify {Sequence: 28484, Request: 1, FirstKeycode: 8, Count: 248}
+unhandled event: type xproto.MappingNotifyEvent
+MappingNotify {Sequence: 28484, Request: 0, FirstKeycode: 0, Count: 0}
+2015-12-12T02:46:26.684    UI typed XF86PowerOff  
+unhandled event: type xproto.MappingNotifyEvent
+MappingNotify {Sequence: 28500, Request: 1, FirstKeycode: 8, Count: 248}
+unhandled event: type xproto.MappingNotifyEvent
+MappingNotify {Sequence: 28500, Request: 0, FirstKeycode: 0, Count: 0}
+
+#fixed bugs
+# * BeatRef locking is balls
+# 	- maybe change index to be stable and add score.beatOrigin
+# 	- XXX makes inserting beats between others awkward though
+# 	- deadlock(fixed): event() calls score AddBeat() -> sends plumb event while holding score Lock()
+#	- fixed in c9282a0a via a doubly-linked list
+# *playback stuck at end of loop after quantizing beats (during playback)?
+# 	- "prefetch samples sent in non-64 frame multiple 2248"
+# 	- fixed in 902a8f3 (hopefully)
+
+[Watch -x '(^|/)(TODO|sqribe|\.git.*|.*_test.go)($|/)' go build]
